@@ -91,4 +91,27 @@ export interface AmbiguityResult {
   emoji?: string;
 }
 
+// Provider Configuration Types
+export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama';
+
+export interface ProviderConfig {
+  provider: ProviderType;
+  apiKey: string;
+  model: string;
+  ollamaEndpoint?: string;
+}
+
+export interface OllamaModel {
+  name: string;
+  modified_at: string;
+  size: number;
+}
+
+export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
+  google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
+  ollama: []
+};
+
 export {};

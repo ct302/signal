@@ -1,7 +1,5 @@
-// API Configuration
-export const API_KEY = "AIzaSyBmIEPNDptZ9kf6DIaWpc3uhUEZdcivIEw";
-export const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
-export const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// API Configuration - Now dynamic via ProviderConfig
+export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
@@ -53,7 +51,8 @@ export const QUICK_START_DOMAINS = [
 
 // Local storage keys
 export const STORAGE_KEYS = {
-  HISTORY: 'signalHistory'
+  HISTORY: 'signalHistory',
+  PROVIDER_CONFIG: 'signalProviderConfig'
 };
 
 // Limits

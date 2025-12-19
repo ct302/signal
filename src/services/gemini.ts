@@ -1,8 +1,143 @@
-import { API_KEY, GEMINI_API_URL } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData } from '../types';
+import { AmbiguityResult, QuizData, ProviderConfig, OllamaModel } from '../types';
 
-const buildUrl = () => `${GEMINI_API_URL}?key=${API_KEY}`;
+// Get stored provider config
+const getProviderConfig = (): ProviderConfig => {
+  const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {
+      // Fall through to default
+    }
+  }
+  return {
+    provider: 'google',
+    apiKey: '',
+    model: 'gemini-2.0-flash',
+    ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
+  };
+};
+
+// Build API URL based on provider
+const buildApiUrl = (config: ProviderConfig): string => {
+  switch (config.provider) {
+    case 'google':
+      return `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+    case 'openai':
+      return 'https://api.openai.com/v1/chat/completions';
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1/messages';
+    case 'ollama':
+      return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
+    default:
+      throw new Error(`Unknown provider: ${config.provider}`);
+  }
+};
+
+// Build request body based on provider
+const buildRequestBody = (prompt: string, config: ProviderConfig, jsonMode: boolean = false): object => {
+  switch (config.provider) {
+    case 'google':
+      return {
+        contents: [{ parts: [{ text: prompt }] }],
+        ...(jsonMode && { generationConfig: { responseMimeType: "application/json" } })
+      };
+    case 'openai':
+      return {
+        model: config.model,
+        messages: [{ role: 'user', content: prompt }],
+        ...(jsonMode && { response_format: { type: 'json_object' } })
+      };
+    case 'anthropic':
+      return {
+        model: config.model,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      };
+    case 'ollama':
+      return {
+        model: config.model,
+        prompt: prompt,
+        stream: false,
+        ...(jsonMode && { format: 'json' })
+      };
+    default:
+      throw new Error(`Unknown provider: ${config.provider}`);
+  }
+};
+
+// Build headers based on provider
+const buildHeaders = (config: ProviderConfig): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  
+  switch (config.provider) {
+    case 'openai':
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      break;
+    case 'anthropic':
+      headers['x-api-key'] = config.apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+      break;
+  }
+  
+  return headers;
+};
+
+// Extract response text based on provider
+const extractResponseText = (data: any, config: ProviderConfig): string => {
+  switch (config.provider) {
+    case 'google':
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    case 'openai':
+      return data.choices?.[0]?.message?.content || '';
+    case 'anthropic':
+      return data.content?.[0]?.text || '';
+    case 'ollama':
+      return data.response || '';
+    default:
+      return '';
+  }
+};
+
+// Unified API call
+const callApi = async (prompt: string, jsonMode: boolean = false): Promise<string> => {
+  const config = getProviderConfig();
+  
+  if (!config.apiKey && config.provider !== 'ollama') {
+    throw new Error(`No API key configured for ${config.provider}. Please add your API key in Settings.`);
+  }
+
+  const url = buildApiUrl(config);
+  const headers = buildHeaders(config);
+  const body = buildRequestBody(prompt, config, jsonMode);
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  return extractResponseText(data, config);
+};
+
+/**
+ * Fetch available Ollama models
+ */
+export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[]> => {
+  const baseUrl = endpoint || DEFAULT_OLLAMA_ENDPOINT;
+  try {
+    const response = await fetch(`${baseUrl}/api/tags`);
+    if (!response.ok) throw new Error('Failed to fetch Ollama models');
+    const data = await response.json();
+    return data.models || [];
+  } catch (error) {
+    console.error('Error fetching Ollama models:', error);
+    return [];
+  }
+};
 
 /**
  * Generate analogy content for a topic
@@ -45,39 +180,26 @@ CRITICAL RULES:
 2. concept_map terms MUST be exact word matches from the text
 3. importance_map should include ALL significant terms (15-25 items)
 4. Use LaTeX ($...$) for any mathematical notation
-5. The analogy should feel natural, not forced`;
+5. The analogy should feel natural, not forced
+6. Return ONLY valid JSON, no markdown code blocks`;
 
-  const response = await fetchWithRetry(buildUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
-
-  const data = await response.json();
-  return safeJsonParse(data.candidates?.[0]?.content?.parts?.[0]?.text);
+  const text = await callApi(prompt, true);
+  return safeJsonParse(text);
 };
 
 /**
  * Check input for ambiguity or typos
  */
 export const checkAmbiguity = async (text: string, contextType: string): Promise<AmbiguityResult> => {
-  const prompt = `Analyze user input: "${text}". Context: ${contextType}. Check for typos or ambiguity (e.g., 'nfll' -> 'NFL'). If typo, set isAmbiguous: true and provide corrections in options. Return JSON { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 3), "corrected": string, "emoji": string }.`;
+  const prompt = `Analyze user input: "${text}". Context: ${contextType}. Check for typos or ambiguity (e.g., 'nfll' -> 'NFL'). If typo, set isAmbiguous: true and provide corrections in options. Return JSON { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 3), "corrected": string, "emoji": string }. Return ONLY valid JSON.`;
 
-  const response = await fetchWithRetry(buildUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
-
-  const data = await response.json();
-  const result = safeJsonParse(data.candidates?.[0]?.content?.parts?.[0]?.text);
-  return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+  try {
+    const responseText = await callApi(prompt, true);
+    const result = safeJsonParse(responseText);
+    return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+  } catch {
+    return { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+  }
 };
 
 /**
@@ -92,35 +214,25 @@ export const fetchDefinition = async (term: string, context: string, level: numb
     promptText += " Use LaTeX ($...$) for math if applicable.";
   }
 
-  const response = await fetchWithRetry(buildUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: promptText }] }]
-    })
-  });
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Could not load definition.";
+  try {
+    return await callApi(promptText, false);
+  } catch {
+    return "Could not load definition.";
+  }
 };
 
 /**
  * Generate quiz question
  */
 export const generateQuiz = async (topic: string, domain: string, context: string): Promise<QuizData | null> => {
-  const prompt = `Based on this content about "${topic}" using ${domain} analogy:\n${context}\n\nGenerate a quiz question. Return JSON:\n{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0-3, "explanation": "Why correct answer is right"}`;
+  const prompt = `Based on this content about "${topic}" using ${domain} analogy:\n${context}\n\nGenerate a quiz question. Return JSON:\n{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0-3, "explanation": "Why correct answer is right"}. Return ONLY valid JSON.`;
 
-  const response = await fetchWithRetry(buildUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
-
-  const data = await response.json();
-  return safeJsonParse(data.candidates?.[0]?.content?.parts?.[0]?.text);
+  try {
+    const text = await callApi(prompt, true);
+    return safeJsonParse(text);
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -134,14 +246,9 @@ export const askTutor = async (
 ) => {
   const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short.`;
 
-  const response = await fetchWithRetry(buildUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
-    })
-  });
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text;
+  try {
+    return await callApi(prompt, false);
+  } catch {
+    return "Sorry, I couldn't process that question.";
+  }
 };

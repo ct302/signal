@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, History, Moon, Sun } from 'lucide-react';
+import { Settings } from './Settings';
 
 interface HeaderProps {
   analogyDomain: string;
@@ -76,6 +77,8 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+
+          <Settings isDarkMode={isDarkMode} />
         </div>
 
         <div className="flex-1 relative">
