@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
 import { AmbiguityResult, QuizData, ProviderConfig, OllamaModel } from '../types';
 
@@ -7,14 +7,19 @@ const getProviderConfig = (): ProviderConfig => {
   const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // Use stored API key if present, otherwise fall back to default for Google
+      if (parsed.provider === 'google' && !parsed.apiKey) {
+        parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+      }
+      return parsed;
     } catch {
       // Fall through to default
     }
   }
   return {
     provider: 'google',
-    apiKey: '',
+    apiKey: DEFAULT_GEMINI_API_KEY,
     model: 'gemini-2.0-flash',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };

@@ -104,16 +104,18 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
 
   return (
     <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black/50 z-50"
+      {/* Backdrop with flexbox centering */}
+      <div
+        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
         onClick={() => setIsOpen(false)}
-      />
-      
-      {/* Modal */}
-      <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-2xl shadow-2xl ${
-        isDarkMode ? 'bg-neutral-800' : 'bg-white'
-      }`}>
+      >
+        {/* Modal */}
+        <div
+          className={`w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl ${
+            isDarkMode ? 'bg-neutral-800' : 'bg-white'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${
           isDarkMode ? 'border-neutral-700' : 'border-neutral-200'
@@ -270,6 +272,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
           >
             Save Settings
           </button>
+        </div>
         </div>
       </div>
     </>

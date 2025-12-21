@@ -39,7 +39,8 @@ import {
   LATEX_REGEX,
   CONCEPT_COLORS,
   CONCEPT_BG_COLORS,
-  MAX_TUTOR_HISTORY
+  MAX_TUTOR_HISTORY,
+  QUICK_START_DOMAINS
 } from './constants';
 
 // Utils
@@ -277,10 +278,30 @@ export default function App() {
     const inputToUse = overrideInput || tempDomainInput;
     if (!inputToUse.trim()) return;
 
-    if (overrideInput) {
+    // Look up emoji from quick start domains first
+    const quickStartMatch = QUICK_START_DOMAINS.find(
+      d => d.name.toLowerCase() === inputToUse.toLowerCase()
+    );
+
+    if (overrideInput && quickStartMatch) {
+      // Use the predefined emoji for quick start domains
       setIsSettingDomain(true);
       setAnalogyDomain(inputToUse);
-      setDomainEmoji("⚡");
+      setDomainEmoji(quickStartMatch.emoji);
+      setHasSelectedDomain(true);
+      setDisambiguation(null);
+      setIsSettingDomain(false);
+      return;
+    }
+
+    if (overrideInput) {
+      // For disambiguation selections, still call API to get emoji
+      setIsSettingDomain(true);
+      setDomainError("");
+
+      const result = await checkAmbiguity(inputToUse, 'domain');
+      setDomainEmoji(result.emoji || "🎯");
+      setAnalogyDomain(result.corrected || inputToUse);
       setHasSelectedDomain(true);
       setDisambiguation(null);
       setIsSettingDomain(false);

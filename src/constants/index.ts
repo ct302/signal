@@ -1,6 +1,9 @@
 // API Configuration - Now dynamic via ProviderConfig
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
+// Default API key for demo purposes (users can override in Settings)
+export const DEFAULT_GEMINI_API_KEY = 'AIzaSyAFaKclEBd8HcVaAcWXFmQZ0nICRXjNUXM';
+
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
 export const KATEX_JS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js";
