@@ -551,10 +551,15 @@ export default function App() {
     setShowHistory(false);
   };
 
+  // Check if any definition popup is open (used to lock morph mode)
+  const isDefinitionPopupOpen = !!(defPosition || miniDefPosition);
+
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(true);
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
+    // Lock morph when definition popup is open
+    if (isDefinitionPopupOpen) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
   };
@@ -562,12 +567,15 @@ export default function App() {
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(false);
-    if (defPosition) return;
+    // Lock morph when definition popup is open
+    if (isDefinitionPopupOpen) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     if (viewMode === 'morph') setIsHovering(false);
   };
 
   const handleTouchToggle = () => {
+    // Lock morph when definition popup is open
+    if (isDefinitionPopupOpen) return;
     if (isMobile && viewMode === 'morph' && hasStarted) setIsHovering(!isHovering);
   };
 
