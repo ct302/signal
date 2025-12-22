@@ -1,6 +1,6 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, ProviderConfig, OllamaModel } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -227,14 +227,92 @@ export const fetchDefinition = async (term: string, context: string, level: numb
 };
 
 /**
- * Generate quiz question
+ * Get difficulty description for prompt
  */
-export const generateQuiz = async (topic: string, domain: string, context: string): Promise<QuizData | null> => {
-  const prompt = `Based on this content about "${topic}" using ${domain} analogy:\n${context}\n\nGenerate a quiz question. Return JSON:\n{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0-3, "explanation": "Why correct answer is right"}. Return ONLY valid JSON.`;
+const getDifficultyPrompt = (difficulty: QuizDifficulty): string => {
+  switch (difficulty) {
+    case 'easy':
+      return 'EASY difficulty: Basic recall question. Test fundamental understanding with straightforward questions.';
+    case 'medium':
+      return 'MEDIUM difficulty: Application question. Test ability to apply concepts in simple scenarios.';
+    case 'hard':
+      return 'HARD difficulty: Connection question. Test understanding of relationships between concepts.';
+    case 'advanced':
+      return 'ADVANCED difficulty: Synthesis question. Test deep understanding with edge cases or complex scenarios.';
+    default:
+      return 'EASY difficulty: Basic recall question.';
+  }
+};
+
+/**
+ * Generate quiz question with difficulty and retry support
+ */
+export const generateQuiz = async (
+  topic: string,
+  domain: string,
+  context: string,
+  difficulty: QuizDifficulty = 'easy',
+  retryMode?: { concept: string; correctAnswer: string }
+): Promise<QuizData | null> => {
+  let prompt: string;
+
+  if (retryMode) {
+    // Retry mode: Rephrase the same question with same concept and answer
+    prompt = `Based on this content about "${topic}" using ${domain} analogy:
+${context}
+
+RETRY MODE: The user got the previous question wrong. Create a NEW question testing the SAME concept but with DIFFERENT wording.
+
+Previous concept being tested: "${retryMode.concept}"
+The correct answer must still be: "${retryMode.correctAnswer}"
+
+Requirements:
+1. Rephrase the question completely - different wording, maybe different angle
+2. Reword ALL answer options (but keep the same correct answer concept)
+3. Shuffle the position of the correct answer
+4. The correct answer meaning must remain "${retryMode.correctAnswer}"
+
+Return JSON:
+{
+  "question": "rephrased question",
+  "options": ["A", "B", "C", "D"],
+  "correctIndex": 0-3,
+  "explanation": "Why this is correct",
+  "concept": "${retryMode.concept}"
+}
+
+Return ONLY valid JSON.`;
+  } else {
+    // Normal mode: Generate new question with difficulty
+    const difficultyPrompt = getDifficultyPrompt(difficulty);
+
+    prompt = `Based on this content about "${topic}" using ${domain} analogy:
+${context}
+
+Generate a quiz question.
+
+${difficultyPrompt}
+
+Return JSON:
+{
+  "question": "the question",
+  "options": ["A", "B", "C", "D"],
+  "correctIndex": 0-3,
+  "explanation": "Why correct answer is right",
+  "difficulty": "${difficulty}",
+  "concept": "the core concept being tested (brief, 2-5 words)"
+}
+
+Return ONLY valid JSON.`;
+  }
 
   try {
     const text = await callApi(prompt, true);
-    return safeJsonParse(text);
+    const result = safeJsonParse(text);
+    if (result) {
+      result.difficulty = difficulty;
+    }
+    return result;
   } catch {
     return null;
   }

@@ -29,6 +29,7 @@ import {
   TutorHistoryEntry,
   TutorResponse,
   QuizData,
+  QuizDifficulty,
   DisambiguationData,
   HistoryItem
 } from './types';
@@ -166,6 +167,11 @@ export default function App() {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
+  const [quizQuestionNumber, setQuizQuestionNumber] = useState(1);
+  const [quizRetryCount, setQuizRetryCount] = useState(0);
+  const [quizCurrentConcept, setQuizCurrentConcept] = useState<string>('');
+  const [quizCurrentCorrectAnswer, setQuizCurrentCorrectAnswer] = useState<string>('');
+  const MAX_QUIZ_RETRIES = 2;
 
   // Synthesis State
   const [synthesisThreshold, setSynthesisThreshold] = useState(0.3);
@@ -235,6 +241,14 @@ export default function App() {
 
     setLastSubmittedTopic(topicName);
     setHasStarted(true);
+
+    // Reset quiz state for new topic
+    setQuizQuestionNumber(1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+    setQuizFeedback(null);
+    setShowQuizModal(false);
   };
 
   // Handlers
@@ -416,23 +430,66 @@ export default function App() {
     fetchDefinition(term, context, level, isMini);
   };
 
-  const fetchQuiz = async () => {
+  // Get difficulty based on question number
+  const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
+    if (questionNum === 1) return 'easy';
+    if (questionNum === 2) return 'medium';
+    if (questionNum === 3) return 'hard';
+    return 'advanced';
+  };
+
+  const fetchQuiz = async (isRetry: boolean = false) => {
     if (isQuizLoading) return;
     setIsQuizLoading(true);
     setQuizFeedback(null);
 
     const context = segments.map(s => `Technical: ${s.tech} | Analogy: ${s.analogy}`).join('\n');
+    const difficulty = getQuizDifficulty(quizQuestionNumber);
+
     try {
-      const quiz = await generateQuiz(lastSubmittedTopic, analogyDomain, context);
+      let quiz: QuizData | null;
+
+      if (isRetry && quizCurrentConcept && quizCurrentCorrectAnswer) {
+        // Retry mode - rephrase same question
+        quiz = await generateQuiz(
+          lastSubmittedTopic,
+          analogyDomain,
+          context,
+          difficulty,
+          { concept: quizCurrentConcept, correctAnswer: quizCurrentCorrectAnswer }
+        );
+      } else {
+        // Normal mode - new question
+        quiz = await generateQuiz(lastSubmittedTopic, analogyDomain, context, difficulty);
+      }
+
       if (quiz) {
         setQuizData(quiz);
         setShowQuizModal(true);
+        // Store concept info for potential retry
+        if (!isRetry) {
+          setQuizCurrentConcept(quiz.concept || '');
+          setQuizCurrentCorrectAnswer(quiz.options[quiz.correctIndex] || '');
+        }
       }
     } catch (e) {
       console.error("Quiz failed", e);
     } finally {
       setIsQuizLoading(false);
     }
+  };
+
+  const handleQuizRetry = () => {
+    setQuizRetryCount(prev => prev + 1);
+    fetchQuiz(true);
+  };
+
+  const handleNextQuestion = () => {
+    setQuizQuestionNumber(prev => prev + 1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+    fetchQuiz(false);
   };
 
   const handleQuizOptionClick = (idx: number) => {
@@ -1055,7 +1112,7 @@ export default function App() {
                   <MessageCircle size={14} />Ask Question
                 </button>
                 <button
-                  onClick={fetchQuiz}
+                  onClick={() => fetchQuiz(false)}
                   disabled={isQuizLoading}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
                 >
@@ -1172,13 +1229,14 @@ export default function App() {
           quizPos={quizPos}
           isMobile={isMobile}
           isQuizLoading={isQuizLoading}
+          retryCount={quizRetryCount}
+          maxRetries={MAX_QUIZ_RETRIES}
+          questionNumber={quizQuestionNumber}
           onOptionClick={handleQuizOptionClick}
           onClose={() => setShowQuizModal(false)}
           onStartDrag={startDrag}
-          onNextQuestion={() => {
-            setQuizFeedback(null);
-            fetchQuiz();
-          }}
+          onNextQuestion={handleNextQuestion}
+          onRetry={handleQuizRetry}
           renderRichText={renderRichText}
         />
       )}

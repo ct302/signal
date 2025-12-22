@@ -67,6 +67,18 @@ export interface QuizData {
   options: string[];
   correctIndex: number;
   explanation?: string;
+  difficulty?: QuizDifficulty;
+  concept?: string; // The core concept being tested (for retry rephrasing)
+}
+
+export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'advanced';
+
+export interface QuizState {
+  questionNumber: number;
+  retryCount: number;
+  maxRetries: number;
+  currentConcept?: string;
+  currentCorrectAnswer?: string;
 }
 
 export interface DisambiguationData {
