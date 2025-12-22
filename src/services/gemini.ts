@@ -232,15 +232,15 @@ export const fetchDefinition = async (term: string, context: string, level: numb
 const getDifficultyPrompt = (difficulty: QuizDifficulty): string => {
   switch (difficulty) {
     case 'easy':
-      return 'EASY difficulty: Basic recall question. Test fundamental understanding with straightforward questions.';
+      return 'EASY: Ask a basic factual question about the core concept. Test if the user understands the fundamental definition or purpose.';
     case 'medium':
-      return 'MEDIUM difficulty: Application question. Test ability to apply concepts in simple scenarios.';
+      return 'MEDIUM: Ask an application question. Test if the user can apply the concept to a simple scenario or identify when it would be used.';
     case 'hard':
-      return 'HARD difficulty: Connection question. Test understanding of relationships between concepts.';
+      return 'HARD: Ask about relationships between concepts, trade-offs, or why something works the way it does.';
     case 'advanced':
-      return 'ADVANCED difficulty: Synthesis question. Test deep understanding with edge cases or complex scenarios.';
+      return 'ADVANCED: Ask about edge cases, limitations, or require synthesizing multiple concepts together.';
     default:
-      return 'EASY difficulty: Basic recall question.';
+      return 'EASY: Ask a basic factual question about the core concept.';
   }
 };
 
@@ -258,52 +258,48 @@ export const generateQuiz = async (
 
   if (retryMode) {
     // Retry mode: Rephrase the same question with same concept and answer
-    prompt = `Based on this content about "${topic}" using ${domain} analogy:
+    prompt = `You are creating an educational quiz about "${topic}".
+
+CONTEXT (for reference only):
 ${context}
 
-RETRY MODE: The user got the previous question wrong. Create a NEW question testing the SAME concept but with DIFFERENT wording.
+RETRY MODE: The user got the previous question wrong. Create a NEW question testing the SAME concept but phrased differently.
 
-Previous concept being tested: "${retryMode.concept}"
-The correct answer must still be: "${retryMode.correctAnswer}"
+Concept being tested: "${retryMode.concept}"
+Correct answer concept: "${retryMode.correctAnswer}"
 
-Requirements:
-1. Rephrase the question completely - different wording, maybe different angle
-2. Reword ALL answer options (but keep the same correct answer concept)
-3. Shuffle the position of the correct answer
-4. The correct answer meaning must remain "${retryMode.correctAnswer}"
+CRITICAL RULES:
+1. Ask about the TECHNICAL concept "${topic}" directly
+2. The ${domain} analogy is just for context - do NOT ask "what ${domain} thing equals what technical thing"
+3. Rephrase the question from a different angle
+4. Reword all answer options but keep the same correct answer meaning
+5. Shuffle the correct answer position
 
-Return JSON:
-{
-  "question": "rephrased question",
-  "options": ["A", "B", "C", "D"],
-  "correctIndex": 0-3,
-  "explanation": "Why this is correct",
-  "concept": "${retryMode.concept}"
-}
-
-Return ONLY valid JSON.`;
+Return ONLY this JSON:
+{"question": "your question about ${topic}", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
   } else {
     // Normal mode: Generate new question with difficulty
     const difficultyPrompt = getDifficultyPrompt(difficulty);
 
-    prompt = `Based on this content about "${topic}" using ${domain} analogy:
-${context}
+    prompt = `You are creating an educational quiz about "${topic}".
 
-Generate a quiz question.
+CONTEXT (the ${domain} analogy is for reference to help frame the question):
+${context}
 
 ${difficultyPrompt}
 
-Return JSON:
-{
-  "question": "the question",
-  "options": ["A", "B", "C", "D"],
-  "correctIndex": 0-3,
-  "explanation": "Why correct answer is right",
-  "difficulty": "${difficulty}",
-  "concept": "the core concept being tested (brief, 2-5 words)"
-}
+CRITICAL RULES:
+1. Test understanding of the TECHNICAL concept "${topic}" - NOT the analogy
+2. DO NOT ask "which ${domain} thing corresponds to X" - that's meaningless
+3. Ask questions that someone who understands ${topic} could answer
+4. Wrong answers should be plausible but clearly wrong to someone who knows the material
+5. The question must make logical sense and have one clearly correct answer
 
-Return ONLY valid JSON.`;
+GOOD question example: "What happens to a matrix when you diagonalize it?"
+BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
+
+Return ONLY this JSON:
+{"question": "your question", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
   }
 
   try {
