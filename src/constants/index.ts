@@ -2,7 +2,7 @@
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // Default API key for demo purposes (users can override in Settings)
-export const DEFAULT_GEMINI_API_KEY = 'AIzaSyAFaKclEBd8HcVaAcWXFmQZ0nICRXjNUXM';
+export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
