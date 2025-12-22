@@ -1111,7 +1111,8 @@ export default function App() {
               <div className="flex flex-wrap gap-2 justify-center">
                 <button
                   onClick={() => setShowFollowUp(!showFollowUp)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  disabled={isLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     showFollowUp
                       ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                       : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
@@ -1121,8 +1122,8 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => fetchQuiz(false)}
-                  disabled={isQuizLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
+                  disabled={isQuizLoading || isLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
                 >
                   {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
                   Quiz Me

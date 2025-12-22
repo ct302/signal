@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, History, Moon, Sun } from 'lucide-react';
+import { Sparkles, History, Moon, Sun, Loader2 } from 'lucide-react';
 import { Settings } from './Settings';
 
 interface HeaderProps {
@@ -86,9 +86,10 @@ export const Header: React.FC<HeaderProps> = ({
             type="text"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+            onKeyDown={(e) => e.key === 'Enter' && !isLoading && onSubmit()}
+            disabled={isLoading}
             placeholder="What do you want to learn about?"
-            className={`w-full pl-4 pr-12 py-2.5 rounded-xl border-2 transition-all outline-none text-sm ${
+            className={`w-full pl-4 pr-12 py-2.5 rounded-xl border-2 transition-all outline-none text-sm disabled:opacity-60 disabled:cursor-not-allowed ${
               isDarkMode
                 ? 'bg-neutral-800 border-neutral-700 focus:border-blue-500 text-white placeholder-neutral-500'
                 : 'border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
@@ -97,9 +98,9 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onSubmit}
             disabled={isLoading || !topic.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Sparkles size={16} />
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
           </button>
         </div>
       </div>

@@ -70,16 +70,14 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         height: 'auto',
         minWidth: '280px',
         minHeight: '200px',
-        maxHeight: '70vh',
-        overflow: 'auto',
-        resize: 'vertical' as const
+        maxHeight: '70vh'
       };
 
   return (
-    <div className="def-window fixed z-[200] w-full max-w-md px-4 flex flex-col" style={style}>
+    <div className="def-window fixed z-[200] flex flex-col" style={style}>
       <div
-        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none ${
-          isMobile ? 'rounded-t-2xl h-full' : 'rounded-xl'
+        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none h-full ${
+          isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
       >
         {/* Header */}
@@ -101,7 +99,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         </div>
 
         {/* Content */}
-        <div className="text-sm leading-relaxed text-neutral-200 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        <div className="text-sm leading-relaxed text-neutral-200 flex-1 overflow-y-auto -mr-2 pr-2">
           {isLoadingDef ? (
             <span className="italic text-neutral-400">Defining...</span>
           ) : (
