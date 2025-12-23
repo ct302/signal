@@ -31,7 +31,7 @@ export const STOP_WORDS = new Set([
 export const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\[a-zA-Z]+(?:[_^]\{[^}]*\}|\{[^}]*\})*)/g;
 
 // LaTeX command regex for wrapping
-export const LATEX_CMD_REGEX = /\\(frac|lim|sum|int|prod|sqrt|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|rho|tau|eta|nu|xi|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|left|right|text|mathrm|mathbf|vec|hat|bar|dot|ddot|tilde|prime)/;
+export const LATEX_CMD_REGEX = /\\(frac|lim|sum|int|prod|sqrt|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|rho|tau|eta|nu|xi|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|left|right|text|mathrm|mathbf|mathcal|mathbb|boldsymbol|textbf|vec|hat|bar|dot|ddot|tilde|prime|circ|bullet|star|forall|exists|subset|supset|cup|cap|in|notin|land|lor|neg|implies|iff|oplus|otimes|odot)/;
 
 // Concept colors for isomorphic mapping
 export const CONCEPT_COLORS = [

@@ -22,7 +22,8 @@ import {
   Snowflake,
   Coffee,
   Network,
-  Columns
+  Columns,
+  Type
 } from 'lucide-react';
 
 // Types
@@ -146,6 +147,7 @@ export default function App() {
   const [threshold, setThreshold] = useState(0.3);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isNarrativeMode, setIsNarrativeMode] = useState(false);
+  const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1); // Text scale multiplier
 
   // Definition State
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
@@ -725,6 +727,15 @@ export default function App() {
           if (!hasStarted) return;
           setIsDualPaneMode(!isDualPaneMode);
           break;
+        case 't':
+          // Cycle text scale
+          if (!hasStarted) return;
+          setTextScale(current => {
+            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+            const currentIndex = scales.indexOf(current);
+            return scales[(currentIndex + 1) % scales.length];
+          });
+          break;
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
@@ -738,7 +749,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode, textScale]);
 
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
@@ -1411,6 +1422,25 @@ export default function App() {
                         <span className="hidden sm:inline">Dual</span>
                       </button>
                     )}
+                    {/* Text Scale Control */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => {
+                          const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                          const currentIndex = scales.indexOf(textScale);
+                          setTextScale(scales[(currentIndex + 1) % scales.length]);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          textScale > 1
+                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300' : 'bg-violet-100 text-violet-700')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
+                      >
+                        <Type size={14} />
+                        <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                      </button>
+                    )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
                       <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
@@ -1452,11 +1482,15 @@ export default function App() {
                   onTouchEnd={handleSelectionEnd}
                 >
                   <p
-                    className={`text-lg md:text-xl leading-relaxed transition-all duration-500 ease-in-out ${
+                    className={`leading-relaxed transition-all duration-500 ease-in-out ${
                       isTransitioning
                         ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
                         : 'opacity-100 blur-0 scale-100 translate-y-0'
                     } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                    style={{
+                      fontSize: `${1.125 * textScale}rem`,
+                      lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
+                    }}
                   >
                     {processedWords.map((word, i) => renderWord(word, i))}
                   </p>
@@ -1808,6 +1842,10 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>P</kbd>
                   <span>Dual Pane</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
+                  <span>Text Size</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>

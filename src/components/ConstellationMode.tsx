@@ -54,35 +54,27 @@ const cleanLabel = (text: string): string => {
     .replace(/\\\]/g, '')
     .replace(/\^{([^}]+)}/g, '^$1')
     .replace(/_{([^}]+)}/g, '_$1')
+    // Handle commands with arguments like \boldsymbol{C} -> C
+    .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
     .replace(/\\[a-zA-Z]+/g, (match) => {
       // Convert common LaTeX commands to readable text
       const commands: { [key: string]: string } = {
-        '\\Sigma': 'Σ',
-        '\\sigma': 'σ',
-        '\\alpha': 'α',
-        '\\beta': 'β',
-        '\\gamma': 'γ',
-        '\\delta': 'δ',
-        '\\theta': 'θ',
-        '\\lambda': 'λ',
-        '\\mu': 'μ',
-        '\\pi': 'π',
-        '\\sum': 'Σ',
-        '\\prod': 'Π',
-        '\\int': '∫',
-        '\\infty': '∞',
-        '\\sqrt': '√',
-        '\\cdot': '·',
-        '\\times': '×',
-        '\\div': '÷',
-        '\\pm': '±',
-        '\\leq': '≤',
-        '\\geq': '≥',
-        '\\neq': '≠',
-        '\\approx': '≈',
+        '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',
+        '\\gamma': 'γ', '\\delta': 'δ', '\\theta': 'θ', '\\lambda': 'λ',
+        '\\mu': 'μ', '\\pi': 'π', '\\sum': 'Σ', '\\prod': 'Π',
+        '\\int': '∫', '\\infty': '∞', '\\sqrt': '√', '\\cdot': '·',
+        '\\times': '×', '\\div': '÷', '\\pm': '±', '\\leq': '≤',
+        '\\geq': '≥', '\\neq': '≠', '\\approx': '≈',
+        '\\circ': '∘', '\\bullet': '•', '\\star': '★',
+        '\\forall': '∀', '\\exists': '∃', '\\in': '∈', '\\notin': '∉',
+        '\\subset': '⊂', '\\supset': '⊃', '\\cup': '∪', '\\cap': '∩',
+        '\\land': '∧', '\\lor': '∨', '\\neg': '¬',
+        '\\implies': '⟹', '\\iff': '⟺',
+        '\\oplus': '⊕', '\\otimes': '⊗', '\\odot': '⊙',
       };
-      return commands[match] || match.slice(1);
+      return commands[match] || '';
     })
+    .replace(/\{([^}]*)\}/g, '$1') // Remove remaining braces
     .trim();
 };
 
