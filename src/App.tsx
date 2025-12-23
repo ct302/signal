@@ -15,7 +15,8 @@ import {
   MessageCircle,
   Palette,
   Loader2,
-  BrainCircuit
+  BrainCircuit,
+  MousePointerClick
 } from 'lucide-react';
 
 // Types
@@ -375,12 +376,34 @@ export default function App() {
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName !== 'SPAN' || !target.id?.startsWith('word-')) return;
+    let target = e.target as HTMLElement;
 
+    // Walk up the DOM tree to find a word span (needed for KaTeX or nested elements)
+    let wordSpan: HTMLElement | null = null;
+    let currentElement: HTMLElement | null = target;
+    for (let i = 0; i < 5 && currentElement; i++) {
+      if (currentElement.tagName === 'SPAN' && currentElement.id?.startsWith('word-')) {
+        wordSpan = currentElement;
+        break;
+      }
+      currentElement = currentElement.parentElement;
+    }
+
+    // Get selected text from the selection or the word span
     const selection = window.getSelection();
     let selectedText = selection?.toString().trim();
-    if (!selectedText) selectedText = target.textContent?.trim() || "";
+
+    // If we found a word span, use its text content if no selection
+    if (wordSpan) {
+      if (!selectedText) {
+        selectedText = wordSpan.textContent?.trim() || "";
+      }
+      target = wordSpan;
+    } else if (!selectedText) {
+      // No word span found and no selection - try using the target's text
+      selectedText = target.textContent?.trim() || "";
+    }
+
     if (!selectedText) return;
 
     const rect = target.getBoundingClientRect();
@@ -754,7 +777,12 @@ export default function App() {
     if (item.isSpace) return <span key={index}>{item.text}</span>;
 
     const isImportant = item.weight >= threshold;
-    let style: React.CSSProperties = { display: 'inline-block', transition: 'all 0.3s ease' };
+    let style: React.CSSProperties = {
+      display: 'inline-block',
+      transition: 'all 0.3s ease',
+      // Make important words look clickable
+      cursor: isImportant ? 'pointer' : 'default',
+    };
     let segmentColorClass = "";
     let heatmapColorClass = "";
     const isSelected = selectedTerm && cleanText(item.text).toLowerCase().includes(selectedTerm.toLowerCase());
@@ -823,20 +851,26 @@ export default function App() {
           ? latexContent.slice(1, -1)
           : latexContent;
 
+      // Add hover class for important clickable words
+      const hoverClass = isImportant ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+
       if (!isKatexLoaded || !window.katex) {
-        return <span id={wordId} key={index} className={classes} title="Math loading...">{rawContent}</span>;
+        return <span id={wordId} key={index} className={`${classes} ${hoverClass}`} title="Math loading...">{rawContent}</span>;
       }
 
       try {
         const html = window.katex.renderToString(rawContent, { throwOnError: false, displayMode: false });
         const mathStyle = { ...style, display: 'inline-block', margin: '0 4px' };
-        return <span id={wordId} key={index} style={mathStyle} className={`${classes} not-italic normal-case`} dangerouslySetInnerHTML={{ __html: html }} />;
+        return <span id={wordId} key={index} style={mathStyle} className={`${classes} ${hoverClass} not-italic normal-case`} dangerouslySetInnerHTML={{ __html: html }} />;
       } catch (e) {
-        return <span id={wordId} key={index} style={style} className={classes}>{item.text}</span>;
+        return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
       }
     }
 
-    return <span id={wordId} key={index} style={style} className={classes}>{item.text}</span>;
+    // Add hover class for important clickable words
+    const hoverClass = isImportant ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+
+    return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
   };
 
   // Process words effect
@@ -1056,6 +1090,11 @@ export default function App() {
 
                 {/* Content Footer */}
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
+                  {/* Clickable words hint */}
+                  <div className={`flex items-center justify-center gap-1.5 mb-2 text-[10px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                    <MousePointerClick size={10} />
+                    <span>Double-click any highlighted word for definitions</span>
+                  </div>
                   <div className="flex items-center gap-4">
                     <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
                     <input
