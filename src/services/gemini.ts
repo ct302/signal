@@ -164,10 +164,28 @@ export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[
 };
 
 /**
+ * Get complexity level description for prompt
+ */
+const getComplexityPrompt = (level: number): string => {
+  switch (level) {
+    case 5:
+      return `IMPORTANT: Write for a 5-year-old child. Use ONLY simple words, short sentences, and fun comparisons. NO technical jargon, NO math notation, NO complex concepts. Make it playful and easy to understand.`;
+    case 100:
+      return `Write for an advanced academic audience. Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations.`;
+    default:
+      return `Write for a general adult audience with some familiarity with the subject. Balance clarity with technical accuracy.`;
+  }
+};
+
+/**
  * Generate analogy content for a topic
  */
-export const generateAnalogy = async (topic: string, domain: string) => {
+export const generateAnalogy = async (topic: string, domain: string, complexity: number = 50) => {
+  const complexityInstructions = getComplexityPrompt(complexity);
+
   const prompt = `Create a comprehensive learning module for "${topic}" using "${domain}" as an analogical lens.
+
+${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
