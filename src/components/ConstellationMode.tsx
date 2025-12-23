@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Play, Pause, RotateCcw } from 'lucide-react';
+import { X, Play, Pause, RotateCcw, Pin, Unlock } from 'lucide-react';
 
 // Types for the graph
 interface GraphNode {
@@ -13,8 +13,7 @@ interface GraphNode {
   y: number;
   vx: number;
   vy: number;
-  fx?: number | null; // Fixed x position (for dragging)
-  fy?: number | null; // Fixed y position (for dragging)
+  pinned: boolean; // Whether node is pinned in place
 }
 
 interface GraphEdge {
@@ -43,6 +42,49 @@ const CONCEPT_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
   '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#06b6d4'
 ];
+
+// Helper to strip LaTeX delimiters for display
+const cleanLabel = (text: string): string => {
+  return text
+    .replace(/\$\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\\(/g, '')
+    .replace(/\\\)/g, '')
+    .replace(/\\\[/g, '')
+    .replace(/\\\]/g, '')
+    .replace(/\^{([^}]+)}/g, '^$1')
+    .replace(/_{([^}]+)}/g, '_$1')
+    .replace(/\\[a-zA-Z]+/g, (match) => {
+      // Convert common LaTeX commands to readable text
+      const commands: { [key: string]: string } = {
+        '\\Sigma': 'Σ',
+        '\\sigma': 'σ',
+        '\\alpha': 'α',
+        '\\beta': 'β',
+        '\\gamma': 'γ',
+        '\\delta': 'δ',
+        '\\theta': 'θ',
+        '\\lambda': 'λ',
+        '\\mu': 'μ',
+        '\\pi': 'π',
+        '\\sum': 'Σ',
+        '\\prod': 'Π',
+        '\\int': '∫',
+        '\\infty': '∞',
+        '\\sqrt': '√',
+        '\\cdot': '·',
+        '\\times': '×',
+        '\\div': '÷',
+        '\\pm': '±',
+        '\\leq': '≤',
+        '\\geq': '≥',
+        '\\neq': '≠',
+        '\\approx': '≈',
+      };
+      return commands[match] || match.slice(1);
+    })
+    .trim();
+};
 
 export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   conceptMap,
@@ -84,9 +126,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       const angle = (index / conceptMap.length) * Math.PI * 2;
       const radius = Math.min(width, height) * 0.3;
 
+      const rawLabel = isAnalogyMode ? concept.analogy_term : concept.tech_term;
+
       return {
         id: `node-${concept.id}`,
-        label: isAnalogyMode ? concept.analogy_term : concept.tech_term,
+        label: cleanLabel(rawLabel),
         techTerm: concept.tech_term,
         analogyTerm: concept.analogy_term,
         weight: weight,
@@ -94,12 +138,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
         y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
         vx: 0,
-        vy: 0
+        vy: 0,
+        pinned: false
       };
     });
 
     // Create edges - connect concepts that might be related
-    // For now, connect sequential concepts and some cross-connections
     const graphEdges: GraphEdge[] = [];
 
     for (let i = 0; i < graphNodes.length; i++) {
@@ -158,10 +202,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       for (let i = 0; i < newNodes.length; i++) {
         const node = newNodes[i];
 
-        // Skip if node is being dragged
-        if (node.fx !== undefined && node.fx !== null) {
-          node.x = node.fx;
-          node.y = node.fy!;
+        // Skip pinned nodes - they stay in place
+        if (node.pinned) {
           node.vx = 0;
           node.vy = 0;
           continue;
@@ -247,9 +289,6 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const handleMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.preventDefault();
     setDraggedNode(nodeId);
-    setNodes(current => current.map(n =>
-      n.id === nodeId ? { ...n, fx: n.x, fy: n.y } : n
-    ));
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -261,17 +300,30 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     const y = e.clientY - rect.top;
 
     setNodes(current => current.map(n =>
-      n.id === draggedNode ? { ...n, fx: x, fy: y, x, y } : n
+      n.id === draggedNode ? { ...n, x, y } : n
     ));
   };
 
   const handleMouseUp = () => {
     if (draggedNode) {
+      // Pin the node where it was dropped
       setNodes(current => current.map(n =>
-        n.id === draggedNode ? { ...n, fx: null, fy: null } : n
+        n.id === draggedNode ? { ...n, pinned: true } : n
       ));
       setDraggedNode(null);
     }
+  };
+
+  // Double-click to unpin a node
+  const handleDoubleClick = (nodeId: string) => {
+    setNodes(current => current.map(n =>
+      n.id === nodeId ? { ...n, pinned: false } : n
+    ));
+  };
+
+  // Unpin all nodes
+  const unpinAll = () => {
+    setNodes(current => current.map(n => ({ ...n, pinned: false })));
   };
 
   // Reset simulation
@@ -290,8 +342,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
         vx: 0,
         vy: 0,
-        fx: null,
-        fy: null
+        pinned: false
       };
     }));
     setIsSimulating(true);
@@ -307,6 +358,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     return 0.1;
   };
 
+  // Count pinned nodes
+  const pinnedCount = nodes.filter(n => n.pinned).length;
+
   return (
     <div className="fixed inset-0 z-[80] bg-black/90 flex flex-col">
       {/* Header */}
@@ -315,6 +369,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           <h2 className="text-white text-lg font-bold">Constellation Mode</h2>
           <span className="text-neutral-400 text-sm">
             {isAnalogyMode ? 'Analogy View' : 'Technical View'} • {nodes.length} concepts
+            {pinnedCount > 0 && <span className="text-amber-400 ml-2">• {pinnedCount} pinned</span>}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -325,6 +380,15 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           >
             {isSimulating ? <Pause size={18} /> : <Play size={18} />}
           </button>
+          {pinnedCount > 0 && (
+            <button
+              onClick={unpinAll}
+              className="p-2 rounded-lg bg-neutral-800 text-amber-400 hover:bg-neutral-700 transition-colors"
+              title="Unpin all nodes"
+            >
+              <Unlock size={18} />
+            </button>
+          )}
           <button
             onClick={resetSimulation}
             className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors"
@@ -401,6 +465,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   onMouseEnter={() => setHoveredNode(node.id)}
                   onMouseLeave={() => !isDragging && setHoveredNode(null)}
                   onMouseDown={(e) => handleMouseDown(node.id, e)}
+                  onDoubleClick={() => handleDoubleClick(node.id)}
                   className="cursor-pointer"
                 >
                   {/* Glow effect */}
@@ -410,6 +475,18 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       fill={color}
                       opacity={0.2}
                       className="animate-pulse"
+                    />
+                  )}
+
+                  {/* Pin indicator ring */}
+                  {node.pinned && (
+                    <circle
+                      r={radius + 4}
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      strokeDasharray="4 2"
+                      opacity={0.8}
                     />
                   )}
 
@@ -429,17 +506,36 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                     opacity={0.2}
                   />
 
-                  {/* Label */}
-                  <text
-                    textAnchor="middle"
-                    dy="0.35em"
-                    fontSize={Math.max(10, Math.min(14, radius * 0.4))}
-                    fill={isDarkMode ? '#e5e7eb' : '#1f2937'}
-                    fontWeight={isHovered ? 'bold' : 'normal'}
-                    className="pointer-events-none select-none"
+                  {/* Label using foreignObject for proper text rendering */}
+                  <foreignObject
+                    x={-radius + 5}
+                    y={-radius / 2}
+                    width={(radius - 5) * 2}
+                    height={radius}
+                    className="pointer-events-none"
                   >
-                    {node.label.length > 15 ? node.label.slice(0, 12) + '...' : node.label}
-                  </text>
+                    <div
+                      className="w-full h-full flex items-center justify-center text-center select-none"
+                      style={{
+                        fontSize: `${Math.max(10, Math.min(14, radius * 0.35))}px`,
+                        fontWeight: isHovered ? 'bold' : 'normal',
+                        color: isDarkMode ? '#e5e7eb' : '#1f2937',
+                        lineHeight: 1.2,
+                        overflow: 'hidden',
+                        wordBreak: 'break-word'
+                      }}
+                    >
+                      {node.label.length > 20 ? node.label.slice(0, 17) + '...' : node.label}
+                    </div>
+                  </foreignObject>
+
+                  {/* Pin icon */}
+                  {node.pinned && (
+                    <g transform={`translate(${radius - 8}, ${-radius + 8})`}>
+                      <circle r={8} fill="#f59e0b" />
+                      <Pin size={10} color="white" style={{ transform: 'translate(-5px, -5px)' }} />
+                    </g>
+                  )}
 
                   {/* Weight indicator */}
                   <text
@@ -469,13 +565,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 <div className="text-white font-medium">{node.label}</div>
                 <div className="text-neutral-400 text-sm mt-1">
                   {isAnalogyMode ? (
-                    <>Tech: <span className="text-blue-400">{node.techTerm}</span></>
+                    <>Tech: <span className="text-blue-400">{cleanLabel(node.techTerm)}</span></>
                   ) : (
-                    <>Analogy: <span className="text-amber-400">{node.analogyTerm}</span></>
+                    <>Analogy: <span className="text-amber-400">{cleanLabel(node.analogyTerm)}</span></>
                   )}
                 </div>
                 <div className="text-neutral-500 text-xs mt-1">
                   Importance: {Math.round(node.weight * 100)}%
+                  {node.pinned && <span className="text-amber-400 ml-2">• Pinned (double-click to unpin)</span>}
                 </div>
               </div>
             );
@@ -485,7 +582,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
       {/* Instructions */}
       <div className="absolute bottom-4 left-4 text-neutral-500 text-xs">
-        Drag nodes to rearrange • Hover for details • Press G or Esc to close
+        Drag to pin • Double-click to unpin • Hover for details • Press G or Esc to close
       </div>
     </div>
   );

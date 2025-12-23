@@ -21,7 +21,8 @@ import {
   X,
   Snowflake,
   Coffee,
-  Network
+  Network,
+  Columns
 } from 'lucide-react';
 
 // Types
@@ -76,7 +77,8 @@ import {
   SynthesisModal,
   DefinitionPopup,
   MiniDefinitionPopup,
-  ConstellationMode
+  ConstellationMode,
+  IsomorphicDualPane
 } from './components';
 
 export default function App() {
@@ -192,6 +194,7 @@ export default function App() {
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
   const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
   const [isConstellationMode, setIsConstellationMode] = useState(false);
+  const [isDualPaneMode, setIsDualPaneMode] = useState(false);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -649,7 +652,8 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (isConstellationMode) setIsConstellationMode(false);
+          if (isDualPaneMode) setIsDualPaneMode(false);
+          else if (isConstellationMode) setIsConstellationMode(false);
           else if (showShortcutsLegend) setShowShortcutsLegend(false);
           else if (showQuizModal) setShowQuizModal(false);
           else if (showSynthesis) setShowSynthesis(false);
@@ -716,6 +720,11 @@ export default function App() {
           if (!hasStarted) return;
           setIsConstellationMode(!isConstellationMode);
           break;
+        case 'p':
+          // Toggle dual-pane isomorphic view
+          if (!hasStarted) return;
+          setIsDualPaneMode(!isDualPaneMode);
+          break;
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
@@ -729,7 +738,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, ambianceMode]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode]);
 
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
@@ -1387,6 +1396,21 @@ export default function App() {
                         <span className="hidden sm:inline">Graph</span>
                       </button>
                     )}
+                    {/* Dual Pane Mode Button */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          isDualPaneMode
+                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Dual Pane Isomorphic View (P)"
+                      >
+                        <Columns size={14} />
+                        <span className="hidden sm:inline">Dual</span>
+                      </button>
+                    )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
                       <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
@@ -1781,6 +1805,10 @@ export default function App() {
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>G</kbd>
                   <span>Graph Mode</span>
                 </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>P</kbd>
+                  <span>Dual Pane</span>
+                </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>
               <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1927,6 +1955,17 @@ export default function App() {
           isAnalogyMode={isAnalogyVisualMode}
           isDarkMode={isDarkMode}
           onClose={() => setIsConstellationMode(false)}
+        />
+      )}
+
+      {/* Dual Pane Isomorphic View */}
+      {isDualPaneMode && (
+        <IsomorphicDualPane
+          segments={segments}
+          conceptMap={conceptMap}
+          importanceMap={importanceMap}
+          isDarkMode={isDarkMode}
+          onClose={() => setIsDualPaneMode(false)}
         />
       )}
     </div>
