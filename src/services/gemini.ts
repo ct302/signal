@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel } from '../types';
 
@@ -8,19 +8,23 @@ const getProviderConfig = (): ProviderConfig => {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      // Use stored API key if present, otherwise fall back to default for Google
+      // Use stored API key if present, otherwise fall back to defaults
       if (parsed.provider === 'google' && !parsed.apiKey) {
         parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+      }
+      if (parsed.provider === 'openrouter' && !parsed.apiKey) {
+        parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
       }
       return parsed;
     } catch {
       // Fall through to default
     }
   }
+  // Default to OpenRouter with LLAMA 3.3 70B for testing
   return {
-    provider: 'google',
-    apiKey: DEFAULT_GEMINI_API_KEY,
-    model: 'gemini-2.0-flash',
+    provider: 'openrouter',
+    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    model: 'meta-llama/llama-3.3-70b-instruct',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };
@@ -36,6 +40,8 @@ const buildApiUrl = (config: ProviderConfig): string => {
       return 'https://api.anthropic.com/v1/messages';
     case 'ollama':
       return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
+    case 'openrouter':
+      return 'https://openrouter.ai/api/v1/chat/completions';
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -68,6 +74,12 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, jsonMode: bool
         stream: false,
         ...(jsonMode && { format: 'json' })
       };
+    case 'openrouter':
+      return {
+        model: config.model,
+        messages: [{ role: 'user', content: prompt }],
+        ...(jsonMode && { response_format: { type: 'json_object' } })
+      };
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -76,7 +88,7 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, jsonMode: bool
 // Build headers based on provider
 const buildHeaders = (config: ProviderConfig): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  
+
   switch (config.provider) {
     case 'openai':
       headers['Authorization'] = `Bearer ${config.apiKey}`;
@@ -85,8 +97,13 @@ const buildHeaders = (config: ProviderConfig): Record<string, string> => {
       headers['x-api-key'] = config.apiKey;
       headers['anthropic-version'] = '2023-06-01';
       break;
+    case 'openrouter':
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      headers['HTTP-Referer'] = 'https://signal-app.com';
+      headers['X-Title'] = 'Signal Analogy Engine';
+      break;
   }
-  
+
   return headers;
 };
 
@@ -101,6 +118,8 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
       return data.content?.[0]?.text || '';
     case 'ollama':
       return data.response || '';
+    case 'openrouter':
+      return data.choices?.[0]?.message?.content || '';
     default:
       return '';
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
 import { fetchOllamaModels } from '../services';
 
 interface SettingsProps {
@@ -13,15 +13,16 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: 'Google (Gemini)',
   openai: 'OpenAI (GPT)',
   anthropic: 'Anthropic (Claude)',
-  ollama: 'Ollama (Local)'
+  ollama: 'Ollama (Local)',
+  openrouter: 'OpenRouter'
 };
 
 export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ProviderConfig>({
-    provider: 'google',
-    apiKey: DEFAULT_GEMINI_API_KEY,
-    model: 'gemini-2.0-flash',
+    provider: 'openrouter',
+    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    model: 'meta-llama/llama-3.3-70b-instruct',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);
@@ -35,9 +36,12 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        // Use default API key for Google if none stored
+        // Use default API key for providers if none stored
         if (parsed.provider === 'google' && !parsed.apiKey) {
           parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+        }
+        if (parsed.provider === 'openrouter' && !parsed.apiKey) {
+          parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
         }
         setConfig(parsed);
         if (parsed.provider === 'ollama') {
