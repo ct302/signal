@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X, Columns, ArrowRight, Zap } from 'lucide-react';
 import { Segment, ConceptMapItem, ImportanceMapItem } from '../types';
 import { LATEX_REGEX } from '../constants';
@@ -12,6 +12,27 @@ declare global {
     };
   }
 }
+
+// Stop words to filter out during semantic distillation
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+  'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+  'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought',
+  'used', 'it', 'its', 'this', 'that', 'these', 'those', 'i', 'you', 'he',
+  'she', 'we', 'they', 'what', 'which', 'who', 'whom', 'where', 'when',
+  'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
+  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same',
+  'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there',
+  'then', 'once', 'into', 'over', 'after', 'before', 'between', 'under',
+  'again', 'further', 'while', 'about', 'against', 'during', 'through',
+  'above', 'below', 'up', 'down', 'out', 'off', 'any', 'if'
+]);
+
+// Check if a word is a stop word
+const isStopWord = (word: string): boolean => {
+  return STOP_WORDS.has(word.toLowerCase().replace(/[.,!?;:'"()]/g, ''));
+};
 
 interface IsomorphicDualPaneProps {
   segments: Segment[];
@@ -36,6 +57,7 @@ interface ConceptPosition {
   color: string;
   importance: number;
 }
+
 
 // Helper to strip LaTeX for display labels
 const cleanLabel = (text: string): string => {
@@ -93,6 +115,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
   const [animationPhase, setAnimationPhase] = useState(0);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [wordBoxOffsets, setWordBoxOffsets] = useState<Map<string, { x: number; y: number }>>(new Map());
 
   // Combine all segments into full text
   const techText = segments.map(s => s.tech).join(' ');
@@ -133,13 +156,58 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   }, []);
 
   // Parse text into segments with LaTeX rendering and concept highlighting
-  // Now with spotlight isolation support
+  // Now with semantic distillation, phrase coalescence, and spotlight isolation
   const parseAndRenderText = useCallback((text: string, isTech: boolean): React.ReactNode[] => {
     if (!text) return [];
 
     const processedText = wrapBareLatex(text);
     const parts = processedText.split(LATEX_REGEX);
     const result: React.ReactNode[] = [];
+    let highlightIndex = 0; // Track index for repulsion offsets
+    const paneType = isTech ? 'tech' : 'analogy';
+
+    // Helper to check if a word is a meaningful match (not just a stop word)
+    const isSemanticMatch = (word: string, concept: ConceptMapItem): boolean => {
+      const wordLower = word.toLowerCase().replace(/[.,!?;:'"()]/g, '');
+
+      // Skip stop words unless they're the entire concept term
+      if (isStopWord(wordLower)) {
+        const techClean = cleanLabel(concept.tech_term).toLowerCase();
+        const analogyClean = cleanLabel(concept.analogy_term).toLowerCase();
+        // Only allow if the stop word IS the entire concept (rare edge case)
+        if (wordLower !== techClean && wordLower !== analogyClean) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    // Helper to find matching concept for a word
+    const findMatchingConcept = (word: string): ConceptMapItem | undefined => {
+      const wordLower = word.toLowerCase().replace(/[.,!?;:'"()]/g, '');
+
+      // Skip very short words and stop words early
+      if (wordLower.length < 3 || isStopWord(wordLower)) {
+        return undefined;
+      }
+
+      for (const concept of conceptMap) {
+        const techClean = cleanLabel(concept.tech_term).toLowerCase();
+        const analogyClean = cleanLabel(concept.analogy_term).toLowerCase();
+
+        // Exact match or meaningful partial match
+        if (wordLower === techClean || wordLower === analogyClean ||
+            techClean.split(/\s+/).includes(wordLower) ||
+            analogyClean.split(/\s+/).includes(wordLower) ||
+            (wordLower.length > 4 && (techClean.includes(wordLower) || analogyClean.includes(wordLower)))) {
+          if (isSemanticMatch(word, concept)) {
+            return concept;
+          }
+        }
+      }
+      return undefined;
+    };
 
     parts.forEach((part, partIndex) => {
       if (!part) return;
@@ -165,18 +233,20 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept!.id);
           const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
           const isHovered = hoveredConcept === matchedConcept.id;
-          const importance = getConceptImportance(matchedConcept);
-          const importanceLevel = getImportanceLevel(importance);
 
-          // Spotlight: when something is hovered, this matched term gets special treatment
           const spotlightActive = hoveredConcept !== null;
           const isSpotlit = isHovered;
+
+          // Get repulsion offset for this box
+          const offsetKey = `${paneType}-${highlightIndex}`;
+          const offset = wordBoxOffsets.get(offsetKey) || { x: 0, y: 0 };
+          highlightIndex++;
 
           result.push(
             <span
               key={`latex-${partIndex}`}
               data-concept-id={matchedConcept.id}
-              data-type={isTech ? 'tech' : 'analogy'}
+              data-type={paneType}
               className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-500 ease-out
                 ${isSpotlit ? 'scale-125 shadow-2xl z-50 relative' : spotlightActive ? 'opacity-40' : ''}
               `}
@@ -184,7 +254,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 backgroundColor: isSpotlit ? color + '60' : color + '20',
                 border: `2px solid ${isSpotlit ? color : 'transparent'}`,
                 transform: isSpotlit
-                  ? `scale(1.3) translateY(-4px)`
+                  ? `scale(1.3) translateY(-4px) translate(${offset.x}px, ${offset.y}px)`
                   : spotlightActive ? 'scale(0.95)' : undefined,
                 boxShadow: isSpotlit ? `0 8px 32px ${color}60, 0 0 0 4px ${color}30` : undefined,
                 filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
@@ -196,7 +266,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             </span>
           );
         } else {
-          // Non-concept LaTeX - apply spotlight fade if active
           const spotlightActive = hoveredConcept !== null;
           result.push(
             <span
@@ -212,46 +281,82 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           );
         }
       } else {
-        // Regular text - check for concept terms word by word
+        // Regular text - use phrase coalescence
         const words = part.split(/(\s+)/);
-        words.forEach((word, wordIndex) => {
-          if (!word) return;
+        let i = 0;
+
+        while (i < words.length) {
+          const word = words[i];
+
+          if (!word) {
+            i++;
+            continue;
+          }
+
           if (/^\s+$/.test(word)) {
-            result.push(<span key={`space-${partIndex}-${wordIndex}`}>{word}</span>);
-            return;
+            result.push(<span key={`space-${partIndex}-${i}`}>{word}</span>);
+            i++;
+            continue;
           }
 
-          let matchedConcept: ConceptMapItem | undefined;
-          const wordLower = word.toLowerCase().replace(/[.,!?;:'"()]/g, '');
-
-          for (const concept of conceptMap) {
-            const techClean = cleanLabel(concept.tech_term).toLowerCase();
-            const analogyClean = cleanLabel(concept.analogy_term).toLowerCase();
-
-            if (wordLower === techClean || wordLower === analogyClean ||
-                techClean.split(/\s+/).includes(wordLower) ||
-                analogyClean.split(/\s+/).includes(wordLower) ||
-                (wordLower.length > 4 && (techClean.includes(wordLower) || analogyClean.includes(wordLower)))) {
-              matchedConcept = concept;
-              break;
-            }
-          }
+          const matchedConcept = findMatchingConcept(word);
 
           if (matchedConcept) {
-            const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept!.id);
+            // Phrase coalescence: collect consecutive words matching the same concept
+            const phraseWords: string[] = [word];
+            let j = i + 1;
+
+            // Look ahead for consecutive matches to the same concept or related words
+            while (j < words.length) {
+              const nextWord = words[j];
+
+              // Include spaces and connecting words in phrases
+              if (/^\s+$/.test(nextWord)) {
+                // Check if there's another matching word after the space
+                if (j + 1 < words.length) {
+                  const wordAfterSpace = words[j + 1];
+                  const nextMatch = findMatchingConcept(wordAfterSpace);
+
+                  if (nextMatch && nextMatch.id === matchedConcept.id) {
+                    phraseWords.push(nextWord); // Include the space
+                    phraseWords.push(wordAfterSpace); // Include the matching word
+                    j += 2;
+                    continue;
+                  }
+                }
+                break; // Stop if next word doesn't match
+              }
+
+              const nextMatch = findMatchingConcept(nextWord);
+              if (nextMatch && nextMatch.id === matchedConcept.id) {
+                phraseWords.push(nextWord);
+                j++;
+              } else {
+                break;
+              }
+            }
+
+            const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept.id);
             const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
             const isHovered = hoveredConcept === matchedConcept.id;
-            const importance = getConceptImportance(matchedConcept);
 
             const spotlightActive = hoveredConcept !== null;
             const isSpotlit = isHovered;
 
+            // Get repulsion offset for this phrase box
+            const offsetKey = `${paneType}-${highlightIndex}`;
+            const offset = wordBoxOffsets.get(offsetKey) || { x: 0, y: 0 };
+            highlightIndex++;
+
+            // Render the entire phrase as one unit
+            const phraseText = phraseWords.join('');
+
             result.push(
               <span
-                key={`word-${partIndex}-${wordIndex}`}
+                key={`phrase-${partIndex}-${i}`}
                 data-concept-id={matchedConcept.id}
-                data-type={isTech ? 'tech' : 'analogy'}
-                className={`inline-block px-1 py-0.5 rounded cursor-pointer transition-all duration-500 ease-out
+                data-type={paneType}
+                className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-500 ease-out
                   ${isSpotlit ? 'z-50 relative' : ''}
                 `}
                 style={{
@@ -260,25 +365,27 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   fontWeight: isSpotlit ? 800 : 600,
                   border: `2px solid ${isSpotlit ? color : 'transparent'}`,
                   transform: isSpotlit
-                    ? `scale(1.35) translateY(-6px)`
+                    ? `scale(1.2) translateY(-4px) translate(${offset.x}px, ${offset.y}px)`
                     : spotlightActive ? 'scale(0.92)' : undefined,
                   boxShadow: isSpotlit ? `0 12px 40px ${color}50, 0 0 0 4px ${color}25` : undefined,
                   opacity: spotlightActive && !isSpotlit ? 0.35 : 1,
                   filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
-                  fontSize: isSpotlit ? '1.1em' : undefined,
+                  fontSize: isSpotlit ? '1.05em' : undefined,
                 }}
-                onMouseEnter={() => setHoveredConcept(matchedConcept!.id)}
+                onMouseEnter={() => setHoveredConcept(matchedConcept.id)}
                 onMouseLeave={() => setHoveredConcept(null)}
               >
-                {word}
+                {phraseText}
               </span>
             );
+
+            i = j; // Skip to after the phrase
           } else {
             // Non-concept word - apply spotlight fade
             const spotlightActive = hoveredConcept !== null;
             result.push(
               <span
-                key={`word-${partIndex}-${wordIndex}`}
+                key={`word-${partIndex}-${i}`}
                 className="transition-all duration-500"
                 style={{
                   opacity: spotlightActive ? 0.2 : 1,
@@ -288,13 +395,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 {word}
               </span>
             );
+            i++;
           }
-        });
+        }
       }
     });
 
     return result;
-  }, [conceptMap, hoveredConcept, isDarkMode, renderLatex, getConceptImportance]);
+  }, [conceptMap, hoveredConcept, isDarkMode, renderLatex, wordBoxOffsets]);
 
   // Update concept positions when layout changes
   const updatePositions = useCallback(() => {
@@ -354,6 +462,124 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
     animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
   }, []);
+
+  // Magnetic repulsion zones - prevent highlighted boxes from overlapping
+  useEffect(() => {
+    if (hoveredConcept === null) {
+      // Clear offsets when not hovering
+      setWordBoxOffsets(new Map());
+      return;
+    }
+
+    // Find all highlighted word boxes for the hovered concept
+    const calculateRepulsion = () => {
+      const techPane = techPaneRef.current;
+      const analogyPane = analogyPaneRef.current;
+      if (!techPane && !analogyPane) return;
+
+      const allBoxes: Array<{ id: string; rect: DOMRect; pane: 'tech' | 'analogy' }> = [];
+
+      // Collect all highlighted boxes from both panes
+      [techPane, analogyPane].forEach((pane, paneIndex) => {
+        if (!pane) return;
+        const paneName = paneIndex === 0 ? 'tech' : 'analogy';
+        const highlightedElements = pane.querySelectorAll(`[data-concept-id="${hoveredConcept}"]`);
+        highlightedElements.forEach((el, idx) => {
+          const rect = el.getBoundingClientRect();
+          allBoxes.push({
+            id: `${paneName}-${idx}`,
+            rect,
+            pane: paneName as 'tech' | 'analogy'
+          });
+        });
+      });
+
+      // Calculate repulsion offsets
+      const newOffsets = new Map<string, { x: number; y: number }>();
+      const bufferZone = 8; // Minimum distance between boxes
+      const maxIterations = 10;
+
+      // Simple iterative repulsion
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
+        let hadOverlap = false;
+
+        for (let i = 0; i < allBoxes.length; i++) {
+          for (let j = i + 1; j < allBoxes.length; j++) {
+            // Only check boxes in the same pane
+            if (allBoxes[i].pane !== allBoxes[j].pane) continue;
+
+            const box1 = allBoxes[i];
+            const box2 = allBoxes[j];
+
+            const offset1 = newOffsets.get(box1.id) || { x: 0, y: 0 };
+            const offset2 = newOffsets.get(box2.id) || { x: 0, y: 0 };
+
+            // Adjusted positions
+            const rect1 = {
+              left: box1.rect.left + offset1.x,
+              right: box1.rect.right + offset1.x,
+              top: box1.rect.top + offset1.y,
+              bottom: box1.rect.bottom + offset1.y,
+              width: box1.rect.width,
+              height: box1.rect.height
+            };
+
+            const rect2 = {
+              left: box2.rect.left + offset2.x,
+              right: box2.rect.right + offset2.x,
+              top: box2.rect.top + offset2.y,
+              bottom: box2.rect.bottom + offset2.y,
+              width: box2.rect.width,
+              height: box2.rect.height
+            };
+
+            // Check for overlap (with buffer zone)
+            const overlapX = Math.max(0, Math.min(rect1.right + bufferZone, rect2.right + bufferZone) -
+                                         Math.max(rect1.left - bufferZone, rect2.left - bufferZone));
+            const overlapY = Math.max(0, Math.min(rect1.bottom + bufferZone, rect2.bottom + bufferZone) -
+                                         Math.max(rect1.top - bufferZone, rect2.top - bufferZone));
+
+            if (overlapX > 0 && overlapY > 0) {
+              hadOverlap = true;
+
+              // Calculate center points
+              const center1X = rect1.left + rect1.width / 2;
+              const center1Y = rect1.top + rect1.height / 2;
+              const center2X = rect2.left + rect2.width / 2;
+              const center2Y = rect2.top + rect2.height / 2;
+
+              // Push boxes apart (primarily vertical for text flow)
+              const pushStrength = 0.6;
+              const deltaY = center1Y - center2Y || 1;
+              const deltaX = center1X - center2X || 0.1;
+
+              // Vertical push is stronger to maintain reading flow
+              const pushY = (overlapY * pushStrength * Math.sign(deltaY)) / 2;
+              const pushX = (overlapX * pushStrength * 0.3 * Math.sign(deltaX)) / 2;
+
+              newOffsets.set(box1.id, {
+                x: offset1.x + pushX,
+                y: offset1.y + pushY
+              });
+
+              newOffsets.set(box2.id, {
+                x: offset2.x - pushX,
+                y: offset2.y - pushY
+              });
+            }
+          }
+        }
+
+        if (!hadOverlap) break;
+      }
+
+      setWordBoxOffsets(newOffsets);
+    };
+
+    // Run repulsion calculation with slight delay for layout to settle
+    const timer = setTimeout(calculateRepulsion, 50);
+    return () => clearTimeout(timer);
+  }, [hoveredConcept]);
 
   // Generate SVG path for attention flow between two points
   const generateFlowPath = (start: DOMRect, end: DOMRect, containerRect: DOMRect): string => {
