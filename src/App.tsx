@@ -16,7 +16,12 @@ import {
   Palette,
   Loader2,
   BrainCircuit,
-  BookOpen
+  BookOpen,
+  HelpCircle,
+  X,
+  Snowflake,
+  Coffee,
+  Network
 } from 'lucide-react';
 
 // Types
@@ -181,6 +186,11 @@ export default function App() {
   // Main Content Complexity State
   const [mainComplexity, setMainComplexity] = useState<5 | 50 | 100>(50);
   const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Ambiance Mode State
+  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
+  const [isConstellationMode, setIsConstellationMode] = useState(false);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -695,14 +705,28 @@ export default function App() {
           setShowHistory(!showHistory);
           break;
         case '?':
-          // Show help/keyboard shortcuts info (could be expanded later)
+          // Show keyboard shortcuts legend
+          setShowShortcutsLegend(!showShortcutsLegend);
+          break;
+        case 'g':
+          // Toggle constellation/graph mode
+          if (!hasStarted) return;
+          setIsConstellationMode(!isConstellationMode);
+          break;
+        case '1':
+          // Study mode
+          setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
+          break;
+        case '2':
+          // Holiday mode
+          setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday');
           break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, ambianceMode]);
 
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
@@ -1345,6 +1369,21 @@ export default function App() {
                         ))}
                       </div>
                     )}
+                    {/* Constellation Mode Button */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setIsConstellationMode(!isConstellationMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          isConstellationMode
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Constellation Mode (G)"
+                      >
+                        <Network size={14} />
+                        <span className="hidden sm:inline">Graph</span>
+                      </button>
+                    )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
                       <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
@@ -1650,6 +1689,37 @@ export default function App() {
 
       {/* Floating Action Buttons */}
       <div className={`fixed bottom-6 right-6 flex gap-2 z-[60] transition-transform duration-500 ${isImmersive ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+        {/* Shortcuts Help Button */}
+        <button
+          onClick={() => setShowShortcutsLegend(true)}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-blue-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-blue-500'}`}
+          title="Keyboard Shortcuts (?)"
+        >
+          <HelpCircle size={20} />
+        </button>
+        {/* Ambiance Mode Buttons */}
+        <button
+          onClick={() => setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study')}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            ambianceMode === 'study'
+              ? 'bg-amber-500 border-amber-600 text-white'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-amber-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-amber-500')
+          }`}
+          title="Study Mode (1)"
+        >
+          <Coffee size={20} />
+        </button>
+        <button
+          onClick={() => setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday')}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            ambianceMode === 'holiday'
+              ? 'bg-red-500 border-red-600 text-white'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500')
+          }`}
+          title="Holiday Mode (2)"
+        >
+          <Snowflake size={20} />
+        </button>
         {hasStarted && (
           <button
             onClick={resetAll}
@@ -1668,6 +1738,150 @@ export default function App() {
           {showControls ? <MoveHorizontal size={20} /> : <Zap size={20} />}
         </button>
       </div>
+
+      {/* Keyboard Shortcuts Legend Modal */}
+      {showShortcutsLegend && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowShortcutsLegend(false)}>
+          <div
+            className={`relative w-full max-w-md mx-4 p-6 rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowShortcutsLegend(false)}
+              className={`absolute top-4 right-4 p-1 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+            >
+              <X size={20} />
+            </button>
+            <h2 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+              Keyboard Shortcuts
+            </h2>
+            <div className="space-y-3">
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>View Modes</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>M</kbd>
+                  <span>Morph Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>E</kbd>
+                  <span>Expert Lock</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
+                  <span>Tech Lock</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>S</kbd>
+                  <span>Story Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>G</kbd>
+                  <span>Graph Mode</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>D</kbd>
+                  <span>Dark Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>I</kbd>
+                  <span>Immersive</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>C</kbd>
+                  <span>Controls</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>H</kbd>
+                  <span>History</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Ambiance</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>1</kbd>
+                  <span>Study Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
+                  <span>Holiday Mode</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Q</kbd>
+                  <span>Quiz Me</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Esc</kbd>
+                  <span>Close Modal</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>?</kbd>
+                  <span>This Menu</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ambiance Overlay Effects */}
+      {ambianceMode === 'study' && (
+        <div className="fixed inset-0 pointer-events-none z-[5]">
+          {/* Warm amber overlay with subtle candle flicker */}
+          <div className="absolute inset-0 bg-amber-800/8 animate-candle" />
+          {/* Subtle warm vignette */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(120, 53, 15, 0.15) 100%)'
+            }}
+          />
+        </div>
+      )}
+
+      {ambianceMode === 'holiday' && (
+        <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
+          {/* Vintage red/green gradient tint */}
+          <div className="absolute inset-0 bg-gradient-to-br from-red-900/8 via-transparent to-green-900/8" />
+          {/* Snow particles */}
+          <div className="absolute inset-0">
+            {Array.from({ length: 40 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-1.5 h-1.5 bg-white/50 rounded-full animate-snowfall"
+                style={{
+                  left: `${(i * 2.5) % 100}%`,
+                  animationDelay: `${(i * 0.2) % 8}s`,
+                  animationDuration: `${6 + (i % 4)}s`,
+                }}
+              />
+            ))}
+          </div>
+          {/* Warm holiday vignette */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(69, 10, 10, 0.12) 100%)'
+            }}
+          />
+        </div>
+      )}
+
+      {/* Constellation Mode Placeholder Notification */}
+      {isConstellationMode && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-full shadow-lg flex items-center gap-2">
+          <Network size={16} />
+          <span>Constellation Mode coming soon!</span>
+          <button onClick={() => setIsConstellationMode(false)} className="ml-2 hover:text-purple-200">
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

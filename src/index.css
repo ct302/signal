@@ -16,3 +16,50 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
+
+/* Ambiance Effects */
+@keyframes snowfall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-snowfall {
+  animation: snowfall linear infinite;
+}
+
+/* Radial gradient for vignette effect */
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at center, var(--tw-gradient-from) 0%, var(--tw-gradient-via) 50%, var(--tw-gradient-to) 100%);
+}
+
+/* Study mode candle flicker */
+@keyframes candleFlicker {
+  0%, 100% {
+    opacity: 0.08;
+  }
+  25% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.06;
+  }
+  75% {
+    opacity: 0.12;
+  }
+}
+
+.animate-candle {
+  animation: candleFlicker 3s ease-in-out infinite;
+}
