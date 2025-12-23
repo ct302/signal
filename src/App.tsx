@@ -538,8 +538,8 @@ export default function App() {
 
     // Get position for the definition popup
     const buttonPos = defineButtonPosition;
-    const popupTop = buttonPos ? buttonPos.top + 50 : 200;
-    const popupLeft = buttonPos ? Math.max(20, buttonPos.left) : 100;
+    const popupTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
+    const popupLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
 
     // Open definition popup
     if (defPosition && selectedTerm) {
