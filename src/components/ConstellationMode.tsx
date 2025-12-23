@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Play, Pause, RotateCcw, Pin, Unlock } from 'lucide-react';
+import { X, Play, Pause, RotateCcw, Pin, Unlock, Target, Orbit } from 'lucide-react';
 
 // Types for the graph
 interface GraphNode {
@@ -14,6 +14,8 @@ interface GraphNode {
   vx: number;
   vy: number;
   pinned: boolean; // Whether node is pinned in place
+  orbitAngle?: number; // For focus mode orbit animation
+  orbitRadius?: number; // Distance from focused node
 }
 
 interface GraphEdge {
@@ -92,7 +94,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [isSimulating, setIsSimulating] = useState(true);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [focusedNode, setFocusedNode] = useState<string | null>(null); // For focus/explosion mode
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
   // Initialize graph data from concept map
   useEffect(() => {
@@ -277,10 +281,27 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     };
   }, [isSimulating, simulate, nodes.length]);
 
-  // Handle mouse events for dragging
+  // Get connected nodes with their connection strengths
+  const getConnectedNodes = useCallback((nodeId: string): Array<{ id: string; strength: number }> => {
+    const connected: Array<{ id: string; strength: number }> = [];
+    for (const edge of edges) {
+      if (edge.source === nodeId) {
+        connected.push({ id: edge.target, strength: edge.strength });
+      } else if (edge.target === nodeId) {
+        connected.push({ id: edge.source, strength: edge.strength });
+      }
+    }
+    return connected;
+  }, [edges]);
+
+  // Handle mouse events for dragging with magnetic chains
   const handleMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.preventDefault();
     setDraggedNode(nodeId);
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) {
+      dragStartPos.current = { x: node.x, y: node.y };
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -288,12 +309,44 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const newX = e.clientX - rect.left;
+    const newY = e.clientY - rect.top;
 
-    setNodes(current => current.map(n =>
-      n.id === draggedNode ? { ...n, x, y } : n
-    ));
+    // Get the drag delta
+    const draggedNodeData = nodes.find(n => n.id === draggedNode);
+    if (!draggedNodeData) return;
+
+    const deltaX = newX - draggedNodeData.x;
+    const deltaY = newY - draggedNodeData.y;
+
+    // Apply magnetic pull to connected nodes based on connection strength
+    const connectedNodes = getConnectedNodes(draggedNode);
+
+    setNodes(current => current.map(n => {
+      if (n.id === draggedNode) {
+        // Main dragged node moves fully
+        return { ...n, x: newX, y: newY };
+      }
+
+      // Check if this node is connected to the dragged node
+      const connection = connectedNodes.find(cn => cn.id === n.id);
+      if (connection && !n.pinned) {
+        // Apply elastic pull based on connection strength
+        // Higher strength = more pull (follows more closely)
+        const pullFactor = connection.strength * 0.6; // 0 to 0.6 pull
+        const elasticX = n.x + deltaX * pullFactor;
+        const elasticY = n.y + deltaY * pullFactor;
+
+        // Boundary constraints
+        const nodeRadius = 30 + n.weight * 20;
+        const constrainedX = Math.max(nodeRadius, Math.min(dimensions.width - nodeRadius, elasticX));
+        const constrainedY = Math.max(nodeRadius, Math.min(dimensions.height - nodeRadius, elasticY));
+
+        return { ...n, x: constrainedX, y: constrainedY };
+      }
+
+      return n;
+    }));
   };
 
   const handleMouseUp = () => {
@@ -303,20 +356,113 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         n.id === draggedNode ? { ...n, pinned: true } : n
       ));
       setDraggedNode(null);
+      dragStartPos.current = null;
     }
   };
 
-  // Double-click to unpin a node
+  // Double-click to toggle focus mode on a node
   const handleDoubleClick = (nodeId: string) => {
-    setNodes(current => current.map(n =>
-      n.id === nodeId ? { ...n, pinned: false } : n
-    ));
+    if (focusedNode === nodeId) {
+      // Unpin and exit focus mode
+      setFocusedNode(null);
+      setNodes(current => current.map(n => ({ ...n, pinned: false })));
+      setIsSimulating(true);
+    } else {
+      // Enter focus mode - this node becomes the center
+      setFocusedNode(nodeId);
+      setIsSimulating(false);
+
+      // Calculate orbit positions for non-focused nodes
+      const focusNode = nodes.find(n => n.id === nodeId);
+      if (!focusNode) return;
+
+      const centerX = dimensions.width / 2;
+      const centerY = dimensions.height / 2;
+      const connectedNodes = getConnectedNodes(nodeId);
+
+      setNodes(current => {
+        const nonFocused = current.filter(n => n.id !== nodeId);
+        const totalNonFocused = nonFocused.length;
+
+        return current.map((n, idx) => {
+          if (n.id === nodeId) {
+            // Focused node goes to center and gets pinned
+            return { ...n, x: centerX, y: centerY, pinned: true };
+          }
+
+          // Calculate orbit position based on connection strength
+          const connection = connectedNodes.find(cn => cn.id === n.id);
+          const connectionStrength = connection?.strength || 0.2;
+
+          // Closer connection = smaller orbit
+          const baseRadius = 180;
+          const orbitRadius = baseRadius + (1 - connectionStrength) * 150;
+
+          // Distribute around the circle
+          const nonFocusedIndex = nonFocused.findIndex(nf => nf.id === n.id);
+          const angle = (nonFocusedIndex / totalNonFocused) * Math.PI * 2;
+
+          return {
+            ...n,
+            x: centerX + Math.cos(angle) * orbitRadius,
+            y: centerY + Math.sin(angle) * orbitRadius,
+            orbitAngle: angle,
+            orbitRadius: orbitRadius,
+            pinned: false
+          };
+        });
+      });
+    }
   };
 
-  // Unpin all nodes
+  // Unpin all nodes and exit focus mode
   const unpinAll = () => {
+    setFocusedNode(null);
     setNodes(current => current.map(n => ({ ...n, pinned: false })));
+    setIsSimulating(true);
   };
+
+  // Exit focus mode
+  const exitFocusMode = () => {
+    setFocusedNode(null);
+    setNodes(current => current.map(n => ({ ...n, pinned: false })));
+    setIsSimulating(true);
+  };
+
+  // Orbit animation for focus mode
+  useEffect(() => {
+    if (!focusedNode) return;
+
+    const orbitSpeed = 0.005; // radians per frame
+    let animId: number;
+
+    const animateOrbit = () => {
+      setNodes(current => {
+        const focusNode = current.find(n => n.id === focusedNode);
+        if (!focusNode) return current;
+
+        return current.map(n => {
+          if (n.id === focusedNode || n.pinned) return n;
+
+          // Slowly orbit around the focused node
+          const newAngle = (n.orbitAngle || 0) + orbitSpeed;
+          const orbitRadius = n.orbitRadius || 200;
+
+          return {
+            ...n,
+            x: focusNode.x + Math.cos(newAngle) * orbitRadius,
+            y: focusNode.y + Math.sin(newAngle) * orbitRadius,
+            orbitAngle: newAngle
+          };
+        });
+      });
+
+      animId = requestAnimationFrame(animateOrbit);
+    };
+
+    animId = requestAnimationFrame(animateOrbit);
+    return () => cancelAnimationFrame(animId);
+  }, [focusedNode]);
 
   // Reset simulation
   const resetSimulation = () => {
@@ -324,6 +470,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     const height = dimensions.height;
     const centerX = width / 2;
     const centerY = height / 2;
+
+    setFocusedNode(null); // Exit focus mode on reset
 
     setNodes(current => current.map((node, index) => {
       const angle = (index / current.length) * Math.PI * 2;
@@ -334,7 +482,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
         vx: 0,
         vy: 0,
-        pinned: false
+        pinned: false,
+        orbitAngle: undefined,
+        orbitRadius: undefined
       };
     }));
     setIsSimulating(true);
@@ -353,6 +503,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   // Count pinned nodes
   const pinnedCount = nodes.filter(n => n.pinned).length;
 
+  // Get focused node label for display
+  const focusedNodeData = focusedNode ? nodes.find(n => n.id === focusedNode) : null;
+
   return (
     <div className="fixed inset-0 z-[80] bg-black/90 flex flex-col">
       {/* Header */}
@@ -363,16 +516,33 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             {isAnalogyMode ? 'Analogy View' : 'Technical View'} • {nodes.length} concepts
             {pinnedCount > 0 && <span className="text-amber-400 ml-2">• {pinnedCount} pinned</span>}
           </span>
+          {focusedNode && (
+            <span className="flex items-center gap-2 text-cyan-400 text-sm bg-cyan-400/10 px-3 py-1 rounded-full">
+              <Target size={14} />
+              Focus: {focusedNodeData?.label}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors"
-            title={isSimulating ? 'Pause simulation' : 'Resume simulation'}
-          >
-            {isSimulating ? <Pause size={18} /> : <Play size={18} />}
-          </button>
-          {pinnedCount > 0 && (
+          {focusedNode ? (
+            <button
+              onClick={exitFocusMode}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 transition-colors"
+              title="Exit focus mode"
+            >
+              <Orbit size={18} />
+              Exit Focus
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsSimulating(!isSimulating)}
+              className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors"
+              title={isSimulating ? 'Pause simulation' : 'Resume simulation'}
+            >
+              {isSimulating ? <Pause size={18} /> : <Play size={18} />}
+            </button>
+          )}
+          {pinnedCount > 0 && !focusedNode && (
             <button
               onClick={unpinAll}
               className="p-2 rounded-lg bg-neutral-800 text-amber-400 hover:bg-neutral-700 transition-colors"
@@ -409,13 +579,79 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          {/* Background grid */}
+          {/* Background grid and filters */}
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
               <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>
             </pattern>
+            {/* Glow filter for focused node */}
+            <filter id="focusGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="8" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            {/* Radial gradient for orbit rings */}
+            <radialGradient id="orbitGradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.3"/>
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0"/>
+            </radialGradient>
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)" />
+
+          {/* Orbit rings for focus mode */}
+          {focusedNode && focusedNodeData && (
+            <g className="orbit-rings">
+              {/* Inner orbit ring */}
+              <circle
+                cx={focusedNodeData.x}
+                cy={focusedNodeData.y}
+                r={180}
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth={1}
+                strokeOpacity={0.3}
+                strokeDasharray="8 4"
+              >
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from={`0 ${focusedNodeData.x} ${focusedNodeData.y}`}
+                  to={`360 ${focusedNodeData.x} ${focusedNodeData.y}`}
+                  dur="30s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+              {/* Outer orbit ring */}
+              <circle
+                cx={focusedNodeData.x}
+                cy={focusedNodeData.y}
+                r={330}
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth={1}
+                strokeOpacity={0.2}
+                strokeDasharray="12 6"
+              >
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from={`360 ${focusedNodeData.x} ${focusedNodeData.y}`}
+                  to={`0 ${focusedNodeData.x} ${focusedNodeData.y}`}
+                  dur="45s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+              {/* Center glow */}
+              <circle
+                cx={focusedNodeData.x}
+                cy={focusedNodeData.y}
+                r={100}
+                fill="url(#orbitGradient)"
+              />
+            </g>
+          )}
 
           {/* Edges */}
           <g className="edges">
@@ -449,6 +685,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               const color = CONCEPT_COLORS[node.conceptIndex % CONCEPT_COLORS.length];
               const isHovered = hoveredNode === node.id;
               const isDragging = draggedNode === node.id;
+              const isFocused = focusedNode === node.id;
 
               return (
                 <g
@@ -459,19 +696,44 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   onMouseDown={(e) => handleMouseDown(node.id, e)}
                   onDoubleClick={() => handleDoubleClick(node.id)}
                   className="cursor-pointer"
+                  style={{ filter: isFocused ? 'url(#focusGlow)' : undefined }}
                 >
+                  {/* Focus mode outer ring */}
+                  {isFocused && (
+                    <circle
+                      r={radius + 15}
+                      fill="none"
+                      stroke="#22d3ee"
+                      strokeWidth={3}
+                      opacity={0.8}
+                    >
+                      <animate
+                        attributeName="r"
+                        values={`${radius + 15};${radius + 25};${radius + 15}`}
+                        dur="2s"
+                        repeatCount="indefinite"
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.8;0.3;0.8"
+                        dur="2s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  )}
+
                   {/* Glow effect */}
-                  {isHovered && (
+                  {(isHovered || isFocused) && (
                     <circle
                       r={radius + 10}
-                      fill={color}
-                      opacity={0.2}
-                      className="animate-pulse"
+                      fill={isFocused ? '#22d3ee' : color}
+                      opacity={0.3}
+                      className={isFocused ? '' : 'animate-pulse'}
                     />
                   )}
 
-                  {/* Pin indicator ring */}
-                  {node.pinned && (
+                  {/* Pin indicator ring (not shown in focus mode) */}
+                  {node.pinned && !isFocused && (
                     <circle
                       r={radius + 4}
                       fill="none"
@@ -486,16 +748,16 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   <circle
                     r={radius}
                     fill={isDarkMode ? '#1f2937' : '#f3f4f6'}
-                    stroke={color}
-                    strokeWidth={isHovered ? 4 : 2}
+                    stroke={isFocused ? '#22d3ee' : color}
+                    strokeWidth={isHovered || isFocused ? 4 : 2}
                     className="transition-all duration-200"
                   />
 
                   {/* Inner colored circle */}
                   <circle
                     r={radius * 0.7}
-                    fill={color}
-                    opacity={0.2}
+                    fill={isFocused ? '#22d3ee' : color}
+                    opacity={isFocused ? 0.4 : 0.2}
                   />
 
                   {/* Label using foreignObject for proper text rendering */}
@@ -574,7 +836,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
       {/* Instructions */}
       <div className="absolute bottom-4 left-4 text-neutral-500 text-xs">
-        Drag to pin • Double-click to unpin • Hover for details • Press G or Esc to close
+        {focusedNode ? (
+          <>Double-click focused node to exit • Connected nodes orbit closer • Drag to arrange</>
+        ) : (
+          <>Drag to move (connected nodes follow) • Double-click for Focus Mode • Hover for details • Press G or Esc to close</>
+        )}
       </div>
     </div>
   );
