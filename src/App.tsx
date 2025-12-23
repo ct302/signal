@@ -75,7 +75,8 @@ import {
   QuizModal,
   SynthesisModal,
   DefinitionPopup,
-  MiniDefinitionPopup
+  MiniDefinitionPopup,
+  ConstellationMode
 } from './components';
 
 export default function App() {
@@ -648,7 +649,9 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (showQuizModal) setShowQuizModal(false);
+          if (isConstellationMode) setIsConstellationMode(false);
+          else if (showShortcutsLegend) setShowShortcutsLegend(false);
+          else if (showQuizModal) setShowQuizModal(false);
           else if (showSynthesis) setShowSynthesis(false);
           else if (miniDefPosition) setMiniDefPosition(null);
           else if (defPosition) {
@@ -1916,15 +1919,15 @@ export default function App() {
         </div>
       )}
 
-      {/* Constellation Mode Placeholder Notification */}
+      {/* Constellation Mode */}
       {isConstellationMode && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-full shadow-lg flex items-center gap-2">
-          <Network size={16} />
-          <span>Constellation Mode coming soon!</span>
-          <button onClick={() => setIsConstellationMode(false)} className="ml-2 hover:text-purple-200">
-            <X size={14} />
-          </button>
-        </div>
+        <ConstellationMode
+          conceptMap={conceptMap}
+          importanceMap={importanceMap}
+          isAnalogyMode={isAnalogyVisualMode}
+          isDarkMode={isDarkMode}
+          onClose={() => setIsConstellationMode(false)}
+        />
       )}
     </div>
   );

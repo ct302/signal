@@ -8,3 +8,4 @@ export * from './SynthesisModal';
 export * from './DefinitionPopup';
 export * from './MiniDefinitionPopup';
 export * from './Settings';
+export * from './ConstellationMode';
