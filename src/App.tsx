@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Eye,
   Zap,
@@ -16,7 +16,7 @@ import {
   Palette,
   Loader2,
   BrainCircuit,
-  MousePointerClick
+  BookOpen
 } from 'lucide-react';
 
 // Types
@@ -184,9 +184,18 @@ export default function App() {
   // Copy State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Selection State (for multi-word definition)
+  const [showDefineButton, setShowDefineButton] = useState(false);
+  const [defineButtonPosition, setDefineButtonPosition] = useState<Position | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<string>("");
+  const [isSelectingText, setIsSelectingText] = useState(false);
+  const [morphLockedForSelection, setMorphLockedForSelection] = useState(false);
+
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
@@ -453,6 +462,123 @@ export default function App() {
     fetchDefinition(term, context, level, isMini);
   };
 
+  // === Selection Handlers for Multi-Word Definition ===
+
+  // Clear selection state
+  const clearSelectionState = useCallback(() => {
+    setShowDefineButton(false);
+    setDefineButtonPosition(null);
+    setPendingSelection("");
+    setIsSelectingText(false);
+    setMorphLockedForSelection(false);
+  }, []);
+
+  // Handle selection start (mousedown/touchstart) - lock morph if in morph mode
+  const handleSelectionStart = useCallback(() => {
+    // Only lock morph if we're in morph mode
+    if (viewMode === 'morph' && !morphLockedForSelection) {
+      setMorphLockedForSelection(true);
+      setIsSelectingText(true);
+    }
+  }, [viewMode, morphLockedForSelection]);
+
+  // Handle selection end (mouseup/touchend) - detect selection and show button
+  const handleSelectionEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    // Small delay to let the selection complete
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+    }
+
+    selectionTimeoutRef.current = setTimeout(() => {
+      const selection = window.getSelection();
+      const selectedText = selection?.toString().trim();
+
+      if (selectedText && selectedText.length > 0) {
+        // Get the selection range to position the button
+        const range = selection?.getRangeAt(0);
+        if (range) {
+          const rect = range.getBoundingClientRect();
+
+          // Position the button above the selection (or below if near top)
+          const buttonTop = rect.top < 60
+            ? rect.bottom + window.scrollY + 8
+            : rect.top + window.scrollY - 40;
+          const buttonLeft = rect.left + window.scrollX + (rect.width / 2) - 40; // Center the button
+
+          setPendingSelection(selectedText);
+          setDefineButtonPosition({
+            top: buttonTop,
+            left: Math.max(10, buttonLeft), // Don't go off-screen left
+            placement: rect.top < 60 ? 'below' : 'above'
+          });
+          setShowDefineButton(true);
+        }
+      } else {
+        // No selection - clear state but keep morph locked briefly
+        setShowDefineButton(false);
+        setPendingSelection("");
+
+        // Unlock morph after a brief delay (allows for re-selection attempts)
+        setTimeout(() => {
+          if (!window.getSelection()?.toString().trim()) {
+            setMorphLockedForSelection(false);
+            setIsSelectingText(false);
+          }
+        }, 300);
+      }
+    }, 10);
+  }, []);
+
+  // Handle clicking the Define button
+  const handleDefineSelection = useCallback(() => {
+    if (!pendingSelection) return;
+
+    // Clear the browser selection
+    window.getSelection()?.removeAllRanges();
+
+    // Get position for the definition popup
+    const buttonPos = defineButtonPosition;
+    const popupTop = buttonPos ? buttonPos.top + 50 : 200;
+    const popupLeft = buttonPos ? Math.max(20, buttonPos.left) : 100;
+
+    // Open definition popup
+    if (defPosition && selectedTerm) {
+      // Already have a popup open - use mini popup
+      setMiniSelectedTerm(pendingSelection);
+      setMiniDefPosition({ top: popupTop, left: popupLeft });
+      fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+    } else {
+      // Open main popup
+      setSelectedTerm(pendingSelection);
+      setDefPosition({ top: popupTop, left: popupLeft, placement: 'below' });
+      const context = isAnalogyVisualMode
+        ? segments.map(s => s.analogy).join(' ')
+        : segments.map(s => s.tech).join(' ');
+      fetchDefinition(pendingSelection, context, defComplexity, false);
+    }
+
+    // Clear selection state
+    clearSelectionState();
+  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState]);
+
+  // Close define button when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      // Don't clear if clicking the define button itself
+      const target = e.target as HTMLElement;
+      if (target.closest('.define-selection-button')) return;
+
+      // Clear selection state when clicking outside content area
+      if (showDefineButton && contentRef.current && !contentRef.current.contains(target)) {
+        clearSelectionState();
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDefineButton, clearSelectionState]);
+
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
     if (questionNum === 1) return 'easy';
@@ -574,15 +700,16 @@ export default function App() {
     setShowHistory(false);
   };
 
-  // Check if any definition popup is open (used to lock morph mode)
+  // Check if morph should be locked (definition popup open OR user is selecting text)
   const isDefinitionPopupOpen = !!(defPosition || miniDefPosition);
+  const isMorphLocked = isDefinitionPopupOpen || morphLockedForSelection;
 
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(true);
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
-    // Lock morph when definition popup is open
-    if (isDefinitionPopupOpen) return;
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
   };
@@ -590,15 +717,15 @@ export default function App() {
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(false);
-    // Lock morph when definition popup is open
-    if (isDefinitionPopupOpen) return;
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     if (viewMode === 'morph') setIsHovering(false);
   };
 
   const handleTouchToggle = () => {
-    // Lock morph when definition popup is open
-    if (isDefinitionPopupOpen) return;
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (isMobile && viewMode === 'morph' && hasStarted) setIsHovering(!isHovering);
   };
 
@@ -1045,6 +1172,12 @@ export default function App() {
                       {modeLabel.icon}
                       <span>{modeLabel.text}</span>
                     </button>
+                    {/* Show selecting indicator when morph is locked for selection */}
+                    {morphLockedForSelection && viewMode === 'morph' && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                        Selecting...
+                      </span>
+                    )}
                     {hasStarted && (
                       <button
                         onClick={() => setIsNarrativeMode(!isNarrativeMode)}
@@ -1082,18 +1215,51 @@ export default function App() {
                 </div>
 
                 {/* Content Body */}
-                <div className="p-6 md:p-8" onDoubleClick={handleDoubleClick}>
+                <div
+                  ref={contentRef}
+                  className="p-6 md:p-8 relative select-text"
+                  onDoubleClick={handleDoubleClick}
+                  onMouseDown={handleSelectionStart}
+                  onMouseUp={handleSelectionEnd}
+                  onTouchStart={handleSelectionStart}
+                  onTouchEnd={handleSelectionEnd}
+                >
                   <p className={`text-lg md:text-xl leading-relaxed transition-all duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'} ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}>
                     {processedWords.map((word, i) => renderWord(word, i))}
                   </p>
+
+                  {/* Floating Define Button */}
+                  {showDefineButton && defineButtonPosition && pendingSelection && (
+                    <button
+                      className="define-selection-button fixed z-[300] flex items-center gap-1.5 px-3 py-2 bg-neutral-900 text-white text-xs font-medium rounded-lg shadow-xl border border-neutral-700 hover:bg-neutral-800 hover:scale-105 active:scale-95 transition-all duration-150"
+                      style={{
+                        top: defineButtonPosition.top,
+                        left: defineButtonPosition.left,
+                      }}
+                      onClick={handleDefineSelection}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDefineSelection();
+                      }}
+                    >
+                      <BookOpen size={14} />
+                      <span>Define</span>
+                      {pendingSelection.split(/\s+/).length > 1 && (
+                        <span className="text-neutral-400 text-[10px]">
+                          ({pendingSelection.split(/\s+/).length} words)
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Content Footer */}
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  {/* Clickable words hint */}
+                  {/* Selection hint */}
                   <div className={`flex items-center justify-center gap-1.5 mb-2 text-[10px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                    <MousePointerClick size={10} />
-                    <span>Double-click any highlighted word for definitions</span>
+                    <BookOpen size={10} />
+                    <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
