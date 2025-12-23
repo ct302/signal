@@ -1832,13 +1832,21 @@ export default function App() {
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
         <div className="fixed inset-0 pointer-events-none z-[5]">
-          {/* Warm amber overlay with subtle candle flicker */}
-          <div className="absolute inset-0 bg-amber-800/8 animate-candle" />
-          {/* Subtle warm vignette */}
+          {/* Deep blue light overlay for focus - scientifically shown to boost alertness */}
+          <div
+            className="absolute inset-0 animate-study-pulse"
+            style={{ backgroundColor: 'rgba(30, 64, 175, 0.15)' }}
+          />
+          {/* Secondary blue layer for depth */}
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)' }}
+          />
+          {/* Blue vignette around edges */}
           <div
             className="absolute inset-0"
             style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(120, 53, 15, 0.15) 100%)'
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(30, 58, 138, 0.25) 100%)'
             }}
           />
         </div>
@@ -1846,27 +1854,63 @@ export default function App() {
 
       {ambianceMode === 'holiday' && (
         <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
-          {/* Vintage red/green gradient tint */}
-          <div className="absolute inset-0 bg-gradient-to-br from-red-900/8 via-transparent to-green-900/8" />
-          {/* Snow particles */}
+          {/* Base holiday tint - red and green */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.12) 0%, transparent 50%, rgba(22, 101, 52, 0.12) 100%)'
+            }}
+          />
+          {/* Snow particles - larger and more visible */}
           <div className="absolute inset-0">
-            {Array.from({ length: 40 }).map((_, i) => (
+            {Array.from({ length: 60 }).map((_, i) => (
               <div
                 key={i}
-                className="absolute w-1.5 h-1.5 bg-white/50 rounded-full animate-snowfall"
+                className="absolute rounded-full animate-snowfall"
                 style={{
-                  left: `${(i * 2.5) % 100}%`,
-                  animationDelay: `${(i * 0.2) % 8}s`,
-                  animationDuration: `${6 + (i % 4)}s`,
+                  left: `${(i * 1.7) % 100}%`,
+                  width: `${3 + (i % 4)}px`,
+                  height: `${3 + (i % 4)}px`,
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  boxShadow: '0 0 4px rgba(255, 255, 255, 0.5)',
+                  animationDelay: `${(i * 0.15) % 10}s`,
+                  animationDuration: `${4 + (i % 6)}s`,
                 }}
               />
             ))}
           </div>
-          {/* Warm holiday vignette */}
+          {/* Twinkling Christmas lights along edges */}
+          <div className="absolute top-0 left-0 right-0 h-2 flex justify-around">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div
+                key={`light-top-${i}`}
+                className="w-2 h-2 rounded-full animate-twinkle"
+                style={{
+                  backgroundColor: i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15',
+                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15'}`,
+                  animationDelay: `${i * 0.2}s`,
+                }}
+              />
+            ))}
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-2 flex justify-around">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div
+                key={`light-bottom-${i}`}
+                className="w-2 h-2 rounded-full animate-twinkle"
+                style={{
+                  backgroundColor: i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15',
+                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15'}`,
+                  animationDelay: `${i * 0.15 + 0.5}s`,
+                }}
+              />
+            ))}
+          </div>
+          {/* Holiday vignette */}
           <div
             className="absolute inset-0"
             style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(69, 10, 10, 0.12) 100%)'
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(127, 29, 29, 0.15) 100%)'
             }}
           />
         </div>
