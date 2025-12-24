@@ -5,7 +5,7 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
 
 // OpenRouter API key for LLAMA 3.3 70B (demo/testing)
-export const DEFAULT_OPENROUTER_API_KEY = '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';
+export const DEFAULT_OPENROUTER_API_KEY = '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';
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
