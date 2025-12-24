@@ -1,4 +1,22 @@
 /**
+ * Protect LaTeX commands that conflict with JSON escape sequences
+ * \f (form feed), \t (tab), \n (newline), \r (carriage return), \b (backspace)
+ */
+const protectLatexEscapes = (text: string): string => {
+  return text
+    // Protect \f commands (frac, forall, flat)
+    .replace(/\\(frac|forall|flat)(?=[^a-zA-Z]|$)/g, '\\\\$1')
+    // Protect \t commands (text, to, tan, theta, times, tau, tilde, top)
+    .replace(/\\(text|to|tan|theta|times|tau|tilde|top|textbf)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
+    // Protect \n commands (nabla, neq, nu, neg, newline, not, nolimits)
+    .replace(/\\(nabla|neq|nu|neg|newline|not|nolimits)(?=[^a-zA-Z]|$)/g, '\\\\$1')
+    // Protect \r commands (rightarrow, rho, rangle, right, Rightarrow)
+    .replace(/\\(rightarrow|rho|rangle|right|Rightarrow)(?=[^a-zA-Z]|$)/g, '\\\\$1')
+    // Protect \b commands (beta, bar, boldsymbol, binom, brace, big, Big)
+    .replace(/\\(beta|bar|boldsymbol|binom|brace|big|Big)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1');
+};
+
+/**
  * Safely parse JSON with fallback handling for common issues
  */
 export const safeJsonParse = (text: string | null | undefined): any => {
@@ -12,10 +30,13 @@ export const safeJsonParse = (text: string | null | undefined): any => {
 
   if (!clean) return null;
 
+  // Protect LaTeX commands before JSON parsing
+  clean = protectLatexEscapes(clean);
+
   try {
     return JSON.parse(clean);
   } catch (e) {
-    // Try fixing common escape issues
+    // Try fixing remaining escape issues
     const fixed = clean.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
     try {
       return JSON.parse(fixed);

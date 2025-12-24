@@ -16,6 +16,8 @@ interface GraphNode {
   pinned: boolean; // Whether node is pinned in place
   orbitAngle?: number; // For focus mode orbit animation
   orbitRadius?: number; // Distance from focused node
+  anchorX?: number; // Original position for tether constraint
+  anchorY?: number;
 }
 
 interface GraphEdge {
@@ -96,6 +98,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [focusedNode, setFocusedNode] = useState<string | null>(null); // For focus/explosion mode
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [anchorNode, setAnchorNode] = useState<string | null>(null); // Highest importance node
+  const [tetherTension, setTetherTension] = useState<Map<string, number>>(new Map()); // Track tether strain
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
   // Initialize graph data from concept map
@@ -173,6 +177,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
     setNodes(graphNodes);
     setEdges(graphEdges);
+
+    // Set anchor node to highest importance concept
+    const highestImportance = graphNodes.reduce((max, node) =>
+      node.weight > max.weight ? node : max, graphNodes[0]);
+    setAnchorNode(highestImportance?.id || null);
   }, [conceptMap, importanceMap, isAnalogyMode]);
 
   // Force simulation
@@ -309,12 +318,51 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
-    const newX = e.clientX - rect.left;
-    const newY = e.clientY - rect.top;
+    let newX = e.clientX - rect.left;
+    let newY = e.clientY - rect.top;
 
     // Get the drag delta
     const draggedNodeData = nodes.find(n => n.id === draggedNode);
     if (!draggedNodeData) return;
+
+    // TETHERED CONSTRAINT: Limit how far non-anchor nodes can go from anchor
+    const anchorNodeData = nodes.find(n => n.id === anchorNode);
+    const isAnchor = draggedNode === anchorNode;
+
+    if (!isAnchor && anchorNodeData) {
+      // Calculate connection strength to anchor
+      const connectionToAnchor = edges.find(e =>
+        (e.source === draggedNode && e.target === anchorNode) ||
+        (e.target === draggedNode && e.source === anchorNode)
+      );
+      const connectionStrength = connectionToAnchor?.strength || 0.3;
+
+      // Max distance based on connection strength (stronger = shorter leash)
+      // Strength 1.0 = max 150px, Strength 0.3 = max 400px
+      const maxDistance = 150 + (1 - connectionStrength) * 350;
+
+      // Calculate distance from anchor
+      const dxToAnchor = newX - anchorNodeData.x;
+      const dyToAnchor = newY - anchorNodeData.y;
+      const distanceToAnchor = Math.sqrt(dxToAnchor * dxToAnchor + dyToAnchor * dyToAnchor);
+
+      // Calculate tension (0 = relaxed, 1 = max strain)
+      const tension = Math.min(1, distanceToAnchor / maxDistance);
+
+      // Update tether tension for visual feedback
+      setTetherTension(prev => {
+        const newMap = new Map(prev);
+        newMap.set(draggedNode, tension);
+        return newMap;
+      });
+
+      // Constrain to max distance if exceeded
+      if (distanceToAnchor > maxDistance) {
+        const angle = Math.atan2(dyToAnchor, dxToAnchor);
+        newX = anchorNodeData.x + Math.cos(angle) * maxDistance;
+        newY = anchorNodeData.y + Math.sin(angle) * maxDistance;
+      }
+    }
 
     const deltaX = newX - draggedNodeData.x;
     const deltaY = newY - draggedNodeData.y;
@@ -324,7 +372,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
     setNodes(current => current.map(n => {
       if (n.id === draggedNode) {
-        // Main dragged node moves fully
+        // Main dragged node moves (with tether constraint applied above)
         return { ...n, x: newX, y: newY };
       }
 
@@ -334,8 +382,28 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         // Apply elastic pull based on connection strength
         // Higher strength = more pull (follows more closely)
         const pullFactor = connection.strength * 0.6; // 0 to 0.6 pull
-        const elasticX = n.x + deltaX * pullFactor;
-        const elasticY = n.y + deltaY * pullFactor;
+        let elasticX = n.x + deltaX * pullFactor;
+        let elasticY = n.y + deltaY * pullFactor;
+
+        // Also apply tether constraint to connected nodes
+        if (anchorNodeData && n.id !== anchorNode) {
+          const connToAnchor = edges.find(e =>
+            (e.source === n.id && e.target === anchorNode) ||
+            (e.target === n.id && e.source === anchorNode)
+          );
+          const connStrength = connToAnchor?.strength || 0.3;
+          const maxDist = 150 + (1 - connStrength) * 350;
+
+          const dx = elasticX - anchorNodeData.x;
+          const dy = elasticY - anchorNodeData.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist > maxDist) {
+            const angle = Math.atan2(dy, dx);
+            elasticX = anchorNodeData.x + Math.cos(angle) * maxDist;
+            elasticY = anchorNodeData.y + Math.sin(angle) * maxDist;
+          }
+        }
 
         // Boundary constraints
         const nodeRadius = 30 + n.weight * 20;
@@ -357,6 +425,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       ));
       setDraggedNode(null);
       dragStartPos.current = null;
+      // Clear tether tension
+      setTetherTension(new Map());
     }
   };
 
@@ -498,6 +568,25 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     if (!hoveredNode) return 0.3;
     if (edge.source === hoveredNode || edge.target === hoveredNode) return 0.8;
     return 0.1;
+  };
+
+  // Get tether color based on tension (0 = green/relaxed, 1 = red/strained)
+  const getTetherColor = (tension: number): string => {
+    if (tension < 0.5) {
+      // Green to Yellow (0-0.5)
+      const t = tension * 2;
+      const r = Math.round(34 + t * (234 - 34));
+      const g = Math.round(197 + t * (179 - 197));
+      const b = Math.round(94 + t * (8 - 94));
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      // Yellow to Red (0.5-1)
+      const t = (tension - 0.5) * 2;
+      const r = Math.round(234 + t * (239 - 234));
+      const g = Math.round(179 - t * 111);
+      const b = Math.round(8 + t * (68 - 8));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
   };
 
   // Count pinned nodes
@@ -678,6 +767,80 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             })}
           </g>
 
+          {/* Visual Elastic Tethers - shown when dragging */}
+          {draggedNode && anchorNode && draggedNode !== anchorNode && (() => {
+            const draggedNodeData = nodes.find(n => n.id === draggedNode);
+            const anchorNodeData = nodes.find(n => n.id === anchorNode);
+            if (!draggedNodeData || !anchorNodeData) return null;
+
+            const tension = tetherTension.get(draggedNode) || 0;
+            const tetherColor = getTetherColor(tension);
+
+            // Calculate control point for curved elastic tether
+            const midX = (draggedNodeData.x + anchorNodeData.x) / 2;
+            const midY = (draggedNodeData.y + anchorNodeData.y) / 2;
+            // Add sag based on tension (less sag when stretched)
+            const dx = draggedNodeData.x - anchorNodeData.x;
+            const dy = draggedNodeData.y - anchorNodeData.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const perpX = -dy / distance;
+            const perpY = dx / distance;
+            const sagAmount = 30 * (1 - tension); // Sag decreases as tension increases
+            const controlX = midX + perpX * sagAmount;
+            const controlY = midY + perpY * sagAmount;
+
+            return (
+              <g className="tether-visualization">
+                {/* Main tether line with curve */}
+                <path
+                  d={`M ${anchorNodeData.x} ${anchorNodeData.y} Q ${controlX} ${controlY} ${draggedNodeData.x} ${draggedNodeData.y}`}
+                  fill="none"
+                  stroke={tetherColor}
+                  strokeWidth={3 + tension * 2}
+                  strokeLinecap="round"
+                  strokeDasharray={tension > 0.8 ? "8 4" : "none"}
+                  opacity={0.8}
+                />
+                {/* Anchor indicator glow */}
+                <circle
+                  cx={anchorNodeData.x}
+                  cy={anchorNodeData.y}
+                  r={getNodeRadius(anchorNodeData.weight) + 8}
+                  fill="none"
+                  stroke={tetherColor}
+                  strokeWidth={2}
+                  opacity={0.6}
+                >
+                  <animate
+                    attributeName="r"
+                    values={`${getNodeRadius(anchorNodeData.weight) + 8};${getNodeRadius(anchorNodeData.weight) + 14};${getNodeRadius(anchorNodeData.weight) + 8}`}
+                    dur="1s"
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="opacity"
+                    values="0.6;0.3;0.6"
+                    dur="1s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+                {/* Tension indicator near dragged node */}
+                {tension > 0.5 && (
+                  <text
+                    x={draggedNodeData.x}
+                    y={draggedNodeData.y - getNodeRadius(draggedNodeData.weight) - 20}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fontWeight="bold"
+                    fill={tetherColor}
+                  >
+                    {tension > 0.9 ? 'MAX!' : tension > 0.7 ? 'STRAIN' : 'pulling...'}
+                  </text>
+                )}
+              </g>
+            );
+          })()}
+
           {/* Nodes */}
           <g className="nodes">
             {nodes.map((node) => {
@@ -779,9 +942,48 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                         wordBreak: 'break-word'
                       }}
                     >
-                      {node.label.length > 20 ? node.label.slice(0, 17) + '...' : node.label}
+                      {(() => {
+                        // Smart truncation based on node size
+                        const maxChars = Math.floor(radius * 0.6);
+                        const label = node.label;
+                        if (label.length <= maxChars) return label;
+                        // Prefer breaking at word boundaries
+                        const truncated = label.slice(0, maxChars - 2);
+                        const lastSpace = truncated.lastIndexOf(' ');
+                        if (lastSpace > maxChars * 0.5) {
+                          return truncated.slice(0, lastSpace) + '…';
+                        }
+                        return truncated + '…';
+                      })()}
                     </div>
                   </foreignObject>
+
+                  {/* Expanded label shown on hover for truncated text */}
+                  {isHovered && node.label.length > Math.floor(radius * 0.6) && (
+                    <g className="expanded-label">
+                      <rect
+                        x={-node.label.length * 4}
+                        y={-radius - 35}
+                        width={node.label.length * 8}
+                        height={24}
+                        rx={4}
+                        fill={isDarkMode ? '#1f2937' : '#f3f4f6'}
+                        stroke={color}
+                        strokeWidth={1}
+                        opacity={0.95}
+                      />
+                      <text
+                        textAnchor="middle"
+                        y={-radius - 18}
+                        fontSize={12}
+                        fontWeight="bold"
+                        fill={isDarkMode ? '#e5e7eb' : '#1f2937'}
+                        className="pointer-events-none select-none"
+                      >
+                        {node.label}
+                      </text>
+                    </g>
+                  )}
 
                   {/* Pin icon */}
                   {node.pinned && (
@@ -839,7 +1041,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         {focusedNode ? (
           <>Double-click focused node to exit • Connected nodes orbit closer • Drag to arrange</>
         ) : (
-          <>Drag to move (connected nodes follow) • Double-click for Focus Mode • Hover for details • Press G or Esc to close</>
+          <>Drag nodes (tethered to anchor) • Connected nodes follow • Double-click for Focus Mode • Hover for details</>
         )}
       </div>
     </div>
