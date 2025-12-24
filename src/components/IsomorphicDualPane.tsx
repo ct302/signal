@@ -496,8 +496,9 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       // Calculate repulsion offsets
       const newOffsets = new Map<string, { x: number; y: number }>();
-      const bufferZone = 8; // Minimum distance between boxes
-      const maxIterations = 10;
+      // Large buffer zone to account for scaled boxes (1.2-1.3x) and shadows
+      const bufferZone = 25;
+      const maxIterations = 20;
 
       // Simple iterative repulsion
       for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -514,23 +515,26 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             const offset1 = newOffsets.get(box1.id) || { x: 0, y: 0 };
             const offset2 = newOffsets.get(box2.id) || { x: 0, y: 0 };
 
-            // Adjusted positions
+            // Scale factor to account for CSS transform scale(1.2-1.3)
+            const scaleFactor = 1.35;
+
+            // Adjusted positions with scale compensation
             const rect1 = {
-              left: box1.rect.left + offset1.x,
-              right: box1.rect.right + offset1.x,
-              top: box1.rect.top + offset1.y,
-              bottom: box1.rect.bottom + offset1.y,
-              width: box1.rect.width,
-              height: box1.rect.height
+              left: box1.rect.left + offset1.x - (box1.rect.width * (scaleFactor - 1) / 2),
+              right: box1.rect.right + offset1.x + (box1.rect.width * (scaleFactor - 1) / 2),
+              top: box1.rect.top + offset1.y - (box1.rect.height * (scaleFactor - 1) / 2),
+              bottom: box1.rect.bottom + offset1.y + (box1.rect.height * (scaleFactor - 1) / 2),
+              width: box1.rect.width * scaleFactor,
+              height: box1.rect.height * scaleFactor
             };
 
             const rect2 = {
-              left: box2.rect.left + offset2.x,
-              right: box2.rect.right + offset2.x,
-              top: box2.rect.top + offset2.y,
-              bottom: box2.rect.bottom + offset2.y,
-              width: box2.rect.width,
-              height: box2.rect.height
+              left: box2.rect.left + offset2.x - (box2.rect.width * (scaleFactor - 1) / 2),
+              right: box2.rect.right + offset2.x + (box2.rect.width * (scaleFactor - 1) / 2),
+              top: box2.rect.top + offset2.y - (box2.rect.height * (scaleFactor - 1) / 2),
+              bottom: box2.rect.bottom + offset2.y + (box2.rect.height * (scaleFactor - 1) / 2),
+              width: box2.rect.width * scaleFactor,
+              height: box2.rect.height * scaleFactor
             };
 
             // Check for overlap (with buffer zone)
@@ -548,14 +552,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               const center2X = rect2.left + rect2.width / 2;
               const center2Y = rect2.top + rect2.height / 2;
 
-              // Push boxes apart (primarily vertical for text flow)
-              const pushStrength = 0.6;
+              // Push boxes apart aggressively
+              const pushStrength = 1.2;
               const deltaY = center1Y - center2Y || 1;
               const deltaX = center1X - center2X || 0.1;
 
-              // Vertical push is stronger to maintain reading flow
+              // Stronger horizontal push to spread boxes across the pane
               const pushY = (overlapY * pushStrength * Math.sign(deltaY)) / 2;
-              const pushX = (overlapX * pushStrength * 0.3 * Math.sign(deltaX)) / 2;
+              const pushX = (overlapX * pushStrength * 0.6 * Math.sign(deltaX)) / 2;
 
               newOffsets.set(box1.id, {
                 x: offset1.x + pushX,
@@ -875,11 +879,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   onMouseLeave={() => setHoveredConcept(null)}
                 >
                   {/* Tech term */}
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div
-                      className={`w-2 h-2 rounded-full flex-shrink-0 transition-all duration-300 ${isHovered ? 'scale-150' : ''}`}
-                      style={{ backgroundColor: color }}
-                    />
+                  <div className="mb-1">
                     <span className={`text-[11px] font-medium truncate transition-all duration-300 ${
                       isDarkMode ? 'text-blue-300' : 'text-blue-700'
                     } ${isHovered ? 'font-bold' : ''}`}>
@@ -897,11 +897,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   </div>
 
                   {/* Analogy term */}
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className={`w-2 h-2 rounded-full flex-shrink-0 transition-all duration-300 ${isHovered ? 'scale-150' : ''}`}
-                      style={{ backgroundColor: color }}
-                    />
+                  <div>
                     <span className={`text-[11px] font-medium truncate transition-all duration-300 ${
                       isDarkMode ? 'text-amber-300' : 'text-amber-700'
                     } ${isHovered ? 'font-bold' : ''}`}>
