@@ -791,31 +791,42 @@ export default function App() {
   // Brown noise audio for Study Mode
   useEffect(() => {
     if (ambianceMode === 'study' && brownNoiseEnabled) {
-      // Create brown noise using Web Audio API
+      // Create deep brown noise using Web Audio API
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const bufferSize = 4096;
       const brownNoise = audioContext.createScriptProcessor(bufferSize, 1, 1);
       let lastOut = 0.0;
 
+      // Generate deeper brown noise with lower coefficient
       brownNoise.onaudioprocess = (e) => {
         const output = e.outputBuffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
           const white = Math.random() * 2 - 1;
-          output[i] = (lastOut + (0.02 * white)) / 1.02;
+          // Lower coefficient (0.008) = deeper/bassier brown noise
+          output[i] = (lastOut + (0.008 * white)) / 1.008;
           lastOut = output[i];
-          output[i] *= 3.5; // Boost volume
+          output[i] *= 5.0; // Boost volume to compensate for lower coefficient
         }
       };
 
+      // Add low-pass filter for extra depth
+      const lowPassFilter = audioContext.createBiquadFilter();
+      lowPassFilter.type = 'lowpass';
+      lowPassFilter.frequency.value = 250; // Cut high frequencies for rumbling bass
+      lowPassFilter.Q.value = 0.7;
+
       const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0.15; // Soft volume
-      brownNoise.connect(gainNode);
+      gainNode.gain.value = 0.25; // Slightly higher volume for deep bass
+
+      brownNoise.connect(lowPassFilter);
+      lowPassFilter.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
       brownNoiseRef.current = { ctx: audioContext, gain: gainNode };
 
       return () => {
         brownNoise.disconnect();
+        lowPassFilter.disconnect();
         gainNode.disconnect();
         audioContext.close();
         brownNoiseRef.current = null;
@@ -1990,33 +2001,29 @@ export default function App() {
         <>
           {/* Main overlay container - covers everything including header */}
           <div className="fixed inset-0 pointer-events-none z-[9999]">
-            {/* Deep blue light overlay for focus - scientifically shown to boost alertness */}
-            <div
-              className="absolute inset-0 animate-study-pulse"
-              style={{ backgroundColor: 'rgba(30, 64, 175, 0.12)' }}
-            />
-            {/* Secondary blue layer for depth */}
+            {/* Base dark overlay - simulates dark room */}
             <div
               className="absolute inset-0"
-              style={{ backgroundColor: 'rgba(59, 130, 246, 0.06)' }}
+              style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}
             />
 
-            {/* Peripheral Vignette - darker edges for focus */}
+            {/* Strong Blue Vignette - late night studying feel */}
             {vignetteEnabled && (
               <div
-                className="absolute inset-0"
+                className="absolute inset-0 animate-study-pulse"
                 style={{
-                  background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(0, 0, 0, 0.15) 85%, rgba(0, 0, 0, 0.25) 100%)'
+                  background: 'radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(30, 58, 138, 0.35) 60%, rgba(23, 37, 84, 0.55) 85%, rgba(15, 23, 42, 0.7) 100%)'
                 }}
               />
             )}
 
-            {/* Warm Desk Lamp Glow - bottom right corner */}
+            {/* Desk Lamp Spotlight - centered on content area */}
             {deskLampEnabled && (
               <div
                 className="absolute inset-0 animate-lamp-flicker"
                 style={{
-                  background: 'radial-gradient(ellipse at 90% 90%, rgba(251, 191, 36, 0.12) 0%, rgba(251, 146, 60, 0.08) 20%, transparent 50%)'
+                  background: 'radial-gradient(ellipse 60% 50% at 50% 55%, rgba(255, 251, 235, 0.35) 0%, rgba(254, 243, 199, 0.2) 30%, rgba(251, 191, 36, 0.1) 50%, transparent 70%)',
+                  mixBlendMode: 'screen'
                 }}
               />
             )}
@@ -2024,36 +2031,54 @@ export default function App() {
 
           {/* Study Mode Control Panel */}
           <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
-            <div className="bg-neutral-900/90 backdrop-blur-sm rounded-lg p-2 border border-neutral-700 shadow-lg flex flex-col gap-1">
+            <div className="bg-neutral-900/95 backdrop-blur-sm rounded-xl p-3 border border-neutral-700 shadow-2xl flex flex-col gap-2">
+              {/* Header with close button */}
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-700 mb-1">
+                <span className="text-xs font-medium text-neutral-300">Study Mode</span>
+                <button
+                  onClick={() => setAmbianceMode('none')}
+                  className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white transition-colors"
+                  title="Exit Study Mode"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
               <button
                 onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
-                  brownNoiseEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                  brownNoiseEnabled
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                 }`}
                 title="Toggle Brown Noise"
               >
-                <span className="text-sm">🔊</span>
+                <span className="text-sm">🎵</span>
                 <span>Brown Noise</span>
               </button>
               <button
                 onClick={() => setDeskLampEnabled(!deskLampEnabled)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
-                  deskLampEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                  deskLampEnabled
+                    ? 'bg-yellow-500 text-neutral-900 shadow-lg shadow-yellow-500/30'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                 }`}
-                title="Toggle Desk Lamp Glow"
+                title="Toggle Desk Lamp Spotlight"
               >
                 <span className="text-sm">💡</span>
                 <span>Desk Lamp</span>
               </button>
               <button
                 onClick={() => setVignetteEnabled(!vignetteEnabled)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
-                  vignetteEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                  vignetteEnabled
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                 }`}
-                title="Toggle Peripheral Vignette"
+                title="Toggle Blue Vignette"
               >
-                <span className="text-sm">🔲</span>
-                <span>Vignette</span>
+                <span className="text-sm">🌙</span>
+                <span>Night Mode</span>
               </button>
             </div>
           </div>
