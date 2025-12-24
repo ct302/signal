@@ -311,6 +311,7 @@ CRITICAL RULES:
 3. Rephrase the question from a different angle
 4. Reword all answer options but keep the same correct answer meaning
 5. Shuffle the correct answer position
+6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
 
 Return ONLY this JSON:
 {"question": "your question about ${topic}", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
@@ -331,12 +332,13 @@ CRITICAL RULES:
 3. Ask questions that someone who understands ${topic} could answer
 4. Wrong answers should be plausible but clearly wrong to someone who knows the material
 5. The question must make logical sense and have one clearly correct answer
+6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
 
-GOOD question example: "What happens to a matrix when you diagonalize it?"
+GOOD question example: "What is the derivative of $f(x) = x^2$?"
 BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
 
 Return ONLY this JSON:
-{"question": "your question", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
+{"question": "your question", "options": ["$option1$", "$option2$", "$option3$", "$option4$"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
   }
 
   try {

@@ -194,6 +194,10 @@ export default function App() {
 
   // Ambiance Mode State
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [brownNoiseEnabled, setBrownNoiseEnabled] = useState(false);
+  const [deskLampEnabled, setDeskLampEnabled] = useState(true);
+  const [vignetteEnabled, setVignetteEnabled] = useState(true);
+  const brownNoiseRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
   const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
   const [isConstellationMode, setIsConstellationMode] = useState(false);
   const [isDualPaneMode, setIsDualPaneMode] = useState(false);
@@ -521,6 +525,25 @@ export default function App() {
     fetchDefinition(term, context, level, isMini);
   };
 
+  // Handle word click in definition popup for nested definitions (max 1 level)
+  const handleDefWordClick = (word: string, rect: DOMRect) => {
+    // Only open mini definition if we're in main definition popup (not already nested)
+    if (!defPosition || miniDefPosition) return;
+
+    const popupMinHeight = 200;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+
+    setMiniSelectedTerm(word);
+    const top = showAbove
+      ? rect.top + window.scrollY - popupMinHeight - 10
+      : rect.bottom + window.scrollY + 10;
+    setMiniDefPosition({ top, left: rect.left + window.scrollX });
+    fetchDefinition(word, defText, miniDefComplexity, true);
+  };
+
   // === Selection Handlers for Multi-Word Definition ===
 
   // Clear selection state
@@ -765,6 +788,44 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode, textScale]);
 
+  // Brown noise audio for Study Mode
+  useEffect(() => {
+    if (ambianceMode === 'study' && brownNoiseEnabled) {
+      // Create brown noise using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const bufferSize = 4096;
+      const brownNoise = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      let lastOut = 0.0;
+
+      brownNoise.onaudioprocess = (e) => {
+        const output = e.outputBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          output[i] = (lastOut + (0.02 * white)) / 1.02;
+          lastOut = output[i];
+          output[i] *= 3.5; // Boost volume
+        }
+      };
+
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.15; // Soft volume
+      brownNoise.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      brownNoiseRef.current = { ctx: audioContext, gain: gainNode };
+
+      return () => {
+        brownNoise.disconnect();
+        gainNode.disconnect();
+        audioContext.close();
+        brownNoiseRef.current = null;
+      };
+    } else if (brownNoiseRef.current) {
+      brownNoiseRef.current.ctx.close();
+      brownNoiseRef.current = null;
+    }
+  }, [ambianceMode, brownNoiseEnabled]);
+
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
     if (questionNum === 1) return 'easy';
@@ -976,7 +1037,9 @@ export default function App() {
     isColorMode: boolean,
     setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
     customMap: ConceptMapItem[] | null,
-    textColor: string
+    textColor: string,
+    textScale?: number,
+    onWordClick?: (word: string, rect: DOMRect) => void
   ) => {
     if (!text) return null;
     const processed = wrapBareLatex(text);
@@ -1035,11 +1098,13 @@ export default function App() {
                 const scale = isImportant ? 1.1 : 0.9;
                 const opacity = isImportant ? 1 : 0.7;
                 const fontWeight = isImportant ? 600 : 400;
+                const cleanWord = word.replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+                const isClickable = onWordClick && cleanWord.length > 2;
 
                 return (
                   <span
                     key={`${i}-${j}`}
-                    className={colorClassName}
+                    className={`${colorClassName} ${isClickable ? 'cursor-pointer hover:underline hover:decoration-dotted' : ''}`}
                     style={{
                       fontSize: `${scale}em`,
                       opacity: opacity,
@@ -1047,6 +1112,11 @@ export default function App() {
                       transition: 'all 0.2s ease',
                       display: 'inline-block'
                     }}
+                    onClick={isClickable ? (e) => {
+                      e.stopPropagation();
+                      const rect = (e.target as HTMLElement).getBoundingClientRect();
+                      onWordClick(cleanWord, rect);
+                    } : undefined}
                   >
                     {word}
                   </span>
@@ -1714,7 +1784,9 @@ export default function App() {
           onStartResize={startResize}
           onEliClick={(level) => handleDefEliClick(level, false)}
           onCopy={copyToClipboard}
+          onWordClick={!miniDefPosition ? handleDefWordClick : undefined}
           renderAttentiveText={renderAttentiveText}
+          renderRichText={renderRichText}
         />
       )}
 
@@ -1759,6 +1831,7 @@ export default function App() {
           onEliClick={(level) => handleDefEliClick(level, true)}
           onCopy={copyToClipboard}
           renderAttentiveText={renderAttentiveText}
+          renderRichText={renderRichText}
         />
       )}
 
@@ -1914,25 +1987,77 @@ export default function App() {
 
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
-        <div className="fixed inset-0 pointer-events-none z-[5]">
-          {/* Deep blue light overlay for focus - scientifically shown to boost alertness */}
-          <div
-            className="absolute inset-0 animate-study-pulse"
-            style={{ backgroundColor: 'rgba(30, 64, 175, 0.15)' }}
-          />
-          {/* Secondary blue layer for depth */}
-          <div
-            className="absolute inset-0"
-            style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)' }}
-          />
-          {/* Blue vignette around edges */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(30, 58, 138, 0.25) 100%)'
-            }}
-          />
-        </div>
+        <>
+          {/* Main overlay container - covers everything including header */}
+          <div className="fixed inset-0 pointer-events-none z-[9999]">
+            {/* Deep blue light overlay for focus - scientifically shown to boost alertness */}
+            <div
+              className="absolute inset-0 animate-study-pulse"
+              style={{ backgroundColor: 'rgba(30, 64, 175, 0.12)' }}
+            />
+            {/* Secondary blue layer for depth */}
+            <div
+              className="absolute inset-0"
+              style={{ backgroundColor: 'rgba(59, 130, 246, 0.06)' }}
+            />
+
+            {/* Peripheral Vignette - darker edges for focus */}
+            {vignetteEnabled && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(0, 0, 0, 0.15) 85%, rgba(0, 0, 0, 0.25) 100%)'
+                }}
+              />
+            )}
+
+            {/* Warm Desk Lamp Glow - bottom right corner */}
+            {deskLampEnabled && (
+              <div
+                className="absolute inset-0 animate-lamp-flicker"
+                style={{
+                  background: 'radial-gradient(ellipse at 90% 90%, rgba(251, 191, 36, 0.12) 0%, rgba(251, 146, 60, 0.08) 20%, transparent 50%)'
+                }}
+              />
+            )}
+          </div>
+
+          {/* Study Mode Control Panel */}
+          <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
+            <div className="bg-neutral-900/90 backdrop-blur-sm rounded-lg p-2 border border-neutral-700 shadow-lg flex flex-col gap-1">
+              <button
+                onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
+                  brownNoiseEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+                title="Toggle Brown Noise"
+              >
+                <span className="text-sm">🔊</span>
+                <span>Brown Noise</span>
+              </button>
+              <button
+                onClick={() => setDeskLampEnabled(!deskLampEnabled)}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
+                  deskLampEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+                title="Toggle Desk Lamp Glow"
+              >
+                <span className="text-sm">💡</span>
+                <span>Desk Lamp</span>
+              </button>
+              <button
+                onClick={() => setVignetteEnabled(!vignetteEnabled)}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-2 ${
+                  vignetteEnabled ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+                title="Toggle Peripheral Vignette"
+              >
+                <span className="text-sm">🔲</span>
+                <span>Vignette</span>
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {ambianceMode === 'holiday' && (

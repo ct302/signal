@@ -81,3 +81,41 @@
 .animate-twinkle {
   animation: twinkle 1.5s ease-in-out infinite;
 }
+
+/* Desk lamp warm glow flicker - subtle candlelight effect */
+@keyframes lampFlicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  20% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0.92;
+  }
+  40% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.98;
+  }
+  60% {
+    opacity: 0.93;
+  }
+  70% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.96;
+  }
+  90% {
+    opacity: 1;
+  }
+}
+
+.animate-lamp-flicker {
+  animation: lampFlicker 3s ease-in-out infinite;
+}
