@@ -1106,7 +1106,7 @@ export default function App() {
                   }
                 }
 
-                const scale = isImportant ? 1.1 : 0.9;
+                const scale = (isImportant ? 1.1 : 0.9) * (textScale || 1);
                 const opacity = isImportant ? 1 : 0.7;
                 const fontWeight = isImportant ? 600 : 400;
                 const cleanWord = word.replace(/[.,!?;:'"()[\]{}]/g, '').trim();
