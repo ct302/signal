@@ -859,8 +859,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             {conceptMap.map((concept, index) => {
               const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
               const isHovered = hoveredConcept === concept.id;
-              const importance = getConceptImportance(concept);
-              const importanceLevel = getImportanceLevel(importance);
 
               return (
                 <div
@@ -876,19 +874,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   onMouseEnter={() => setHoveredConcept(concept.id)}
                   onMouseLeave={() => setHoveredConcept(null)}
                 >
-                  {/* Importance indicator */}
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1">
-                      {importanceLevel === 'high' && <span className="text-[9px]">▲</span>}
-                      {importanceLevel === 'medium' && <span className="text-[9px]">◆</span>}
-                      {importanceLevel === 'low' && <span className="text-[9px]">●</span>}
-                      <span className={`text-[9px] font-bold ${isHovered ? '' : 'opacity-60'}`}
-                        style={{ color: isHovered ? color : undefined }}>
-                        {Math.round(importance * 100)}%
-                      </span>
-                    </div>
-                  </div>
-
                   {/* Tech term */}
                   <div className="flex items-center gap-1.5 mb-1">
                     <div
@@ -950,19 +935,25 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-neutral-600 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${hoveredConceptData.importance * 100}%`,
-                      backgroundColor: hoveredConceptData.color
-                    }}
-                  />
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-neutral-600 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${hoveredConceptData.importance * 100}%`,
+                        backgroundColor: hoveredConceptData.color
+                      }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-bold" style={{ color: hoveredConceptData.color }}>
+                    {Math.round(hoveredConceptData.importance * 100)}%
+                  </span>
                 </div>
-                <span className="text-[9px] font-bold" style={{ color: hoveredConceptData.color }}>
-                  {Math.round(hoveredConceptData.importance * 100)}%
-                </span>
+                <div className={`text-[8px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}
+                  title="How essential this concept is to understanding the main topic">
+                  Importance = centrality to core topic
+                </div>
               </div>
             </div>
           )}
@@ -992,7 +983,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
       <div className="px-6 py-2 border-t border-neutral-700 bg-neutral-900">
         <div className="flex items-center justify-between">
           <span className="text-neutral-500 text-xs">
-            Hover concepts to spotlight connections • Shapes indicate importance: ▲ High • ◆ Medium • ● Low
+            Hover concepts to spotlight connections • Importance shows how central a concept is to understanding the topic
           </span>
           <span className="text-neutral-600 text-xs">
             Press P or Esc to close

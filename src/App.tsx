@@ -461,13 +461,27 @@ export default function App() {
     if (!selectedText) return;
 
     const rect = target.getBoundingClientRect();
+    const popupMinHeight = 250; // Approximate minimum popup height
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Smart positioning: show above if not enough space below
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+
     if (defPosition && selectedTerm) {
       setMiniSelectedTerm(selectedText);
-      setMiniDefPosition({ top: rect.bottom + window.scrollY + 10, left: rect.left + window.scrollX });
+      const top = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      setMiniDefPosition({ top, left: rect.left + window.scrollX });
       fetchDefinition(selectedText, defText, miniDefComplexity, true);
     } else {
       setSelectedTerm(selectedText);
-      setDefPosition({ top: rect.bottom + window.scrollY + 10, left: rect.left + window.scrollX, placement: 'below' });
+      const top = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
       const context = isAnalogyVisualMode
         ? segments.map(s => s.analogy).join(' ')
         : segments.map(s => s.tech).join(' ');
