@@ -197,6 +197,7 @@ export default function App() {
 
   // Ambiance Mode State
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [showStudyControls, setShowStudyControls] = useState(true);
   const [brownNoiseEnabled, setBrownNoiseEnabled] = useState(false);
   const [deskLampEnabled, setDeskLampEnabled] = useState(true);
   const [vignetteEnabled, setVignetteEnabled] = useState(true);
@@ -1916,13 +1917,22 @@ export default function App() {
         </button>
         {/* Ambiance Mode Buttons */}
         <button
-          onClick={() => setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study')}
+          onClick={() => {
+            if (ambianceMode === 'study') {
+              // Toggle control panel visibility when already in study mode
+              setShowStudyControls(!showStudyControls);
+            } else {
+              // Enter study mode and show controls
+              setAmbianceMode('study');
+              setShowStudyControls(true);
+            }
+          }}
           className={`p-3 rounded-full shadow-lg border transition-colors ${
             ambianceMode === 'study'
-              ? 'bg-amber-500 border-amber-600 text-white'
+              ? 'bg-amber-500 border-amber-600 text-white ring-2 ring-amber-400/50'
               : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-amber-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-amber-500')
           }`}
-          title="Study Mode (1)"
+          title={ambianceMode === 'study' ? 'Toggle Study Controls' : 'Study Mode (1)'}
         >
           <Coffee size={20} />
         </button>
@@ -2057,11 +2067,10 @@ export default function App() {
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
         <>
-          {/* Clickable backdrop to exit Study Mode */}
+          {/* Clickable backdrop - closes control panel but stays in study mode */}
           <div
-            className="fixed inset-0 z-[9998] cursor-pointer"
-            onClick={() => setAmbianceMode('none')}
-            title="Click anywhere to exit Study Mode"
+            className="fixed inset-0 z-[9998]"
+            onClick={() => setShowStudyControls(false)}
           />
           {/* Main overlay container - covers everything including header */}
           <div className="fixed inset-0 pointer-events-none z-[9999]">
@@ -2093,59 +2102,64 @@ export default function App() {
             )}
           </div>
 
-          {/* Study Mode Control Panel */}
-          <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
-            <div className="bg-neutral-900/95 backdrop-blur-sm rounded-xl p-3 border border-neutral-700 shadow-2xl flex flex-col gap-2">
-              {/* Header with close button */}
-              <div className="flex items-center justify-between pb-2 border-b border-neutral-700 mb-1">
-                <span className="text-xs font-medium text-neutral-300">Study Mode</span>
+          {/* Study Mode Control Panel - only shown when showStudyControls is true */}
+          {showStudyControls && (
+            <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
+              <div className="bg-neutral-900/95 backdrop-blur-sm rounded-xl p-3 border border-neutral-700 shadow-2xl flex flex-col gap-2">
+                {/* Header with close button */}
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-700 mb-1">
+                  <span className="text-xs font-medium text-neutral-300">Study Mode</span>
+                  <button
+                    onClick={() => {
+                      setAmbianceMode('none');
+                      setShowStudyControls(true); // Reset for next time
+                    }}
+                    className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white transition-colors"
+                    title="Exit Study Mode"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
                 <button
-                  onClick={() => setAmbianceMode('none')}
-                  className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white transition-colors"
-                  title="Exit Study Mode"
+                  onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    brownNoiseEnabled
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Brown Noise"
                 >
-                  <X size={14} />
+                  <span className="text-sm">🎵</span>
+                  <span>Brown Noise</span>
+                </button>
+                <button
+                  onClick={() => setDeskLampEnabled(!deskLampEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    deskLampEnabled
+                      ? 'bg-yellow-500 text-neutral-900 shadow-lg shadow-yellow-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Desk Lamp Spotlight"
+                >
+                  <span className="text-sm">💡</span>
+                  <span>Desk Lamp</span>
+                </button>
+                <button
+                  onClick={() => setVignetteEnabled(!vignetteEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    vignetteEnabled
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Blue Vignette"
+                >
+                  <span className="text-sm">🌙</span>
+                  <span>Night Mode</span>
                 </button>
               </div>
-
-              <button
-                onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
-                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                  brownNoiseEnabled
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                }`}
-                title="Toggle Brown Noise"
-              >
-                <span className="text-sm">🎵</span>
-                <span>Brown Noise</span>
-              </button>
-              <button
-                onClick={() => setDeskLampEnabled(!deskLampEnabled)}
-                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                  deskLampEnabled
-                    ? 'bg-yellow-500 text-neutral-900 shadow-lg shadow-yellow-500/30'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                }`}
-                title="Toggle Desk Lamp Spotlight"
-              >
-                <span className="text-sm">💡</span>
-                <span>Desk Lamp</span>
-              </button>
-              <button
-                onClick={() => setVignetteEnabled(!vignetteEnabled)}
-                className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                  vignetteEnabled
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                }`}
-                title="Toggle Blue Vignette"
-              >
-                <span className="text-sm">🌙</span>
-                <span>Night Mode</span>
-              </button>
             </div>
-          </div>
+          )}
         </>
       )}
 

@@ -122,9 +122,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       );
       const weight = importanceEntry?.importance || 0.5;
 
-      // Random initial position in a circle around center
+      // Initial position in a wider, more uniform spread
       const angle = (index / conceptMap.length) * Math.PI * 2;
-      const radius = Math.min(width, height) * 0.3;
+      // Vary radius based on weight - important nodes closer to center
+      const baseRadius = Math.min(width, height) * 0.35;
+      const radiusVariation = (1 - weight) * 0.2 * baseRadius; // Less important = further out
+      const radius = baseRadius + radiusVariation;
 
       const rawLabel = isAnalogyMode ? concept.analogy_term : concept.tech_term;
 
@@ -135,8 +138,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         analogyTerm: concept.analogy_term,
         weight: weight,
         conceptIndex: index,
-        x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
-        y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
+        x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 30,
+        y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 30,
         vx: 0,
         vy: 0,
         pinned: false
@@ -196,12 +199,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       const centerX = width / 2;
       const centerY = height / 2;
 
-      // Force parameters
-      const repulsionStrength = 5000;
-      const attractionStrength = 0.01;
-      const centerGravity = 0.02;
-      const damping = 0.85;
-      const minDistance = 80;
+      // Force parameters - tuned for smooth, non-overlapping layout
+      const repulsionStrength = 12000; // Increased to prevent overlap
+      const attractionStrength = 0.008; // Reduced for gentler springs
+      const centerGravity = 0.015; // Slightly reduced
+      const damping = 0.92; // Increased for smoother motion
+      const minDistance = 120; // Increased minimum separation
 
       // Calculate forces for each node
       for (let i = 0; i < newNodes.length; i++) {
@@ -217,7 +220,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         let fx = 0;
         let fy = 0;
 
-        // Repulsion from other nodes (Coulomb's law)
+        // Repulsion from other nodes (Coulomb's law) - always active to prevent overlap
         for (let j = 0; j < newNodes.length; j++) {
           if (i === j) continue;
 
@@ -226,8 +229,16 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           const dy = node.y - other.y;
           const distance = Math.sqrt(dx * dx + dy * dy) || 1;
 
-          if (distance < minDistance * 3) {
-            const force = repulsionStrength / (distance * distance);
+          // Calculate combined radii for proper spacing
+          const nodeRadius = 25 + node.weight * 25;
+          const otherRadius = 25 + other.weight * 25;
+          const combinedRadius = nodeRadius + otherRadius + 40; // Add buffer
+
+          // Apply repulsion if within range
+          if (distance < Math.max(minDistance * 4, combinedRadius * 2)) {
+            // Stronger repulsion when very close
+            const distanceFactor = distance < combinedRadius ? 2 : 1;
+            const force = (repulsionStrength * distanceFactor) / (distance * distance);
             fx += (dx / distance) * force;
             fy += (dy / distance) * force;
           }
@@ -246,7 +257,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             const dx = other.x - node.x;
             const dy = other.y - node.y;
             const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-            const idealDistance = 150;
+            const idealDistance = 180; // Increased for better spacing
             const force = (distance - idealDistance) * attractionStrength * edge.strength;
             fx += (dx / distance) * force;
             fy += (dy / distance) * force;
@@ -260,6 +271,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         // Update velocity with damping
         node.vx = (node.vx + fx) * damping;
         node.vy = (node.vy + fy) * damping;
+
+        // Cap maximum velocity for smoother motion
+        const maxVelocity = 8;
+        const velocity = Math.sqrt(node.vx * node.vx + node.vy * node.vy);
+        if (velocity > maxVelocity) {
+          node.vx = (node.vx / velocity) * maxVelocity;
+          node.vy = (node.vy / velocity) * maxVelocity;
+        }
 
         // Update position
         node.x += node.vx;
@@ -996,10 +1015,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   {/* Weight indicator */}
                   <text
                     textAnchor="middle"
-                    dy={radius + 15}
-                    fontSize={10}
-                    fill="#9ca3af"
+                    dy={radius + 18}
+                    fontSize={11}
+                    fontWeight="600"
+                    fill="#ffffff"
                     className="pointer-events-none select-none"
+                    style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}
                   >
                     {Math.round(node.weight * 100)}%
                   </text>
@@ -1037,11 +1058,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       )}
 
       {/* Instructions */}
-      <div className="absolute bottom-4 left-4 text-neutral-500 text-xs">
+      <div className="absolute bottom-4 left-4 text-white/80 text-sm font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
         {focusedNode ? (
           <>Double-click focused node to exit • Connected nodes orbit closer • Drag to arrange</>
         ) : (
-          <>Drag nodes (tethered to anchor) • Connected nodes follow • Double-click for Focus Mode • Hover for details</>
+          <>Drag nodes • Connected nodes follow • Double-click for Focus Mode • Hover for details</>
         )}
       </div>
     </div>

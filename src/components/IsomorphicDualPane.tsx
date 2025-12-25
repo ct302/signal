@@ -181,7 +181,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
       const wordLower = word.toLowerCase().replace(/[.,!?;:'"()]/g, '');
 
       // Skip very short words and stop words early
-      if (wordLower.length < 3 || isStopWord(wordLower)) {
+      if (wordLower.length < 2 || isStopWord(wordLower)) {
         return undefined;
       }
 
@@ -189,14 +189,31 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         const techClean = cleanLabel(concept.tech_term).toLowerCase();
         const analogyClean = cleanLabel(concept.analogy_term).toLowerCase();
 
-        // Exact match or meaningful partial match
-        if (wordLower === techClean || wordLower === analogyClean ||
-            techClean.split(/\s+/).includes(wordLower) ||
-            analogyClean.split(/\s+/).includes(wordLower) ||
-            (wordLower.length > 4 && (techClean.includes(wordLower) || analogyClean.includes(wordLower)))) {
-          if (isSemanticMatch(word, concept)) {
-            return concept;
+        // Check each word in multi-word terms
+        const techWords = techClean.split(/\s+/);
+        const analogyWords = analogyClean.split(/\s+/);
+
+        // Exact match to full term
+        if (wordLower === techClean || wordLower === analogyClean) {
+          if (isSemanticMatch(word, concept)) return concept;
+        }
+
+        // Match any significant word in the term (not just includes check)
+        for (const tw of techWords) {
+          if (tw.length >= 3 && !isStopWord(tw) && (wordLower === tw || (wordLower.length > 4 && tw.includes(wordLower)))) {
+            if (isSemanticMatch(word, concept)) return concept;
           }
+        }
+
+        for (const aw of analogyWords) {
+          if (aw.length >= 3 && !isStopWord(aw) && (wordLower === aw || (wordLower.length > 4 && aw.includes(wordLower)))) {
+            if (isSemanticMatch(word, concept)) return concept;
+          }
+        }
+
+        // Partial match for longer words
+        if (wordLower.length > 4 && (techClean.includes(wordLower) || analogyClean.includes(wordLower))) {
+          if (isSemanticMatch(word, concept)) return concept;
         }
       }
       return undefined;
