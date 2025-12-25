@@ -25,10 +25,40 @@ export const fixUnicode = (text: string | null | undefined): string => {
 };
 
 /**
+ * Fix LaTeX commands that are missing backslashes
+ * e.g., "mathbf{x}" -> "\mathbf{x}", "cdot" -> "\cdot"
+ */
+const fixMissingBackslashes = (text: string): string => {
+  // List of common LaTeX commands that might appear without backslash
+  const commands = [
+    'mathbf', 'mathrm', 'mathcal', 'mathbb', 'mathit', 'textbf', 'textrm',
+    'frac', 'sqrt', 'sum', 'prod', 'int', 'lim',
+    'cdot', 'times', 'div', 'pm', 'approx', 'neq', 'leq', 'geq',
+    'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'theta', 'lambda', 'mu', 'pi', 'sigma', 'omega',
+    'infty', 'partial', 'nabla',
+    'sin', 'cos', 'tan', 'log', 'ln', 'exp',
+    'rightarrow', 'leftarrow', 'Rightarrow', 'Leftarrow'
+  ];
+
+  let result = text;
+  for (const cmd of commands) {
+    // Match command NOT preceded by backslash, followed by { or end/space
+    // Be careful not to match inside words like "symbol" when looking for "sum"
+    const regex = new RegExp(`(?<!\\\\)(?<![a-zA-Z])${cmd}(?=\\{|\\s|$|[^a-zA-Z])`, 'g');
+    result = result.replace(regex, `\\${cmd}`);
+  }
+  return result;
+};
+
+/**
  * Wrap bare LaTeX commands in $ delimiters
  */
 export const wrapBareLatex = (text: string): string => {
   if (!text) return "";
+
+  // First fix any missing backslashes
+  text = fixMissingBackslashes(text);
+
   const DOLLAR = String.fromCharCode(36);
 
   const findClosingBrace = (str: string, start: number): number => {

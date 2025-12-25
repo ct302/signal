@@ -221,12 +221,13 @@ CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map terms MUST be exact word matches from the text
 3. importance_map should include ALL significant terms (15-25 items)
-4. LaTeX FORMATTING (CRITICAL):
+4. LaTeX FORMATTING (CRITICAL - JSON ESCAPING REQUIRED):
    - ALL math MUST be wrapped in dollar signs: $...$
-   - Use proper backslashes: $\\mathbf{x}$, $\\frac{a}{b}$, $\\cdot$, $\\approx$
-   - WRONG: mathbf s, cdot, frac a b
-   - RIGHT: $\\mathbf{s}$, $\\cdot$, $\\frac{a}{b}$
-   - Variables should be in math mode: $x$, $n$, $e_i$
+   - In JSON strings, backslashes MUST be doubled: use \\\\ not \\
+   - WRONG: "$mathbf{x}$" or "$\\mathbf{x}$"
+   - RIGHT: "$\\\\mathbf{x}$", "$\\\\frac{a}{b}$", "$\\\\cdot$"
+   - Simple variables don't need backslash: "$x$", "$n$", "$e_i$"
+   - Example: encryption "$E(m) = m \\\\cdot s + e$"
 5. The analogy should feel natural, not forced
 6. Return ONLY valid JSON, no markdown code blocks`;
 
