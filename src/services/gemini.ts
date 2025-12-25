@@ -221,7 +221,12 @@ CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map terms MUST be exact word matches from the text
 3. importance_map should include ALL significant terms (15-25 items)
-4. Use LaTeX ($...$) for any mathematical notation
+4. LaTeX FORMATTING (CRITICAL):
+   - ALL math MUST be wrapped in dollar signs: $...$
+   - Use proper backslashes: $\\mathbf{x}$, $\\frac{a}{b}$, $\\cdot$, $\\approx$
+   - WRONG: mathbf s, cdot, frac a b
+   - RIGHT: $\\mathbf{s}$, $\\cdot$, $\\frac{a}{b}$
+   - Variables should be in math mode: $x$, $n$, $e_i$
 5. The analogy should feel natural, not forced
 6. Return ONLY valid JSON, no markdown code blocks`;
 
@@ -279,7 +284,7 @@ export const fetchDefinition = async (term: string, context: string, level: numb
   if (level === 5) {
     promptText += " STRICT CONSTRAINT: DO NOT use LaTeX. DO NOT use technical jargon. DO NOT use math notation ($...$). Use ONLY simple English analogies and 5-year-old appropriate language. Get to the core essence immediately.";
   } else {
-    promptText += " Use LaTeX ($...$) for math if applicable.";
+    promptText += " CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac, $\\cdot$ not cdot. Variables like x, n, e_i should be $x$, $n$, $e_i$.";
   }
 
   try {
