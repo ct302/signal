@@ -55,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setShowHistory(!showHistory)}
+            data-history-toggle
             className={`p-2 rounded-full transition-colors relative ${
               isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}

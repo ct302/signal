@@ -92,13 +92,6 @@ const cleanLabel = (text: string): string => {
     .trim();
 };
 
-// Get importance level category
-const getImportanceLevel = (importance: number): 'high' | 'medium' | 'low' => {
-  if (importance >= 0.8) return 'high';
-  if (importance >= 0.5) return 'medium';
-  return 'low';
-};
-
 export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   segments,
   conceptMap,
@@ -496,11 +489,11 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       // Calculate repulsion offsets
       const newOffsets = new Map<string, { x: number; y: number }>();
-      // Large buffer zone to account for scaled boxes (1.2-1.3x) and shadows
-      const bufferZone = 25;
-      const maxIterations = 20;
+      // Increased buffer zone for better separation with scaled boxes
+      const bufferZone = 40;
+      const maxIterations = 30;
 
-      // Simple iterative repulsion
+      // Simple iterative repulsion with stronger force
       for (let iteration = 0; iteration < maxIterations; iteration++) {
         let hadOverlap = false;
 
@@ -515,8 +508,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             const offset1 = newOffsets.get(box1.id) || { x: 0, y: 0 };
             const offset2 = newOffsets.get(box2.id) || { x: 0, y: 0 };
 
-            // Scale factor to account for CSS transform scale(1.2-1.3)
-            const scaleFactor = 1.35;
+            // Scale factor to account for CSS transform scale(1.2-1.3) plus shadows
+            const scaleFactor = 1.5;
 
             // Adjusted positions with scale compensation
             const rect1 = {
@@ -552,14 +545,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               const center2X = rect2.left + rect2.width / 2;
               const center2Y = rect2.top + rect2.height / 2;
 
-              // Push boxes apart aggressively
-              const pushStrength = 1.2;
+              // Push boxes apart more aggressively
+              const pushStrength = 1.8;
               const deltaY = center1Y - center2Y || 1;
               const deltaX = center1X - center2X || 0.1;
 
-              // Stronger horizontal push to spread boxes across the pane
+              // Stronger push in both directions
               const pushY = (overlapY * pushStrength * Math.sign(deltaY)) / 2;
-              const pushX = (overlapX * pushStrength * 0.6 * Math.sign(deltaX)) / 2;
+              const pushX = (overlapX * pushStrength * 0.8 * Math.sign(deltaX)) / 2;
 
               newOffsets.set(box1.id, {
                 x: offset1.x + pushX,
@@ -599,49 +592,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               ${midX} ${endY},
               ${endX} ${endY}`;
   };
-
-  // Generate geometric bridge shape based on importance
-  const generateBridgeGeometry = useCallback((concept: ConceptPosition, containerRect: DOMRect) => {
-    if (!concept.techRect || !concept.analogyRect) return null;
-
-    const techX = concept.techRect.right - containerRect.left;
-    const techY = concept.techRect.top + concept.techRect.height / 2 - containerRect.top;
-    const analogyX = concept.analogyRect.left - containerRect.left;
-    const analogyY = concept.analogyRect.top + concept.analogyRect.height / 2 - containerRect.top;
-
-    const centerX = (techX + analogyX) / 2;
-    const centerY = (techY + analogyY) / 2;
-
-    const importanceLevel = getImportanceLevel(concept.importance);
-
-    // Different geometric patterns based on importance
-    if (importanceLevel === 'high') {
-      // Triangle pointing up - important concepts rise
-      const size = 30;
-      return {
-        type: 'triangle',
-        path: `M ${centerX} ${centerY - size} L ${centerX - size} ${centerY + size/2} L ${centerX + size} ${centerY + size/2} Z`,
-        centerX, centerY: centerY - size/3
-      };
-    } else if (importanceLevel === 'medium') {
-      // Diamond/rhombus - balanced
-      const size = 20;
-      return {
-        type: 'diamond',
-        path: `M ${centerX} ${centerY - size} L ${centerX + size} ${centerY} L ${centerX} ${centerY + size} L ${centerX - size} ${centerY} Z`,
-        centerX, centerY
-      };
-    } else {
-      // Circle - peripheral concepts
-      return {
-        type: 'circle',
-        cx: centerX,
-        cy: centerY,
-        r: 15,
-        centerX, centerY
-      };
-    }
-  }, []);
 
   const containerRect = containerRef.current?.getBoundingClientRect();
 
@@ -735,7 +685,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             const path = generateFlowPath(concept.techRect, concept.analogyRect, containerRect);
             const isHovered = hoveredConcept === concept.id;
             const baseOpacity = hoveredConcept === null ? 0.5 : (isHovered ? 1 : 0.1);
-            const geometry = generateBridgeGeometry(concept, containerRect);
 
             return (
               <g key={`flow-${concept.id}`} className="transition-all duration-500">
@@ -750,44 +699,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                       strokeOpacity={0.3}
                       filter="url(#intense-glow)"
                     />
-                    {/* Geometric bridge shape */}
-                    {geometry && (
-                      <>
-                        {geometry.type === 'circle' ? (
-                          <circle
-                            cx={geometry.cx}
-                            cy={geometry.cy}
-                            r={geometry.r}
-                            fill={concept.color + '40'}
-                            stroke={concept.color}
-                            strokeWidth={3}
-                            filter="url(#glow)"
-                            className="animate-pulse"
-                          />
-                        ) : (
-                          <path
-                            d={geometry.path}
-                            fill={concept.color + '40'}
-                            stroke={concept.color}
-                            strokeWidth={3}
-                            filter="url(#glow)"
-                            className="animate-pulse"
-                          />
-                        )}
-                        {/* Importance level text */}
-                        <text
-                          x={geometry.centerX}
-                          y={geometry.centerY}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          fill={concept.color}
-                          fontSize="10"
-                          fontWeight="bold"
-                        >
-                          {Math.round(concept.importance * 100)}%
-                        </text>
-                      </>
-                    )}
                   </>
                 )}
 

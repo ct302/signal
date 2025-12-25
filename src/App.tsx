@@ -220,6 +220,7 @@ export default function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const controlsPanelRef = useRef<HTMLDivElement>(null);
   const controlsButtonRef = useRef<HTMLButtonElement>(null);
+  const historyPanelRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -681,6 +682,24 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showControls]);
+
+  // Close history panel when clicking outside
+  useEffect(() => {
+    if (!showHistory) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking the panel itself
+      if (historyPanelRef.current?.contains(target)) return;
+      // Don't close if clicking the history toggle button in header
+      if (target.closest('[data-history-toggle]')) return;
+
+      setShowHistory(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showHistory, setShowHistory]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1389,12 +1408,14 @@ export default function App() {
 
       {/* History Panel */}
       {showHistory && (
-        <HistoryPanel
-          history={history}
-          isDarkMode={isDarkMode}
-          onLoadEntry={loadFromHistory}
-          onDeleteEntry={deleteHistoryItem}
-        />
+        <div ref={historyPanelRef}>
+          <HistoryPanel
+            history={history}
+            isDarkMode={isDarkMode}
+            onLoadEntry={loadFromHistory}
+            onDeleteEntry={deleteHistoryItem}
+          />
+        </div>
       )}
 
       {/* Main Content */}
@@ -1457,13 +1478,13 @@ export default function App() {
                     {hasStarted && (
                       <button
                         onClick={() => setIsNarrativeMode(!isNarrativeMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isNarrativeMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
                             : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
                       >
-                        <BookOpenText size={14} />
+                        <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Story</span>
                       </button>
                     )}
@@ -1491,14 +1512,14 @@ export default function App() {
                     {hasStarted && (
                       <button
                         onClick={() => setIsConstellationMode(!isConstellationMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isConstellationMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
                             : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
                         title="Constellation Mode (G)"
                       >
-                        <Network size={14} />
+                        <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Graph</span>
                       </button>
                     )}
@@ -1506,14 +1527,14 @@ export default function App() {
                     {hasStarted && (
                       <button
                         onClick={() => setIsDualPaneMode(!isDualPaneMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isDualPaneMode
-                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')
+                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
                             : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
                         title="Dual Pane Isomorphic View (P)"
                       >
-                        <Columns size={14} />
+                        <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Dual</span>
                       </button>
                     )}
@@ -1525,14 +1546,14 @@ export default function App() {
                           const currentIndex = scales.indexOf(textScale);
                           setTextScale(scales[(currentIndex + 1) % scales.length]);
                         }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           textScale > 1
-                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300' : 'bg-violet-100 text-violet-700')
+                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
                             : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
                         title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
                       >
-                        <Type size={14} />
+                        <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
                       </button>
                     )}
@@ -1999,6 +2020,12 @@ export default function App() {
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
         <>
+          {/* Clickable backdrop to exit Study Mode */}
+          <div
+            className="fixed inset-0 z-[9998] cursor-pointer"
+            onClick={() => setAmbianceMode('none')}
+            title="Click anywhere to exit Study Mode"
+          />
           {/* Main overlay container - covers everything including header */}
           <div className="fixed inset-0 pointer-events-none z-[9999]">
             {/* Base dark overlay - simulates dark room */}
