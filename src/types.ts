@@ -103,6 +103,12 @@ export interface AmbiguityResult {
   emoji?: string;
 }
 
+export interface ProximityResult {
+  isTooClose: boolean;
+  reason?: string;
+  suggestedDomains?: Array<{ name: string; emoji: string }>;
+}
+
 // Provider Configuration Types
 export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter';
 

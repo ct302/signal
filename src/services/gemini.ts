@@ -1,6 +1,6 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -401,4 +401,111 @@ export const askTutor = async (
   } catch {
     return "Sorry, I couldn't process that question.";
   }
+};
+
+/**
+ * Check if a topic is too close to the selected analogy domain
+ * Returns suggestions for alternative domains if too close
+ */
+export const checkDomainProximity = async (topic: string, domain: string): Promise<ProximityResult> => {
+  const topicLower = topic.toLowerCase().trim();
+  const domainLower = domain.toLowerCase().trim();
+
+  // Quick check: exact match or direct substring
+  if (topicLower === domainLower ||
+      topicLower.includes(domainLower) ||
+      domainLower.includes(topicLower)) {
+    return getProximityResult(domain, `"${topic}" is essentially the same as your analogy domain "${domain}".`);
+  }
+
+  // Find which category the domain belongs to
+  let domainCategory: string | null = null;
+  for (const [category, data] of Object.entries(DOMAIN_CATEGORIES)) {
+    if (data.keywords.some(kw => domainLower.includes(kw) || kw.includes(domainLower))) {
+      domainCategory = category;
+      break;
+    }
+  }
+
+  // Check if topic falls in the same category as the domain
+  if (domainCategory) {
+    const categoryData = DOMAIN_CATEGORIES[domainCategory];
+    const topicMatchesCategory = categoryData.keywords.some(kw =>
+      topicLower.includes(kw) || kw.includes(topicLower)
+    );
+
+    if (topicMatchesCategory) {
+      return getProximityResult(domain, `"${topic}" is in the same category as "${domain}" - try learning something outside of ${domainCategory}!`);
+    }
+  }
+
+  // For edge cases, use LLM to check semantic similarity
+  const prompt = `You are checking if a learning topic is too close to an analogy domain for an educational app.
+
+The app explains unfamiliar topics using familiar domains as analogies. If the topic IS the domain, there's no learning bridge to build.
+
+Domain (what user knows): "${domain}"
+Topic (what user wants to learn): "${topic}"
+
+Is this topic too close to or essentially the same as the domain?
+
+Examples:
+- Domain: "NFL", Topic: "Tom Brady" → TOO CLOSE (Tom Brady is part of NFL)
+- Domain: "NFL", Topic: "Quantum Computing" → OK (completely different)
+- Domain: "Cooking", Topic: "How recipes work" → TOO CLOSE (recipes are cooking)
+- Domain: "Cooking", Topic: "Machine Learning" → OK (different domain)
+- Domain: "Chess", Topic: "Opening gambits" → TOO CLOSE (that's chess)
+- Domain: "NFL", Topic: "Physics of a football throw" → OK (physics is different, football is just context)
+
+Return ONLY this JSON (no markdown):
+{"isTooClose": true/false, "reason": "brief explanation if too close"}`;
+
+  try {
+    const responseText = await callApi(prompt, true);
+    const result = safeJsonParse(responseText);
+
+    if (result?.isTooClose) {
+      return getProximityResult(domain, result.reason || `"${topic}" is too similar to "${domain}".`);
+    }
+
+    return { isTooClose: false };
+  } catch {
+    // If LLM fails, allow the request (fail open)
+    return { isTooClose: false };
+  }
+};
+
+/**
+ * Helper to build proximity result with suggested domains
+ */
+const getProximityResult = (domain: string, reason: string): ProximityResult => {
+  const domainLower = domain.toLowerCase();
+
+  // Find the category for this domain
+  for (const [, data] of Object.entries(DOMAIN_CATEGORIES)) {
+    if (data.keywords.some(kw => domainLower.includes(kw) || kw.includes(domainLower))) {
+      // Filter out the current domain from suggestions
+      const suggestions = data.related.filter(d =>
+        d.name.toLowerCase() !== domainLower
+      ).slice(0, 4);
+
+      return {
+        isTooClose: true,
+        reason,
+        suggestedDomains: suggestions
+      };
+    }
+  }
+
+  // Default suggestions if no category matched
+  return {
+    isTooClose: true,
+    reason,
+    suggestedDomains: [
+      { name: 'Cooking', emoji: '🍳' },
+      { name: 'Music', emoji: '🎵' },
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Nature', emoji: '🌿' }
+    ]
+  };
 };

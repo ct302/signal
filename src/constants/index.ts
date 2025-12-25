@@ -55,6 +55,90 @@ export const QUICK_START_DOMAINS = [
   { emoji: '🎬', name: 'Movies' }
 ];
 
+// Domain categories for proximity checking and suggestions
+export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Array<{ name: string; emoji: string }> }> = {
+  sports: {
+    keywords: ['nfl', 'football', 'nba', 'basketball', 'mlb', 'baseball', 'nhl', 'hockey', 'soccer', 'mls', 'tennis', 'golf', 'boxing', 'mma', 'ufc', 'wrestling', 'olympics', 'sports', 'athlete', 'player', 'team', 'game', 'score', 'championship', 'super bowl', 'world series', 'playoffs'],
+    related: [
+      { name: 'NBA', emoji: '🏀' },
+      { name: 'MLB', emoji: '⚾' },
+      { name: 'NHL', emoji: '🏒' },
+      { name: 'Soccer', emoji: '⚽' },
+      { name: 'Tennis', emoji: '🎾' }
+    ]
+  },
+  gaming: {
+    keywords: ['video games', 'gaming', 'esports', 'playstation', 'xbox', 'nintendo', 'steam', 'rpg', 'fps', 'moba', 'minecraft', 'fortnite', 'league of legends', 'valorant', 'call of duty', 'gamer', 'twitch', 'streamer'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Card Games', emoji: '🃏' },
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Anime', emoji: '🎌' }
+    ]
+  },
+  cooking: {
+    keywords: ['cooking', 'baking', 'cuisine', 'recipe', 'chef', 'kitchen', 'food', 'restaurant', 'culinary', 'ingredients', 'meal', 'dish', 'flavor', 'gordon ramsay', 'masterchef'],
+    related: [
+      { name: 'Chemistry', emoji: '🧪' },
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Wine', emoji: '🍷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  music: {
+    keywords: ['music', 'song', 'album', 'band', 'artist', 'concert', 'guitar', 'piano', 'drums', 'singer', 'musician', 'spotify', 'genre', 'rock', 'pop', 'hip hop', 'jazz', 'classical', 'beethoven', 'taylor swift'],
+    related: [
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Dance', emoji: '💃' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Poetry', emoji: '📜' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  movies: {
+    keywords: ['movies', 'film', 'cinema', 'director', 'actor', 'actress', 'hollywood', 'oscar', 'screenplay', 'blockbuster', 'marvel', 'dc', 'disney', 'netflix', 'streaming'],
+    related: [
+      { name: 'TV Shows', emoji: '📺' },
+      { name: 'Books', emoji: '📚' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Music', emoji: '🎵' },
+      { name: 'Video Games', emoji: '🎮' }
+    ]
+  },
+  chess: {
+    keywords: ['chess', 'chessboard', 'grandmaster', 'magnus carlsen', 'checkmate', 'pawn', 'rook', 'bishop', 'knight', 'queen', 'king', 'opening', 'endgame', 'gambit'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Poker', emoji: '🃏' },
+      { name: 'Go', emoji: '⚫' },
+      { name: 'Strategy Games', emoji: '🎯' },
+      { name: 'Mathematics', emoji: '📐' }
+    ]
+  },
+  military: {
+    keywords: ['military', 'army', 'navy', 'air force', 'marines', 'war', 'battle', 'soldier', 'general', 'strategy', 'tactics', 'weapons', 'defense'],
+    related: [
+      { name: 'History', emoji: '📜' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Politics', emoji: '🏛️' },
+      { name: 'Engineering', emoji: '⚙️' },
+      { name: 'Space', emoji: '🚀' }
+    ]
+  },
+  nature: {
+    keywords: ['nature', 'wildlife', 'animals', 'plants', 'ecosystem', 'forest', 'ocean', 'mountains', 'weather', 'climate', 'biology', 'ecology'],
+    related: [
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Photography', emoji: '📷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Science', emoji: '🔬' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  }
+};
+
 // Local storage keys
 export const STORAGE_KEYS = {
   HISTORY: 'signalHistory',

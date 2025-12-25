@@ -39,7 +39,8 @@ import {
   QuizData,
   QuizDifficulty,
   DisambiguationData,
-  HistoryItem
+  HistoryItem,
+  ProximityResult
 } from './types';
 
 // Constants
@@ -62,6 +63,7 @@ import { useMobile, useKatex, useDrag, useHistory } from './hooks';
 import {
   generateAnalogy,
   checkAmbiguity,
+  checkDomainProximity,
   fetchDefinition as fetchDefinitionApi,
   generateQuiz,
   askTutor
@@ -79,7 +81,8 @@ import {
   DefinitionPopup,
   MiniDefinitionPopup,
   ConstellationMode,
-  IsomorphicDualPane
+  IsomorphicDualPane,
+  ProximityWarningModal
 } from './components';
 
 export default function App() {
@@ -205,6 +208,9 @@ export default function App() {
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
 
+  // Proximity Warning State
+  const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
+
   // Copy State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -292,6 +298,7 @@ export default function App() {
   const handleSubmit = async () => {
     if (!topic.trim()) return;
     if (disambiguation) setDisambiguation(null);
+    if (proximityWarning) setProximityWarning(null);
 
     const result = await checkAmbiguity(topic, 'topic');
     if (result.isAmbiguous || (result.options && result.options.length > 0)) {
@@ -302,7 +309,17 @@ export default function App() {
       setDomainError("Invalid topic or typo.");
       return;
     }
-    await fetchAnalogy(result.corrected || topic);
+
+    const confirmedTopic = result.corrected || topic;
+
+    // Check if topic is too close to the domain
+    const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
+    if (proximityResult.isTooClose) {
+      setProximityWarning({ topic: confirmedTopic, result: proximityResult });
+      return;
+    }
+
+    await fetchAnalogy(confirmedTopic);
   };
 
   const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {
@@ -1383,6 +1400,26 @@ export default function App() {
             }
           }}
           onCancel={() => setDisambiguation(null)}
+        />
+      )}
+
+      {/* Proximity Warning Modal */}
+      {proximityWarning && (
+        <ProximityWarningModal
+          topic={proximityWarning.topic}
+          domain={analogyDomain}
+          proximityResult={proximityWarning.result}
+          isDarkMode={isDarkMode}
+          onClose={() => setProximityWarning(null)}
+          onSwitchDomain={(newDomain) => {
+            handleSetDomain(newDomain);
+            setProximityWarning(null);
+          }}
+          onProceedAnyway={() => {
+            const topicToUse = proximityWarning.topic;
+            setProximityWarning(null);
+            fetchAnalogy(topicToUse);
+          }}
         />
       )}
 
