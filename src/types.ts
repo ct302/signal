@@ -132,6 +132,7 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   ollama: [],
   openrouter: [
     // DeepSeek models (free/cheap tier available)
+    'deepseek/deepseek-r1-0528:free',
     'deepseek/deepseek-chat',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-r1:free',
