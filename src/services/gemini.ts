@@ -2,31 +2,44 @@ import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_
 import { fetchWithRetry, safeJsonParse } from '../utils';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult } from '../types';
 
+// Config version - increment to force reset of stored config
+const CONFIG_VERSION = 2;
+
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
   const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      // Use stored API key if present, otherwise fall back to defaults
-      if (parsed.provider === 'google' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+
+      // Check config version - if outdated, reset to defaults
+      if (parsed._version !== CONFIG_VERSION) {
+        localStorage.removeItem(STORAGE_KEYS.PROVIDER_CONFIG);
+        // Fall through to return default config
+      } else {
+        // Use stored API key if present, otherwise fall back to defaults
+        if (parsed.provider === 'google' && !parsed.apiKey) {
+          parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+        }
+        if (parsed.provider === 'openrouter' && !parsed.apiKey) {
+          parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
+        }
+        return parsed;
       }
-      if (parsed.provider === 'openrouter' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
-      }
-      return parsed;
     } catch {
       // Fall through to default
     }
   }
-  // Default to OpenRouter
-  return {
-    provider: 'openrouter',
-    apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'openai/gpt-oss-120b:free',
-    ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
+  // Default to Google Gemini (has working default key)
+  const defaultConfig = {
+    provider: 'google' as const,
+    apiKey: DEFAULT_GEMINI_API_KEY,
+    model: 'gemini-2.0-flash',
+    ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT,
+    _version: CONFIG_VERSION
   };
+  localStorage.setItem(STORAGE_KEYS.PROVIDER_CONFIG, JSON.stringify(defaultConfig));
+  return defaultConfig;
 };
 
 // Build API URL based on provider

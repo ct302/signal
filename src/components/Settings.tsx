@@ -20,9 +20,9 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
 export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ProviderConfig>({
-    provider: 'openrouter',
-    apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'openai/gpt-oss-120b:free',
+    provider: 'google',
+    apiKey: DEFAULT_GEMINI_API_KEY,
+    model: 'gemini-2.0-flash',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);
@@ -30,12 +30,20 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
+  // Config version - must match gemini.ts
+  const CONFIG_VERSION = 2;
+
   // Load config from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
+        // Check version - if outdated, use defaults
+        if (parsed._version !== CONFIG_VERSION) {
+          localStorage.removeItem(STORAGE_KEYS.PROVIDER_CONFIG);
+          return; // Use default state
+        }
         // Use default API key for providers if none stored
         if (parsed.provider === 'google' && !parsed.apiKey) {
           parsed.apiKey = DEFAULT_GEMINI_API_KEY;
@@ -87,7 +95,8 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
 
   const handleSave = () => {
     try {
-      localStorage.setItem(STORAGE_KEYS.PROVIDER_CONFIG, JSON.stringify(config));
+      const configWithVersion = { ...config, _version: CONFIG_VERSION };
+      localStorage.setItem(STORAGE_KEYS.PROVIDER_CONFIG, JSON.stringify(configWithVersion));
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
