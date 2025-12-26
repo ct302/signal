@@ -55,19 +55,35 @@ export const safeJsonParse = (text: string | null | undefined): any => {
 
   if (!clean) return null;
 
-  // Protect LaTeX commands before JSON parsing
-  clean = protectLatexEscapes(clean);
-
+  // First attempt: try parsing as-is
   try {
     return JSON.parse(clean);
-  } catch (e) {
-    // Try fixing remaining escape issues
-    const fixed = clean.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+  } catch (e1) {
+    // Second attempt: protect LaTeX commands that conflict with JSON escapes
     try {
-      return JSON.parse(fixed);
+      const protected1 = protectLatexEscapes(clean);
+      return JSON.parse(protected1);
     } catch (e2) {
-      console.error("JSON parsing failed completely:", e2);
-      return null;
+      // Third attempt: more aggressive escape fixing
+      try {
+        // Only escape backslashes that are clearly problematic (not valid JSON escapes or already escaped)
+        const fixed = clean
+          .replace(/\\(?!["\\\/bfnrtu])/g, "\\\\")
+          .replace(/\\\\\\\\/g, "\\\\"); // Fix over-escaping
+        return JSON.parse(fixed);
+      } catch (e3) {
+        // Fourth attempt: try to extract just the JSON object
+        try {
+          const jsonMatch = clean.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+          }
+        } catch (e4) {
+          // Give up
+        }
+        console.error("JSON parsing failed completely:", e3);
+        return null;
+      }
     }
   }
 };
