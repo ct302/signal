@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Columns, ArrowRight, Zap } from 'lucide-react';
+import { X, Columns, Zap } from 'lucide-react';
 import { Segment, ConceptMapItem, ImportanceMapItem } from '../types';
 import { LATEX_REGEX } from '../constants';
 import { wrapBareLatex } from '../utils';
@@ -118,7 +118,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
   const [conceptPositions, setConceptPositions] = useState<ConceptPosition[]>([]);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
-  const [animationPhase, setAnimationPhase] = useState(0);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [wordBoxOffsets, setWordBoxOffsets] = useState<Map<string, { x: number; y: number }>>(new Map());
 
@@ -480,19 +479,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
     };
   }, [updatePositions, segments, hoveredConcept]);
 
-  // Animation loop for flowing effect
-  useEffect(() => {
-    let animationId: number;
-
-    const animate = () => {
-      setAnimationPhase(prev => (prev + 0.012) % 1);
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animationId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationId);
-  }, []);
-
   // Magnetic repulsion zones - prevent highlighted boxes from overlapping
   useEffect(() => {
     if (hoveredConcept === null) {
@@ -643,21 +629,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
     return () => clearTimeout(timer);
   }, [hoveredConcept]);
 
-  // Generate SVG path for attention flow between two points
-  const generateFlowPath = (start: DOMRect, end: DOMRect, containerRect: DOMRect): string => {
-    const startX = start.right - containerRect.left;
-    const startY = start.top + start.height / 2 - containerRect.top;
-    const endX = end.left - containerRect.left;
-    const endY = end.top + end.height / 2 - containerRect.top;
-
-    const midX = (startX + endX) / 2;
-
-    return `M ${startX} ${startY}
-            C ${midX} ${startY},
-              ${midX} ${endY},
-              ${endX} ${endY}`;
-  };
-
   const containerRect = containerRef.current?.getBoundingClientRect();
 
   // Get the currently hovered concept details
@@ -694,152 +665,76 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       {/* Main Content */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden flex">
-        {/* SVG Layer for Attention Rivers and Geometric Bridges */}
+        {/* SVG Layer - Minimal edge indicators only, no cross-pane curves */}
         <svg
           ref={svgRef}
           className="absolute inset-0 w-full h-full pointer-events-none z-10"
           style={{ overflow: 'visible' }}
         >
           <defs>
-            {/* Enhanced glow filter */}
-            <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+            <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
               <feMerge>
                 <feMergeNode in="coloredBlur"/>
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
-
-            {/* Stronger glow for hovered */}
-            <filter id="intense-glow" x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="12" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-
-            {/* Animated gradients for each concept */}
-            {conceptPositions.map((concept) => (
-              <linearGradient
-                key={`gradient-${concept.id}`}
-                id={`flow-gradient-${concept.id}`}
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop offset="0%" stopColor={concept.color} stopOpacity="0.3" />
-                <stop
-                  offset={`${(animationPhase * 100)}%`}
-                  stopColor={concept.color}
-                  stopOpacity={hoveredConcept === concept.id ? "1" : "0.5"}
-                />
-                <stop
-                  offset={`${((animationPhase * 100) + 25) % 100}%`}
-                  stopColor={concept.color}
-                  stopOpacity={hoveredConcept === concept.id ? "1" : "0.5"}
-                />
-                <stop offset="100%" stopColor={concept.color} stopOpacity="0.3" />
-              </linearGradient>
-            ))}
           </defs>
 
-          {/* Attention flow paths */}
-          {containerRect && conceptPositions.map((concept, index) => {
+          {/* Edge indicators - small dots at the edge of highlighted terms pointing to center */}
+          {containerRect && conceptPositions.map((concept) => {
             if (!concept.techRect || !concept.analogyRect) return null;
 
-            const path = generateFlowPath(concept.techRect, concept.analogyRect, containerRect);
             const isHovered = hoveredConcept === concept.id;
-            const baseOpacity = hoveredConcept === null ? 0.5 : (isHovered ? 1 : 0.1);
+            const opacity = hoveredConcept === null ? 0.4 : (isHovered ? 1 : 0.1);
 
-            // Calculate midpoint of the curve for the relationship label
-            const startX = concept.techRect.right - containerRect.left;
-            const startY = concept.techRect.top + concept.techRect.height / 2 - containerRect.top;
-            const endX = concept.analogyRect.left - containerRect.left;
-            const endY = concept.analogyRect.top + concept.analogyRect.height / 2 - containerRect.top;
-            const labelX = (startX + endX) / 2;
-            const labelY = (startY + endY) / 2;
+            // Tech side indicator (right edge of tech term)
+            const techX = concept.techRect.right - containerRect.left + 4;
+            const techY = concept.techRect.top + concept.techRect.height / 2 - containerRect.top;
 
-            // Pick a relationship label based on concept index
-            const relationshipLabel = RELATIONSHIP_LABELS[index % RELATIONSHIP_LABELS.length];
+            // Analogy side indicator (left edge of analogy term)
+            const analogyX = concept.analogyRect.left - containerRect.left - 4;
+            const analogyY = concept.analogyRect.top + concept.analogyRect.height / 2 - containerRect.top;
 
             return (
-              <g key={`flow-${concept.id}`} className="transition-all duration-500">
-                {/* Background glow for hovered */}
-                {isHovered && (
-                  <>
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke={concept.color}
-                      strokeWidth={20}
-                      strokeOpacity={0.3}
-                      filter="url(#intense-glow)"
-                    />
-                  </>
-                )}
-
-                {/* Main flow line */}
-                <path
-                  d={path}
-                  fill="none"
-                  stroke={`url(#flow-gradient-${concept.id})`}
-                  strokeWidth={isHovered ? 6 : 2.5}
-                  strokeLinecap="round"
-                  strokeOpacity={baseOpacity}
-                  className="transition-all duration-500"
-                />
-
-                {/* Relationship label on the curve */}
-                <g
-                  opacity={hoveredConcept === null ? 0.7 : (isHovered ? 1 : 0.15)}
-                  className="transition-all duration-300"
-                >
-                  {/* Background pill for label */}
-                  <rect
-                    x={labelX - 35}
-                    y={labelY - 10}
-                    width={70}
-                    height={20}
-                    rx={10}
-                    fill={isDarkMode ? 'rgba(23, 23, 23, 0.95)' : 'rgba(255, 255, 255, 0.95)'}
-                    stroke={isHovered ? concept.color : (isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')}
-                    strokeWidth={isHovered ? 2 : 1}
+              <g key={`indicator-${concept.id}`} className="transition-all duration-300">
+                {/* Tech side - small arrow pointing right */}
+                <g opacity={opacity} filter={isHovered ? "url(#soft-glow)" : undefined}>
+                  <circle
+                    cx={techX}
+                    cy={techY}
+                    r={isHovered ? 5 : 3}
+                    fill={concept.color}
                   />
-                  {/* Label text */}
-                  <text
-                    x={labelX}
-                    y={labelY + 4}
-                    textAnchor="middle"
-                    fontSize={11}
-                    fontWeight={isHovered ? 600 : 400}
-                    fill={isHovered ? concept.color : (isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)')}
-                    fontFamily="system-ui, -apple-system, sans-serif"
-                  >
-                    {relationshipLabel}
-                  </text>
+                  {isHovered && (
+                    <path
+                      d={`M ${techX + 6} ${techY} L ${techX + 14} ${techY}`}
+                      stroke={concept.color}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      opacity={0.6}
+                    />
+                  )}
                 </g>
 
-                {/* Animated particles */}
-                <circle r={isHovered ? 6 : 3} fill={concept.color} opacity={isHovered ? 1 : 0.5}>
-                  <animateMotion
-                    dur={isHovered ? "1.2s" : "3s"}
-                    repeatCount="indefinite"
-                    path={path}
+                {/* Analogy side - small arrow pointing left */}
+                <g opacity={opacity} filter={isHovered ? "url(#soft-glow)" : undefined}>
+                  <circle
+                    cx={analogyX}
+                    cy={analogyY}
+                    r={isHovered ? 5 : 3}
+                    fill={concept.color}
                   />
-                </circle>
-                {isHovered && (
-                  <>
-                    <circle r={5} fill={concept.color} opacity={0.8}>
-                      <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.3s" />
-                    </circle>
-                    <circle r={4} fill={concept.color} opacity={0.6}>
-                      <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.6s" />
-                    </circle>
-                    <circle r={3} fill={concept.color} opacity={0.4}>
-                      <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.9s" />
-                    </circle>
-                  </>
-                )}
+                  {isHovered && (
+                    <path
+                      d={`M ${analogyX - 6} ${analogyY} L ${analogyX - 14} ${analogyY}`}
+                      stroke={concept.color}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      opacity={0.6}
+                    />
+                  )}
+                </g>
               </g>
             );
           })}
@@ -880,44 +775,55 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             {conceptMap.map((concept, index) => {
               const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
               const isHovered = hoveredConcept === concept.id;
+              const relationshipLabel = RELATIONSHIP_LABELS[index % RELATIONSHIP_LABELS.length];
 
               return (
                 <div
                   key={concept.id}
-                  className={`px-2 py-2 mx-1 my-1 rounded-lg cursor-pointer transition-all duration-500 ${
-                    isHovered ? 'scale-105 shadow-xl' : hoveredConcept !== null ? 'opacity-40 scale-95' : 'hover:scale-[1.02]'
+                  className={`px-2 py-2 mx-1 my-1 rounded-lg cursor-pointer transition-all duration-300 ${
+                    hoveredConcept !== null && !isHovered ? 'opacity-30' : ''
                   }`}
                   style={{
-                    backgroundColor: isHovered ? color + '40' : (isDarkMode ? 'rgba(38,38,38,0.5)' : 'rgba(255,255,255,0.5)'),
-                    border: `2px solid ${isHovered ? color : 'transparent'}`,
-                    boxShadow: isHovered ? `0 8px 32px ${color}40` : undefined,
+                    backgroundColor: isHovered ? color + '25' : (isDarkMode ? 'rgba(38,38,38,0.5)' : 'rgba(255,255,255,0.5)'),
+                    border: `2px solid ${isHovered ? color : (isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')}`,
+                    boxShadow: isHovered ? `0 4px 16px ${color}30` : undefined,
                   }}
                   onMouseEnter={() => setHoveredConcept(concept.id)}
                   onMouseLeave={() => setHoveredConcept(null)}
                 >
                   {/* Tech term */}
                   <div className="mb-1">
-                    <span className={`text-[11px] font-medium truncate transition-all duration-300 ${
+                    <span className={`text-[10px] leading-tight block transition-all duration-300 ${
                       isDarkMode ? 'text-blue-300' : 'text-blue-700'
-                    } ${isHovered ? 'font-bold' : ''}`}>
+                    } ${isHovered ? 'font-semibold' : 'font-medium'}`}>
                       {cleanLabel(concept.tech_term)}
                     </span>
                   </div>
 
-                  {/* Arrow */}
-                  <div className="flex justify-center my-1">
-                    <ArrowRight
-                      size={isHovered ? 18 : 14}
-                      className={`transition-all duration-300`}
-                      style={{ color: isHovered ? color : (isDarkMode ? '#6b7280' : '#9ca3af') }}
-                    />
+                  {/* Relationship label */}
+                  <div className="flex items-center justify-center gap-1 my-1.5">
+                    <div className={`h-px flex-1 ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} style={{ backgroundColor: isHovered ? color + '50' : undefined }} />
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded-full transition-all duration-300 ${
+                        isHovered
+                          ? 'font-medium'
+                          : isDarkMode ? 'text-neutral-500' : 'text-neutral-400'
+                      }`}
+                      style={{
+                        color: isHovered ? color : undefined,
+                        backgroundColor: isHovered ? color + '15' : 'transparent'
+                      }}
+                    >
+                      {relationshipLabel}
+                    </span>
+                    <div className={`h-px flex-1 ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} style={{ backgroundColor: isHovered ? color + '50' : undefined }} />
                   </div>
 
                   {/* Analogy term */}
                   <div>
-                    <span className={`text-[11px] font-medium truncate transition-all duration-300 ${
+                    <span className={`text-[10px] leading-tight block transition-all duration-300 ${
                       isDarkMode ? 'text-amber-300' : 'text-amber-700'
-                    } ${isHovered ? 'font-bold' : ''}`}>
+                    } ${isHovered ? 'font-semibold' : 'font-medium'}`}>
                       {cleanLabel(concept.analogy_term)}
                     </span>
                   </div>
