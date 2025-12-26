@@ -196,7 +196,7 @@ export default function App() {
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Ambiance Mode State
-  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'winter'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
   const [brownNoiseEnabled, setBrownNoiseEnabled] = useState(false);
   const [deskLampEnabled, setDeskLampEnabled] = useState(true);
@@ -815,8 +815,8 @@ export default function App() {
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
           break;
         case '2':
-          // Holiday mode
-          setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday');
+          // Winter mode
+          setAmbianceMode(ambianceMode === 'winter' ? 'none' : 'winter');
           break;
       }
     };
@@ -1937,13 +1937,13 @@ export default function App() {
           <Coffee size={20} />
         </button>
         <button
-          onClick={() => setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday')}
+          onClick={() => setAmbianceMode(ambianceMode === 'winter' ? 'none' : 'winter')}
           className={`p-3 rounded-full shadow-lg border transition-colors ${
-            ambianceMode === 'holiday'
-              ? 'bg-red-500 border-red-600 text-white'
-              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500')
+            ambianceMode === 'winter'
+              ? 'bg-sky-500 border-sky-600 text-white ring-2 ring-sky-400/50'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-sky-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-sky-500')
           }`}
-          title="Holiday Mode (2)"
+          title="Winter Mode (2)"
         >
           <Snowflake size={20} />
         </button>
@@ -2041,7 +2041,7 @@ export default function App() {
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
-                  <span>Holiday Mode</span>
+                  <span>Winter Mode</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
@@ -2067,11 +2067,13 @@ export default function App() {
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
         <>
-          {/* Clickable backdrop - closes control panel but stays in study mode */}
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={() => setShowStudyControls(false)}
-          />
+          {/* Clickable backdrop - only shown when control panel is visible */}
+          {showStudyControls && (
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={() => setShowStudyControls(false)}
+            />
+          )}
           {/* Main overlay container - covers everything including header */}
           <div className="fixed inset-0 pointer-events-none z-[9999]">
             {/* Base dark overlay - simulates dark room */}
@@ -2163,65 +2165,56 @@ export default function App() {
         </>
       )}
 
-      {ambianceMode === 'holiday' && (
+      {ambianceMode === 'winter' && (
         <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
-          {/* Base holiday tint - red and green */}
+          {/* Subtle winter blue tint */}
           <div
             className="absolute inset-0"
             style={{
-              background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.12) 0%, transparent 50%, rgba(22, 101, 52, 0.12) 100%)'
+              background: 'linear-gradient(180deg, rgba(186, 230, 253, 0.08) 0%, transparent 40%, rgba(186, 230, 253, 0.05) 100%)'
             }}
           />
-          {/* Snow particles - larger and more visible */}
+          {/* Snow particles with wind drift */}
           <div className="absolute inset-0">
-            {Array.from({ length: 60 }).map((_, i) => (
+            {Array.from({ length: 80 }).map((_, i) => (
               <div
                 key={i}
-                className="absolute rounded-full animate-snowfall"
+                className="absolute rounded-full animate-snowfall-wind"
                 style={{
-                  left: `${(i * 1.7) % 100}%`,
-                  width: `${3 + (i % 4)}px`,
-                  height: `${3 + (i % 4)}px`,
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                  boxShadow: '0 0 4px rgba(255, 255, 255, 0.5)',
-                  animationDelay: `${(i * 0.15) % 10}s`,
-                  animationDuration: `${4 + (i % 6)}s`,
+                  left: `${(i * 1.25) % 100}%`,
+                  width: `${2 + (i % 5)}px`,
+                  height: `${2 + (i % 5)}px`,
+                  backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                  boxShadow: '0 0 3px rgba(255, 255, 255, 0.4)',
+                  animationDelay: `${(i * 0.12) % 12}s`,
+                  animationDuration: `${5 + (i % 7)}s`,
                 }}
               />
             ))}
           </div>
-          {/* Twinkling Christmas lights along edges */}
-          <div className="absolute top-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
+          {/* Wind streaks - subtle horizontal lines */}
+          <div className="absolute inset-0">
+            {Array.from({ length: 8 }).map((_, i) => (
               <div
-                key={`light-top-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
+                key={`wind-${i}`}
+                className="absolute animate-wind-streak"
                 style={{
-                  backgroundColor: i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15'}`,
-                  animationDelay: `${i * 0.2}s`,
+                  top: `${10 + (i * 12)}%`,
+                  left: '-20%',
+                  width: '40%',
+                  height: '1px',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
+                  animationDelay: `${i * 1.5}s`,
+                  animationDuration: `${3 + (i % 3)}s`,
                 }}
               />
             ))}
           </div>
-          <div className="absolute bottom-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={`light-bottom-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
-                style={{
-                  backgroundColor: i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15'}`,
-                  animationDelay: `${i * 0.15 + 0.5}s`,
-                }}
-              />
-            ))}
-          </div>
-          {/* Holiday vignette */}
+          {/* Cold winter vignette */}
           <div
             className="absolute inset-0"
             style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(127, 29, 29, 0.15) 100%)'
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(56, 189, 248, 0.08) 100%)'
             }}
           />
         </div>

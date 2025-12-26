@@ -39,6 +39,53 @@
   animation: snowfall linear infinite;
 }
 
+/* Snowfall with wind drift effect */
+@keyframes snowfallWind {
+  0% {
+    transform: translateY(-10px) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(50vh) translateX(30px) rotate(180deg);
+  }
+  90% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(100vh) translateX(60px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-snowfall-wind {
+  animation: snowfallWind linear infinite;
+}
+
+/* Wind streak animation */
+@keyframes windStreak {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.3;
+  }
+  80% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateX(150vw);
+    opacity: 0;
+  }
+}
+
+.animate-wind-streak {
+  animation: windStreak linear infinite;
+}
+
 /* Radial gradient for vignette effect */
 .bg-gradient-radial {
   background: radial-gradient(ellipse at center, var(--tw-gradient-from) 0%, var(--tw-gradient-via) 50%, var(--tw-gradient-to) 100%);
@@ -58,7 +105,7 @@
   animation: studyPulse 4s ease-in-out infinite;
 }
 
-/* Christmas lights twinkling */
+/* Twinkling effect (legacy - kept for potential future use) */
 @keyframes twinkle {
   0%, 100% {
     opacity: 1;

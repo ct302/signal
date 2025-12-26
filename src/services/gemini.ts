@@ -125,10 +125,26 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
   }
 };
 
+// Protect LaTeX escape sequences that conflict with JSON escape sequences
+// This must run BEFORE JSON.parse to prevent \f, \t, \n, \r, \b from being interpreted
+const protectLatexInRawJson = (text: string): string => {
+  return text
+    // Protect \f commands (frac, forall, flat, floor)
+    .replace(/\\f(?=rac|orall|lat|loor)/g, '\\\\f')
+    // Protect \t commands (text, theta, times, tan, tau, tilde, top, textbf)
+    .replace(/\\t(?=ext|heta|imes|an(?![a-z])|au(?![a-z])|ilde|op(?![a-z])|extbf)/g, '\\\\t')
+    // Protect \n commands (nabla, neq, nu, neg, newline, not, nolimits)
+    .replace(/\\n(?=abla|eq(?![a-z])|u(?![a-z])|eg(?![a-z])|ewline|ot(?![a-z])|olimits)/g, '\\\\n')
+    // Protect \r commands (rightarrow, rho, rangle, right, Rightarrow)
+    .replace(/\\r(?=ightarrow|ho(?![a-z])|angle|ight(?![a-z])|Rightarrow)/g, '\\\\r')
+    // Protect \b commands (beta, bar, boldsymbol, binom, brace, big, Big)
+    .replace(/\\b(?=eta|ar(?![a-z])|oldsymbol|inom|race|ig(?![a-z])|Big)/g, '\\\\b');
+};
+
 // Unified API call
 const callApi = async (prompt: string, jsonMode: boolean = false): Promise<string> => {
   const config = getProviderConfig();
-  
+
   if (!config.apiKey && config.provider !== 'ollama') {
     throw new Error(`No API key configured for ${config.provider}. Please add your API key in Settings.`);
   }
@@ -143,8 +159,19 @@ const callApi = async (prompt: string, jsonMode: boolean = false): Promise<strin
     body: JSON.stringify(body)
   });
 
-  const data = await response.json();
-  return extractResponseText(data, config);
+  // Get raw text first, protect LaTeX escapes, then parse JSON
+  const rawText = await response.text();
+  const protectedText = protectLatexInRawJson(rawText);
+
+  try {
+    const data = JSON.parse(protectedText);
+    return extractResponseText(data, config);
+  } catch (e) {
+    // Fallback: try parsing original if protection caused issues
+    console.warn('Protected JSON parse failed, trying original');
+    const data = JSON.parse(rawText);
+    return extractResponseText(data, config);
+  }
 };
 
 /**
