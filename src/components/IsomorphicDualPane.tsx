@@ -257,16 +257,16 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               key={`latex-${partIndex}`}
               data-concept-id={matchedConcept.id}
               data-type={paneType}
-              className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-500 ease-out
-                ${isSpotlit ? 'scale-125 shadow-2xl z-50 relative' : spotlightActive ? 'opacity-40' : ''}
+              className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-700 ease-out
+                ${isSpotlit ? 'z-50 relative' : spotlightActive ? 'opacity-40' : ''}
               `}
               style={{
                 backgroundColor: isSpotlit ? color + '60' : color + '20',
                 border: `2px solid ${isSpotlit ? color : 'transparent'}`,
                 transform: isSpotlit
-                  ? `scale(1.3) translateY(-4px) translate(${offset.x}px, ${offset.y}px)`
-                  : spotlightActive ? 'scale(0.95)' : undefined,
-                boxShadow: isSpotlit ? `0 8px 32px ${color}60, 0 0 0 4px ${color}30` : undefined,
+                  ? `scale(1.08) translateY(-2px) translate(${offset.x}px, ${offset.y}px)`
+                  : spotlightActive ? 'scale(0.97)' : undefined,
+                boxShadow: isSpotlit ? `0 4px 16px ${color}50, 0 0 0 2px ${color}25` : undefined,
                 filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
               }}
               onMouseEnter={() => setHoveredConcept(matchedConcept!.id)}
@@ -366,21 +366,21 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 key={`phrase-${partIndex}-${i}`}
                 data-concept-id={matchedConcept.id}
                 data-type={paneType}
-                className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-500 ease-out
+                className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-700 ease-out
                   ${isSpotlit ? 'z-50 relative' : ''}
                 `}
                 style={{
                   backgroundColor: isSpotlit ? color + '60' : color + '20',
                   color: isSpotlit ? (isDarkMode ? '#fff' : '#000') : color,
-                  fontWeight: isSpotlit ? 800 : 600,
+                  fontWeight: isSpotlit ? 700 : 600,
                   border: `2px solid ${isSpotlit ? color : 'transparent'}`,
                   transform: isSpotlit
-                    ? `scale(1.2) translateY(-4px) translate(${offset.x}px, ${offset.y}px)`
-                    : spotlightActive ? 'scale(0.92)' : undefined,
-                  boxShadow: isSpotlit ? `0 12px 40px ${color}50, 0 0 0 4px ${color}25` : undefined,
+                    ? `scale(1.05) translateY(-2px) translate(${offset.x}px, ${offset.y}px)`
+                    : spotlightActive ? 'scale(0.96)' : undefined,
+                  boxShadow: isSpotlit ? `0 6px 20px ${color}40, 0 0 0 2px ${color}20` : undefined,
                   opacity: spotlightActive && !isSpotlit ? 0.35 : 1,
                   filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
-                  fontSize: isSpotlit ? '1.05em' : undefined,
+                  fontSize: isSpotlit ? '1.02em' : undefined,
                 }}
                 onMouseEnter={() => setHoveredConcept(matchedConcept.id)}
                 onMouseLeave={() => setHoveredConcept(null)}
@@ -487,28 +487,34 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
       const analogyPane = analogyPaneRef.current;
       if (!techPane && !analogyPane) return;
 
-      const allBoxes: Array<{ id: string; rect: DOMRect; pane: 'tech' | 'analogy' }> = [];
+      // Get pane boundaries for constraining offsets
+      const techPaneRect = techPane?.getBoundingClientRect();
+      const analogyPaneRect = analogyPane?.getBoundingClientRect();
+
+      const allBoxes: Array<{ id: string; rect: DOMRect; pane: 'tech' | 'analogy'; paneRect: DOMRect | null }> = [];
 
       // Collect all highlighted boxes from both panes
       [techPane, analogyPane].forEach((pane, paneIndex) => {
         if (!pane) return;
         const paneName = paneIndex === 0 ? 'tech' : 'analogy';
+        const paneRect = paneIndex === 0 ? techPaneRect : analogyPaneRect;
         const highlightedElements = pane.querySelectorAll(`[data-concept-id="${hoveredConcept}"]`);
         highlightedElements.forEach((el, idx) => {
           const rect = el.getBoundingClientRect();
           allBoxes.push({
             id: `${paneName}-${idx}`,
             rect,
-            pane: paneName as 'tech' | 'analogy'
+            pane: paneName as 'tech' | 'analogy',
+            paneRect: paneRect || null
           });
         });
       });
 
       // Calculate repulsion offsets
       const newOffsets = new Map<string, { x: number; y: number }>();
-      // Increased buffer zone for better separation with scaled boxes
-      const bufferZone = 40;
-      const maxIterations = 30;
+      // Buffer zone for better separation (smaller now that we use smaller scales)
+      const bufferZone = 20;
+      const maxIterations = 25;
 
       // Simple iterative repulsion with stronger force
       for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -525,8 +531,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             const offset1 = newOffsets.get(box1.id) || { x: 0, y: 0 };
             const offset2 = newOffsets.get(box2.id) || { x: 0, y: 0 };
 
-            // Scale factor to account for CSS transform scale(1.2-1.3) plus shadows
-            const scaleFactor = 1.5;
+            // Scale factor to account for CSS transform scale(1.05-1.08) plus shadows
+            const scaleFactor = 1.15;
 
             // Adjusted positions with scale compensation
             const rect1 = {
@@ -562,14 +568,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               const center2X = rect2.left + rect2.width / 2;
               const center2Y = rect2.top + rect2.height / 2;
 
-              // Push boxes apart more aggressively
-              const pushStrength = 1.8;
+              // Push boxes apart - primarily in Y direction for text flow
+              const pushStrength = 1.5;
               const deltaY = center1Y - center2Y || 1;
               const deltaX = center1X - center2X || 0.1;
 
-              // Stronger push in both directions
+              // Favor Y-axis movement to preserve reading flow
               const pushY = (overlapY * pushStrength * Math.sign(deltaY)) / 2;
-              const pushX = (overlapX * pushStrength * 0.8 * Math.sign(deltaX)) / 2;
+              const pushX = (overlapX * pushStrength * 0.4 * Math.sign(deltaX)) / 2;
 
               newOffsets.set(box1.id, {
                 x: offset1.x + pushX,
@@ -585,6 +591,28 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         }
 
         if (!hadOverlap) break;
+      }
+
+      // Apply boundary constraints - keep boxes within their panes
+      const boundaryPadding = 12;
+      for (const box of allBoxes) {
+        const offset = newOffsets.get(box.id);
+        if (!offset || !box.paneRect) continue;
+
+        const scaledWidth = box.rect.width * 1.15;
+        const scaledHeight = box.rect.height * 1.15;
+
+        // Calculate boundaries relative to the pane
+        const minX = box.paneRect.left + boundaryPadding - box.rect.left + (scaledWidth - box.rect.width) / 2;
+        const maxX = box.paneRect.right - boundaryPadding - box.rect.right - (scaledWidth - box.rect.width) / 2;
+        const minY = box.paneRect.top + boundaryPadding - box.rect.top + (scaledHeight - box.rect.height) / 2;
+        const maxY = box.paneRect.bottom - boundaryPadding - box.rect.bottom - (scaledHeight - box.rect.height) / 2;
+
+        // Clamp offsets to boundaries
+        newOffsets.set(box.id, {
+          x: Math.max(minX, Math.min(maxX, offset.x)),
+          y: Math.max(minY, Math.min(maxY, offset.y))
+        });
       }
 
       setWordBoxOffsets(newOffsets);

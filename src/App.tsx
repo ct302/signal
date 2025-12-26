@@ -2235,6 +2235,8 @@ export default function App() {
           isAnalogyMode={isAnalogyVisualMode}
           isDarkMode={isDarkMode}
           onClose={() => setIsConstellationMode(false)}
+          domainName={analogyDomain}
+          topicName={lastSubmittedTopic}
         />
       )}
 
