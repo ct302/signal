@@ -66,12 +66,20 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   };
 
   const handleProviderChange = (provider: ProviderType) => {
-    const defaultModel = provider === 'ollama' 
-      ? (ollamaModels[0]?.name || '') 
+    const defaultModel = provider === 'ollama'
+      ? (ollamaModels[0]?.name || '')
       : DEFAULT_MODELS[provider][0];
-    
-    setConfig(prev => ({ ...prev, provider, model: defaultModel }));
-    
+
+    // Reset API key to default when switching providers
+    let defaultApiKey = '';
+    if (provider === 'google') {
+      defaultApiKey = DEFAULT_GEMINI_API_KEY;
+    } else if (provider === 'openrouter') {
+      defaultApiKey = DEFAULT_OPENROUTER_API_KEY;
+    }
+
+    setConfig(prev => ({ ...prev, provider, model: defaultModel, apiKey: defaultApiKey }));
+
     if (provider === 'ollama') {
       loadOllamaModels();
     }
