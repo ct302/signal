@@ -22,7 +22,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [config, setConfig] = useState<ProviderConfig>({
     provider: 'openrouter',
     apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'meta-llama/llama-3.3-70b-instruct',
+    model: 'openai/gpt-oss-120b:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);

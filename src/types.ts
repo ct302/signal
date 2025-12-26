@@ -130,33 +130,7 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   ollama: [],
-  openrouter: [
-    // DeepSeek models (free/cheap tier available)
-    'deepseek/deepseek-r1-0528:free',
-    'deepseek/deepseek-chat',
-    'deepseek/deepseek-r1',
-    'deepseek/deepseek-r1:free',
-    'deepseek/deepseek-chat:free',
-    // Meta Llama models
-    'meta-llama/llama-3.3-70b-instruct',
-    'meta-llama/llama-3.1-405b-instruct',
-    'meta-llama/llama-3.2-90b-vision-instruct',
-    // Mistral models
-    'mistralai/mistral-large-2411',
-    'mistralai/mixtral-8x22b-instruct',
-    // Google via OpenRouter
-    'google/gemini-2.0-flash-exp:free',
-    'google/gemini-pro-1.5',
-    // Anthropic via OpenRouter
-    'anthropic/claude-3.5-sonnet',
-    'anthropic/claude-3-haiku',
-    // OpenAI via OpenRouter
-    'openai/gpt-4o',
-    'openai/gpt-4o-mini',
-    // Qwen models
-    'qwen/qwen-2.5-72b-instruct',
-    'qwen/qwen-2.5-coder-32b-instruct'
-  ]
+  openrouter: ['openai/gpt-oss-120b:free']
 };
 
 export {};

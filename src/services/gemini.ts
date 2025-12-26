@@ -20,11 +20,11 @@ const getProviderConfig = (): ProviderConfig => {
       // Fall through to default
     }
   }
-  // Default to OpenRouter with LLAMA 3.3 70B for testing
+  // Default to OpenRouter
   return {
     provider: 'openrouter',
     apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'meta-llama/llama-3.3-70b-instruct',
+    model: 'openai/gpt-oss-120b:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };
