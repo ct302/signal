@@ -73,6 +73,29 @@ const RELATIONSHIP_LABELS = [
   'aligns with'
 ];
 
+// Dynamic explanation templates based on relationship type
+const generateDynamicExplanation = (
+  analogyTerm: string,
+  techTerm: string,
+  relationshipLabel: string,
+  domainName: string,
+  topicName: string,
+  index: number
+): string => {
+  const explanationTemplates = [
+    `Think of how ${analogyTerm} operates in ${domainName} - it coordinates, directs, and influences outcomes. In the same way, ${techTerm} orchestrates the behavior and flow within ${topicName}, serving as a central organizing principle.`,
+    `In ${domainName}, ${analogyTerm} provides structure and rules that govern interactions. Similarly, ${techTerm} establishes the foundational framework in ${topicName}, defining how elements relate and transform.`,
+    `Just as ${analogyTerm} measures and quantifies relationships in ${domainName}, ${techTerm} provides the mathematical machinery to measure and compute relationships in ${topicName}.`,
+    `The role of ${analogyTerm} in ${domainName} is to track changes and transformations. ${techTerm} performs an analogous function in ${topicName}, capturing how quantities change across different perspectives.`,
+    `When you understand how ${analogyTerm} connects different parts of ${domainName}, you grasp the essence of ${techTerm} - both serve as bridges that link related concepts and enable transformation between them.`,
+    `${analogyTerm} in ${domainName} acts as a reference point for understanding position and movement. ${techTerm} serves the same purpose in ${topicName}, providing a framework for describing location and change.`,
+    `The power of ${analogyTerm} lies in how it simplifies complex ${domainName} scenarios into manageable parts. ${techTerm} achieves the same simplification in ${topicName}, breaking down complexity into structured components.`,
+    `In ${domainName}, ${analogyTerm} enables prediction and strategy. ${techTerm} similarly empowers prediction and calculation in ${topicName}, using the same underlying logical patterns.`
+  ];
+
+  return explanationTemplates[index % explanationTemplates.length];
+};
+
 export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   conceptMap,
   importanceMap,
@@ -116,24 +139,47 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   }, [importanceMap]);
 
   // Calculate node positions - static layout with expertise on left, learning on right
+  // Ensures no overlap by calculating spacing based on actual node sizes
   const getNodePositions = useCallback(() => {
-    const leftX = dimensions.width * 0.22;
-    const rightX = dimensions.width * 0.78;
-    const startY = 80;
-    const spacing = Math.min(100, (dimensions.height - 160) / Math.max(conceptMap.length, 1));
+    const leftX = dimensions.width * 0.18;
+    const rightX = dimensions.width * 0.82;
+    const headerOffset = 100; // Space for header labels
+    const footerOffset = 60;  // Space at bottom
+    const availableHeight = dimensions.height - headerOffset - footerOffset;
 
-    return conceptMap.map((concept, index) => {
-      const y = startY + index * spacing + spacing / 2;
+    // First pass: calculate all node radii to determine proper spacing
+    const nodeData = conceptMap.map((concept, index) => {
       const importance = getConceptImportance(concept);
+      const radius = 30 + importance * 20;
+      return { concept, index, importance, radius };
+    });
+
+    // Calculate minimum spacing needed (largest radius * 2 + padding)
+    const maxRadius = Math.max(...nodeData.map(n => n.radius), 30);
+    const minSpacing = maxRadius * 2 + 30; // Diameter + padding between nodes
+
+    // Calculate actual spacing - ensure nodes don't overlap
+    const totalMinHeight = nodeData.length * minSpacing;
+    const spacing = totalMinHeight > availableHeight
+      ? availableHeight / nodeData.length  // Compress if necessary
+      : Math.min(minSpacing + 20, availableHeight / Math.max(nodeData.length, 1));
+
+    // Center the nodes vertically
+    const totalHeight = (nodeData.length - 1) * spacing;
+    const startY = headerOffset + (availableHeight - totalHeight) / 2;
+
+    return nodeData.map((data, index) => {
+      const y = startY + index * spacing;
       const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
 
       return {
-        concept,
+        concept: data.concept,
         index,
         leftX,
         rightX,
         y,
-        importance,
+        importance: data.importance,
+        radius: data.radius,
         color,
         relationshipLabel: RELATIONSHIP_LABELS[index % RELATIONSHIP_LABELS.length]
       };
@@ -320,8 +366,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       {node.relationshipLabel}
                     </text>
 
-                    {/* Animated particles on bridge when active */}
-                    {isActive && (
+                    {/* Animated particles on bridge - ONLY when hovered (not just selected) */}
+                    {isHovered && (
                       <>
                         <circle r={4} fill={node.color}>
                           <animateMotion
@@ -353,24 +399,31 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               })}
             </g>
 
-            {/* Left Domain Nodes (Expertise/Analogy) */}
+            {/* Left Domain Nodes (Expertise/Analogy) - sorted so hovered/selected render last (on top) */}
             <g className="left-nodes">
-              {nodePositions.map((node) => {
+              {[...nodePositions]
+                .sort((a, b) => {
+                  const aActive = selectedConcept === a.concept.id || hoveredConcept === a.concept.id;
+                  const bActive = selectedConcept === b.concept.id || hoveredConcept === b.concept.id;
+                  if (aActive && !bActive) return 1;  // a renders after b (on top)
+                  if (!aActive && bActive) return -1; // b renders after a (on top)
+                  return 0;
+                })
+                .map((node) => {
                 const isSelected = selectedConcept === node.concept.id;
                 const isHovered = hoveredConcept === node.concept.id;
                 const isActive = isSelected || isHovered;
                 const otherSelected = selectedConcept !== null && !isSelected;
-                const radius = 30 + node.importance * 20;
+                const radius = node.radius;
                 const label = cleanLabel(node.concept.analogy_term);
 
                 return (
                   <g
                     key={`left-${node.concept.id}`}
                     transform={`translate(${node.leftX}, ${node.y})`}
-                    className="cursor-pointer transition-all duration-300"
+                    className="cursor-pointer"
                     style={{
                       opacity: otherSelected && !isActive ? 0.3 : 1,
-                      transform: `translate(${node.leftX}px, ${node.y}px) scale(${isActive ? 1.1 : 1})`
                     }}
                     onMouseEnter={() => setHoveredConcept(node.concept.id)}
                     onMouseLeave={() => setHoveredConcept(null)}
@@ -448,7 +501,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                           fontWeight: isActive ? 700 : 500,
                           color: '#fff',
                           lineHeight: 1.2,
-                          textShadow: '0 1px 3px rgba(0,0,0,0.8)'
+                          textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)'
                         }}
                       >
                         {label.length > 20 ? label.slice(0, 18) + '...' : label}
@@ -469,24 +522,31 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               })}
             </g>
 
-            {/* Right Domain Nodes (Learning/Tech) */}
+            {/* Right Domain Nodes (Learning/Tech) - sorted so hovered/selected render last (on top) */}
             <g className="right-nodes">
-              {nodePositions.map((node) => {
+              {[...nodePositions]
+                .sort((a, b) => {
+                  const aActive = selectedConcept === a.concept.id || hoveredConcept === a.concept.id;
+                  const bActive = selectedConcept === b.concept.id || hoveredConcept === b.concept.id;
+                  if (aActive && !bActive) return 1;
+                  if (!aActive && bActive) return -1;
+                  return 0;
+                })
+                .map((node) => {
                 const isSelected = selectedConcept === node.concept.id;
                 const isHovered = hoveredConcept === node.concept.id;
                 const isActive = isSelected || isHovered;
                 const otherSelected = selectedConcept !== null && !isSelected;
-                const radius = 30 + node.importance * 20;
+                const radius = node.radius;
                 const label = cleanLabel(node.concept.tech_term);
 
                 return (
                   <g
                     key={`right-${node.concept.id}`}
                     transform={`translate(${node.rightX}, ${node.y})`}
-                    className="cursor-pointer transition-all duration-300"
+                    className="cursor-pointer"
                     style={{
                       opacity: otherSelected && !isActive ? 0.3 : 1,
-                      transform: `translate(${node.rightX}px, ${node.y}px) scale(${isActive ? 1.1 : 1})`
                     }}
                     onMouseEnter={() => setHoveredConcept(node.concept.id)}
                     onMouseLeave={() => setHoveredConcept(null)}
@@ -564,7 +624,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                           fontWeight: isActive ? 700 : 500,
                           color: '#fff',
                           lineHeight: 1.2,
-                          textShadow: '0 1px 3px rgba(0,0,0,0.8)'
+                          textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)'
                         }}
                       >
                         {label.length > 20 ? label.slice(0, 18) + '...' : label}
@@ -681,16 +741,21 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </p>
               </div>
 
-              {/* Structural Isomorphism Explanation */}
+              {/* Structural Isomorphism Explanation - Dynamic per concept */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
                 <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                   <Layers size={16} className="text-purple-400" />
                   Why This Works
                 </h4>
                 <p className="text-neutral-300 text-sm leading-relaxed">
-                  Just as <span className="text-amber-300 font-medium">{cleanLabel(selectedConceptData.concept.analogy_term)}</span> functions
-                  in {domainName}, <span className="text-blue-300 font-medium">{cleanLabel(selectedConceptData.concept.tech_term)}</span> serves
-                  a similar structural role in {topicName}. The underlying patterns and relationships are preserved across both domains.
+                  {generateDynamicExplanation(
+                    cleanLabel(selectedConceptData.concept.analogy_term),
+                    cleanLabel(selectedConceptData.concept.tech_term),
+                    selectedConceptData.relationshipLabel,
+                    domainName,
+                    topicName,
+                    selectedConceptData.index
+                  )}
                 </p>
               </div>
 

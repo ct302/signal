@@ -865,50 +865,62 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             })}
           </div>
 
-          {/* Hovered concept detail panel */}
-          {hoveredConceptData && (
-            <div className={`px-3 py-3 border-t transition-all duration-300 ${
+          {/* Hovered concept detail panel - fixed height to prevent jumpy layout */}
+          <div
+            className={`px-3 py-3 border-t transition-all duration-300 min-h-[100px] ${
               isDarkMode ? 'border-neutral-700 bg-neutral-800/95' : 'border-neutral-300 bg-white/95'
-            }`}>
-              <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                Active Connection
-              </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 rounded-full animate-pulse"
-                  style={{ backgroundColor: hoveredConceptData.color, boxShadow: `0 0 12px ${hoveredConceptData.color}` }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-[11px] font-semibold truncate ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
-                    {cleanLabel(hoveredConceptData.techTerm)}
-                  </div>
-                  <div className={`text-[11px] font-semibold truncate ${isDarkMode ? 'text-amber-300' : 'text-amber-700'}`}>
-                    ↔ {cleanLabel(hoveredConceptData.analogyTerm)}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-neutral-600 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${hoveredConceptData.importance * 100}%`,
-                        backgroundColor: hoveredConceptData.color
-                      }}
-                    />
-                  </div>
-                  <span className="text-[9px] font-bold" style={{ color: hoveredConceptData.color }}>
-                    {Math.round(hoveredConceptData.importance * 100)}%
-                  </span>
-                </div>
-                <div className={`text-[8px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}
-                  title="How essential this concept is to understanding the main topic">
-                  Importance = centrality to core topic
-                </div>
-              </div>
+            }`}
+            style={{
+              opacity: hoveredConceptData ? 1 : 0.5,
+              pointerEvents: hoveredConceptData ? 'auto' : 'none'
+            }}
+          >
+            <div className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+              {hoveredConceptData ? 'Active Connection' : 'Hover to Preview'}
             </div>
-          )}
+            {hoveredConceptData ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-4 h-4 rounded-full animate-pulse"
+                    style={{ backgroundColor: hoveredConceptData.color, boxShadow: `0 0 12px ${hoveredConceptData.color}` }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-[11px] font-semibold truncate ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                      {cleanLabel(hoveredConceptData.techTerm)}
+                    </div>
+                    <div className={`text-[11px] font-semibold truncate ${isDarkMode ? 'text-amber-300' : 'text-amber-700'}`}>
+                      ↔ {cleanLabel(hoveredConceptData.analogyTerm)}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-neutral-600 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${hoveredConceptData.importance * 100}%`,
+                          backgroundColor: hoveredConceptData.color
+                        }}
+                      />
+                    </div>
+                    <span className="text-[9px] font-bold" style={{ color: hoveredConceptData.color }}>
+                      {Math.round(hoveredConceptData.importance * 100)}%
+                    </span>
+                  </div>
+                  <div className={`text-[8px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}
+                    title="How essential this concept is to understanding the main topic">
+                    Importance = centrality to core topic
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className={`text-[11px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                Hover over any concept card above to see details
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Analogy Pane (Right) */}
