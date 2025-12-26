@@ -1,9 +1,9 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, OPENROUTER_API_KEYS, DOMAIN_CATEGORIES } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult } from '../types';
 
 // Config version - increment to force reset of stored config
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -30,11 +30,12 @@ const getProviderConfig = (): ProviderConfig => {
       // Fall through to default
     }
   }
-  // Default to Google Gemini (has working default key)
+  // Default to OpenRouter with Llama 3.3 70B
+  const defaultModel = 'meta-llama/llama-3.3-70b-instruct:free';
   const defaultConfig = {
-    provider: 'google' as const,
-    apiKey: DEFAULT_GEMINI_API_KEY,
-    model: 'gemini-2.0-flash',
+    provider: 'openrouter' as const,
+    apiKey: OPENROUTER_API_KEYS[defaultModel],
+    model: defaultModel,
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT,
     _version: CONFIG_VERSION
   };
@@ -111,7 +112,9 @@ const buildHeaders = (config: ProviderConfig): Record<string, string> => {
       headers['anthropic-version'] = '2023-06-01';
       break;
     case 'openrouter':
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      // Use model-specific API key from mapping, fallback to stored/default
+      const openrouterKey = OPENROUTER_API_KEYS[config.model] || config.apiKey;
+      headers['Authorization'] = `Bearer ${openrouterKey}`;
       headers['HTTP-Referer'] = 'https://signal-app.com';
       headers['X-Title'] = 'Signal Analogy Engine';
       break;

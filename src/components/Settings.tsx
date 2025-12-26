@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, OPENROUTER_API_KEYS } from '../constants';
 import { fetchOllamaModels } from '../services';
 
 interface SettingsProps {
@@ -20,9 +20,9 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
 export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ProviderConfig>({
-    provider: 'google',
-    apiKey: DEFAULT_GEMINI_API_KEY,
-    model: 'gemini-2.0-flash',
+    provider: 'openrouter',
+    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);
@@ -31,7 +31,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   // Config version - must match gemini.ts
-  const CONFIG_VERSION = 2;
+  const CONFIG_VERSION = 3;
 
   // Load config from localStorage on mount
   useEffect(() => {
@@ -83,7 +83,8 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     if (provider === 'google') {
       defaultApiKey = DEFAULT_GEMINI_API_KEY;
     } else if (provider === 'openrouter') {
-      defaultApiKey = DEFAULT_OPENROUTER_API_KEY;
+      // Use model-specific API key for OpenRouter
+      defaultApiKey = OPENROUTER_API_KEYS[defaultModel] || DEFAULT_OPENROUTER_API_KEY;
     }
 
     setConfig(prev => ({ ...prev, provider, model: defaultModel, apiKey: defaultApiKey }));
@@ -91,6 +92,15 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     if (provider === 'ollama') {
       loadOllamaModels();
     }
+  };
+
+  // Handle model change - update API key for OpenRouter models
+  const handleModelChange = (model: string) => {
+    let apiKey = config.apiKey;
+    if (config.provider === 'openrouter') {
+      apiKey = OPENROUTER_API_KEYS[model] || config.apiKey;
+    }
+    setConfig(prev => ({ ...prev, model, apiKey }));
   };
 
   const handleSave = () => {
@@ -259,7 +269,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
             </label>
             <select
               value={config.model}
-              onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
+              onChange={(e) => handleModelChange(e.target.value)}
               className={`w-full px-3 py-2 rounded-lg border text-sm ${
                 isDarkMode 
                   ? 'bg-neutral-700 border-neutral-600 text-white' 

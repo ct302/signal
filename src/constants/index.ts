@@ -4,8 +4,15 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 // Default API key for demo purposes (users can override in Settings)
 export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
 
-// OpenRouter API key
-export const DEFAULT_OPENROUTER_API_KEY = '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';
+// OpenRouter model-specific API keys
+export const OPENROUTER_API_KEYS: Record<string, string> = {
+  'meta-llama/llama-3.3-70b-instruct:free': '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',
+  'google/gemini-2.0-flash-exp:free': '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',
+  'openai/gpt-oss-120b:free': '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'
+};
+
+// Default OpenRouter API key (for Llama)
+export const DEFAULT_OPENROUTER_API_KEY = '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';
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
