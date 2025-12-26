@@ -48,6 +48,18 @@ const CONCEPT_COLORS = [
   '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#06b6d4'
 ];
 
+// Relationship labels for connections
+const RELATIONSHIP_LABELS = [
+  'maps to',
+  'is like',
+  'corresponds to',
+  'functions as',
+  'represents',
+  'parallels',
+  'mirrors',
+  'aligns with'
+];
+
 interface ConceptPosition {
   id: number;
   techTerm: string;
@@ -149,15 +161,17 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   }, []);
 
   // Parse text into segments with LaTeX rendering and concept highlighting
-  // Now with semantic distillation, phrase coalescence, and spotlight isolation
+  // FIRST OCCURRENCE ONLY - reduces visual chaos
   const parseAndRenderText = useCallback((text: string, isTech: boolean): React.ReactNode[] => {
     if (!text) return [];
 
     const processedText = wrapBareLatex(text);
     const parts = processedText.split(LATEX_REGEX);
     const result: React.ReactNode[] = [];
-    let highlightIndex = 0; // Track index for repulsion offsets
     const paneType = isTech ? 'tech' : 'analogy';
+
+    // Track which concepts have been highlighted - ONLY highlight first occurrence
+    const highlightedConceptIds = new Set<number>();
 
     // Helper to check if a word is a meaningful match (not just a stop word)
     const isSemanticMatch = (word: string, concept: ConceptMapItem): boolean => {
@@ -240,41 +254,45 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         }
 
         if (matchedConcept) {
-          const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept!.id);
-          const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
-          const isHovered = hoveredConcept === matchedConcept.id;
+          // FIRST OCCURRENCE ONLY - skip if already highlighted
+          if (highlightedConceptIds.has(matchedConcept.id)) {
+            // Render as plain LaTeX without highlighting
+            result.push(
+              <span key={`latex-${partIndex}`} className="transition-opacity duration-300">
+                {renderLatex(part)}
+              </span>
+            );
+          } else {
+            // Mark this concept as highlighted
+            highlightedConceptIds.add(matchedConcept.id);
 
-          const spotlightActive = hoveredConcept !== null;
-          const isSpotlit = isHovered;
+            const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept!.id);
+            const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
+            const isHovered = hoveredConcept === matchedConcept.id;
+            const spotlightActive = hoveredConcept !== null;
+            const isSpotlit = isHovered;
 
-          // Get repulsion offset for this box
-          const offsetKey = `${paneType}-${highlightIndex}`;
-          const offset = wordBoxOffsets.get(offsetKey) || { x: 0, y: 0 };
-          highlightIndex++;
-
-          result.push(
-            <span
-              key={`latex-${partIndex}`}
-              data-concept-id={matchedConcept.id}
-              data-type={paneType}
-              className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-700 ease-out
-                ${isSpotlit ? 'z-50 relative' : spotlightActive ? 'opacity-40' : ''}
-              `}
-              style={{
-                backgroundColor: isSpotlit ? color + '60' : color + '20',
-                border: `2px solid ${isSpotlit ? color : 'transparent'}`,
-                transform: isSpotlit
-                  ? `scale(1.08) translateY(-2px) translate(${offset.x}px, ${offset.y}px)`
-                  : spotlightActive ? 'scale(0.97)' : undefined,
-                boxShadow: isSpotlit ? `0 4px 16px ${color}50, 0 0 0 2px ${color}25` : undefined,
-                filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
-              }}
-              onMouseEnter={() => setHoveredConcept(matchedConcept!.id)}
-              onMouseLeave={() => setHoveredConcept(null)}
-            >
-              {renderLatex(part)}
-            </span>
-          );
+            // NO SCALE TRANSFORMS - just color and border for clean highlighting
+            result.push(
+              <span
+                key={`latex-${partIndex}`}
+                data-concept-id={matchedConcept.id}
+                data-type={paneType}
+                className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-300
+                  ${spotlightActive && !isSpotlit ? 'opacity-40' : ''}
+                `}
+                style={{
+                  backgroundColor: isSpotlit ? color + '50' : color + '15',
+                  border: `2px solid ${isSpotlit ? color : color + '40'}`,
+                  boxShadow: isSpotlit ? `0 2px 8px ${color}30` : undefined,
+                }}
+                onMouseEnter={() => setHoveredConcept(matchedConcept!.id)}
+                onMouseLeave={() => setHoveredConcept(null)}
+              >
+                {renderLatex(part)}
+              </span>
+            );
+          }
         } else {
           const spotlightActive = hoveredConcept !== null;
           result.push(
@@ -346,48 +364,50 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
               }
             }
 
-            const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept.id);
-            const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
-            const isHovered = hoveredConcept === matchedConcept.id;
-
-            const spotlightActive = hoveredConcept !== null;
-            const isSpotlit = isHovered;
-
-            // Get repulsion offset for this phrase box
-            const offsetKey = `${paneType}-${highlightIndex}`;
-            const offset = wordBoxOffsets.get(offsetKey) || { x: 0, y: 0 };
-            highlightIndex++;
-
             // Render the entire phrase as one unit
             const phraseText = phraseWords.join('');
 
-            result.push(
-              <span
-                key={`phrase-${partIndex}-${i}`}
-                data-concept-id={matchedConcept.id}
-                data-type={paneType}
-                className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-700 ease-out
-                  ${isSpotlit ? 'z-50 relative' : ''}
-                `}
-                style={{
-                  backgroundColor: isSpotlit ? color + '60' : color + '20',
-                  color: isSpotlit ? (isDarkMode ? '#fff' : '#000') : color,
-                  fontWeight: isSpotlit ? 700 : 600,
-                  border: `2px solid ${isSpotlit ? color : 'transparent'}`,
-                  transform: isSpotlit
-                    ? `scale(1.05) translateY(-2px) translate(${offset.x}px, ${offset.y}px)`
-                    : spotlightActive ? 'scale(0.96)' : undefined,
-                  boxShadow: isSpotlit ? `0 6px 20px ${color}40, 0 0 0 2px ${color}20` : undefined,
-                  opacity: spotlightActive && !isSpotlit ? 0.35 : 1,
-                  filter: spotlightActive && !isSpotlit ? 'blur(1px)' : undefined,
-                  fontSize: isSpotlit ? '1.02em' : undefined,
-                }}
-                onMouseEnter={() => setHoveredConcept(matchedConcept.id)}
-                onMouseLeave={() => setHoveredConcept(null)}
-              >
-                {phraseText}
-              </span>
-            );
+            // FIRST OCCURRENCE ONLY - skip highlighting if already done
+            if (highlightedConceptIds.has(matchedConcept.id)) {
+              // Render as plain text
+              result.push(
+                <span key={`phrase-${partIndex}-${i}`} className="transition-opacity duration-300">
+                  {phraseText}
+                </span>
+              );
+            } else {
+              // Mark this concept as highlighted
+              highlightedConceptIds.add(matchedConcept.id);
+
+              const conceptIndex = conceptMap.findIndex(c => c.id === matchedConcept.id);
+              const color = CONCEPT_COLORS[conceptIndex % CONCEPT_COLORS.length];
+              const isHovered = hoveredConcept === matchedConcept.id;
+              const spotlightActive = hoveredConcept !== null;
+              const isSpotlit = isHovered;
+
+              // NO SCALE TRANSFORMS - clean, simple highlighting
+              result.push(
+                <span
+                  key={`phrase-${partIndex}-${i}`}
+                  data-concept-id={matchedConcept.id}
+                  data-type={paneType}
+                  className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-300
+                    ${spotlightActive && !isSpotlit ? 'opacity-40' : ''}
+                  `}
+                  style={{
+                    backgroundColor: isSpotlit ? color + '50' : color + '15',
+                    color: isSpotlit ? (isDarkMode ? '#fff' : '#000') : color,
+                    fontWeight: isSpotlit ? 700 : 600,
+                    border: `2px solid ${isSpotlit ? color : color + '40'}`,
+                    boxShadow: isSpotlit ? `0 2px 8px ${color}30` : undefined,
+                  }}
+                  onMouseEnter={() => setHoveredConcept(matchedConcept.id)}
+                  onMouseLeave={() => setHoveredConcept(null)}
+                >
+                  {phraseText}
+                </span>
+              );
+            }
 
             i = j; // Skip to after the phrase
           } else {
@@ -724,12 +744,23 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           </defs>
 
           {/* Attention flow paths */}
-          {containerRect && conceptPositions.map((concept) => {
+          {containerRect && conceptPositions.map((concept, index) => {
             if (!concept.techRect || !concept.analogyRect) return null;
 
             const path = generateFlowPath(concept.techRect, concept.analogyRect, containerRect);
             const isHovered = hoveredConcept === concept.id;
             const baseOpacity = hoveredConcept === null ? 0.5 : (isHovered ? 1 : 0.1);
+
+            // Calculate midpoint of the curve for the relationship label
+            const startX = concept.techRect.right - containerRect.left;
+            const startY = concept.techRect.top + concept.techRect.height / 2 - containerRect.top;
+            const endX = concept.analogyRect.left - containerRect.left;
+            const endY = concept.analogyRect.top + concept.analogyRect.height / 2 - containerRect.top;
+            const labelX = (startX + endX) / 2;
+            const labelY = (startY + endY) / 2;
+
+            // Pick a relationship label based on concept index
+            const relationshipLabel = RELATIONSHIP_LABELS[index % RELATIONSHIP_LABELS.length];
 
             return (
               <g key={`flow-${concept.id}`} className="transition-all duration-500">
@@ -757,6 +788,36 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   strokeOpacity={baseOpacity}
                   className="transition-all duration-500"
                 />
+
+                {/* Relationship label on the curve */}
+                <g
+                  opacity={hoveredConcept === null ? 0.7 : (isHovered ? 1 : 0.15)}
+                  className="transition-all duration-300"
+                >
+                  {/* Background pill for label */}
+                  <rect
+                    x={labelX - 35}
+                    y={labelY - 10}
+                    width={70}
+                    height={20}
+                    rx={10}
+                    fill={isDarkMode ? 'rgba(23, 23, 23, 0.95)' : 'rgba(255, 255, 255, 0.95)'}
+                    stroke={isHovered ? concept.color : (isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')}
+                    strokeWidth={isHovered ? 2 : 1}
+                  />
+                  {/* Label text */}
+                  <text
+                    x={labelX}
+                    y={labelY + 4}
+                    textAnchor="middle"
+                    fontSize={11}
+                    fontWeight={isHovered ? 600 : 400}
+                    fill={isHovered ? concept.color : (isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)')}
+                    fontFamily="system-ui, -apple-system, sans-serif"
+                  >
+                    {relationshipLabel}
+                  </text>
+                </g>
 
                 {/* Animated particles */}
                 <circle r={isHovered ? 6 : 3} fill={concept.color} opacity={isHovered ? 1 : 0.5}>
