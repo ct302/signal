@@ -17,7 +17,9 @@ import {
   Share2,
   Medal,
   Eye,
-  Check
+  Check,
+  AlignLeft,
+  Zap
 } from 'lucide-react';
 import {
   MasterySession,
@@ -109,6 +111,38 @@ const KeywordHoverModal: React.FC<{
 };
 
 // ============================================
+// ATTENTION MODE TYPE
+// ============================================
+type AttentionMode = 'opacity' | 'size' | 'heatmap';
+
+// Heatmap color palette for visual hierarchy
+const HEATMAP_COLORS = [
+  'bg-red-500/30 text-red-300',
+  'bg-orange-500/30 text-orange-300',
+  'bg-amber-500/30 text-amber-300',
+  'bg-yellow-500/30 text-yellow-300',
+  'bg-lime-500/30 text-lime-300',
+  'bg-green-500/30 text-green-300',
+  'bg-emerald-500/30 text-emerald-300',
+  'bg-teal-500/30 text-teal-300',
+  'bg-cyan-500/30 text-cyan-300',
+  'bg-blue-500/30 text-blue-300'
+];
+
+const HEATMAP_COLORS_LIGHT = [
+  'bg-red-100 text-red-700',
+  'bg-orange-100 text-orange-700',
+  'bg-amber-100 text-amber-700',
+  'bg-yellow-100 text-yellow-700',
+  'bg-lime-100 text-lime-700',
+  'bg-green-100 text-green-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-teal-100 text-teal-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-blue-100 text-blue-700'
+];
+
+// ============================================
 // STORY CARD COMPONENT
 // ============================================
 const StoryCard: React.FC<{
@@ -122,59 +156,163 @@ const StoryCard: React.FC<{
 }> = ({ story, keywords, stage, isDarkMode, domain, isLoading, onRegenerate }) => {
   const [hoveredKeyword, setHoveredKeyword] = useState<MasteryKeyword | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+  const [attentionMode, setAttentionMode] = useState<AttentionMode>('opacity');
+  const [threshold, setThreshold] = useState(0.3);
+  const [showAttentionControls, setShowAttentionControls] = useState(false);
 
-  // Highlight keywords in the story text
-  const renderStoryWithHighlights = () => {
-    if (!story) return null;
+  // Calculate word importance based on keywords and position
+  const calculateWordImportance = (word: string, wordIndex: number, totalWords: number): number => {
+    const cleanWord = word.toLowerCase().replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+    if (!cleanWord || cleanWord.length < 2) return 0;
 
-    let content = story.content;
-    const relevantKeywords = stage === 1 ? [] : stage === 2 ? keywords.slice(0, 6) : keywords;
+    const relevantKeywords = stage === 1 ? keywords : stage === 2 ? keywords.slice(0, 6) : keywords;
 
-    if (relevantKeywords.length === 0) {
-      return <span>{content}</span>;
+    // Check if word matches any keyword (tech or analogy term)
+    for (const keyword of relevantKeywords) {
+      const techLower = keyword.term.toLowerCase();
+      const analogyLower = keyword.analogyTerm.toLowerCase();
+
+      if (cleanWord === techLower || cleanWord === analogyLower) {
+        return keyword.importance;
+      }
+
+      // Partial match for longer keywords
+      if (techLower.includes(cleanWord) || cleanWord.includes(techLower)) {
+        return keyword.importance * 0.8;
+      }
+      if (analogyLower.includes(cleanWord) || cleanWord.includes(analogyLower)) {
+        return keyword.importance * 0.8;
+      }
     }
 
-    // Create a regex pattern for all keywords (both tech and analogy terms)
-    const terms: { term: string; keyword: MasteryKeyword }[] = [];
+    // Position-based importance (words at beginning/end are often more important)
+    const positionRatio = wordIndex / totalWords;
+    const positionBonus = positionRatio < 0.15 || positionRatio > 0.85 ? 0.1 : 0;
+
+    // Longer words tend to be more significant
+    const lengthBonus = cleanWord.length > 6 ? 0.15 : cleanWord.length > 4 ? 0.05 : 0;
+
+    // Base importance for regular words
+    return 0.2 + positionBonus + lengthBonus;
+  };
+
+  // Get styles for a word based on attention mode and importance
+  const getWordStyles = (importance: number, isKeyword: boolean): React.CSSProperties => {
+    const isImportant = importance >= threshold;
+
+    const baseStyles: React.CSSProperties = {
+      transition: 'all 0.2s ease',
+      display: 'inline',
+    };
+
+    if (attentionMode === 'opacity') {
+      return {
+        ...baseStyles,
+        opacity: isImportant ? 1 : 0.25,
+        filter: isImportant ? 'none' : 'blur(0.3px)',
+        fontWeight: isImportant ? (isKeyword ? 700 : 600) : 400,
+      };
+    }
+
+    if (attentionMode === 'size') {
+      const scale = isImportant ? (isKeyword ? 1.15 : 1.05) : 0.9;
+      return {
+        ...baseStyles,
+        fontSize: `${scale}em`,
+        opacity: isImportant ? 1 : 0.6,
+        fontWeight: isImportant ? (isKeyword ? 700 : 600) : 400,
+        lineHeight: '1.4',
+      };
+    }
+
+    // Heatmap mode - return base styles, color applied via className
+    return {
+      ...baseStyles,
+      fontWeight: isImportant ? (isKeyword ? 700 : 600) : 400,
+      borderRadius: '3px',
+      padding: isKeyword ? '1px 4px' : '0 2px',
+    };
+  };
+
+  // Get heatmap color class based on importance
+  const getHeatmapClass = (importance: number): string => {
+    if (attentionMode !== 'heatmap') return '';
+    if (importance < threshold) return '';
+
+    const colorIndex = Math.min(
+      Math.floor((1 - importance) * HEATMAP_COLORS.length),
+      HEATMAP_COLORS.length - 1
+    );
+
+    return isDarkMode ? HEATMAP_COLORS[colorIndex] : HEATMAP_COLORS_LIGHT[colorIndex];
+  };
+
+  // Render story with importance-based styling
+  const renderStoryWithImportance = () => {
+    if (!story) return null;
+
+    const content = story.content;
+    const relevantKeywords = stage === 1 ? [] : stage === 2 ? keywords.slice(0, 6) : keywords;
+
+    // Build keyword lookup for efficient matching
+    const keywordLookup = new Map<string, MasteryKeyword>();
     relevantKeywords.forEach(k => {
-      terms.push({ term: k.term, keyword: k });
-      terms.push({ term: k.analogyTerm, keyword: k });
+      keywordLookup.set(k.term.toLowerCase(), k);
+      keywordLookup.set(k.analogyTerm.toLowerCase(), k);
     });
 
-    // Sort by length (longest first) to match longer terms first
-    terms.sort((a, b) => b.term.length - a.term.length);
+    // Split into words while preserving whitespace
+    const tokens = content.split(/(\s+)/);
+    const wordCount = tokens.filter(t => !/^\s*$/.test(t)).length;
+    let wordIndex = 0;
 
-    // Build regex
-    const pattern = terms.map(t => t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    const regex = new RegExp(`(${pattern})`, 'gi');
+    return tokens.map((token, index) => {
+      // Preserve whitespace
+      if (/^\s+$/.test(token)) {
+        return <span key={index}>{token}</span>;
+      }
 
-    const parts = content.split(regex);
+      const cleanToken = token.toLowerCase().replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+      const matchedKeyword = keywordLookup.get(cleanToken);
+      const importance = calculateWordImportance(token, wordIndex, wordCount);
+      const styles = getWordStyles(importance, !!matchedKeyword);
+      const heatmapClass = getHeatmapClass(importance);
 
-    return parts.map((part, index) => {
-      const matchedTerm = terms.find(t => t.term.toLowerCase() === part.toLowerCase());
+      wordIndex++;
 
-      if (matchedTerm) {
+      if (matchedKeyword) {
+        // Keyword with hover functionality
         return (
           <span
             key={index}
             className={`
-              cursor-pointer px-1 py-0.5 rounded transition-all duration-200
-              ${isDarkMode
+              cursor-pointer rounded transition-all duration-200
+              ${heatmapClass || (isDarkMode
                 ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}
-              font-medium
+                : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
             `}
+            style={styles}
             onMouseEnter={(e) => {
-              setHoveredKeyword(matchedTerm.keyword);
+              setHoveredKeyword(matchedKeyword);
               setHoverPosition({ x: e.clientX, y: e.clientY });
             }}
             onMouseLeave={() => setHoveredKeyword(null)}
           >
-            {part}
+            {token}
           </span>
         );
       }
-      return <span key={index}>{part}</span>;
+
+      // Regular word with importance-based styling
+      return (
+        <span
+          key={index}
+          className={heatmapClass}
+          style={styles}
+        >
+          {token}
+        </span>
+      );
     });
   };
 
@@ -202,36 +340,102 @@ const StoryCard: React.FC<{
           </span>
         </div>
 
-        {/* Regenerate Button */}
-        <button
-          onClick={onRegenerate}
-          className={`
-            p-2 rounded-lg transition-all duration-200 group
-            ${isDarkMode
-              ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
-              : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
-          `}
-          title="Regenerate story"
-        >
-          <Dices size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Attention Mode Toggle */}
+          <button
+            onClick={() => setShowAttentionControls(!showAttentionControls)}
+            className={`
+              p-2 rounded-lg transition-all duration-200
+              ${showAttentionControls
+                ? 'bg-purple-500 text-white'
+                : isDarkMode
+                  ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                  : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+            `}
+            title="Attention controls"
+          >
+            <Eye size={18} />
+          </button>
+
+          {/* Regenerate Button */}
+          <button
+            onClick={onRegenerate}
+            className={`
+              p-2 rounded-lg transition-all duration-200 group
+              ${isDarkMode
+                ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+            `}
+            title="Regenerate story"
+          >
+            <Dices size={18} className="group-hover:rotate-180 transition-transform duration-500" />
+          </button>
+        </div>
       </div>
+
+      {/* Attention Controls Panel */}
+      {showAttentionControls && (
+        <div className={`
+          mb-4 p-3 rounded-lg border animate-in slide-in-from-top-2 duration-200
+          ${isDarkMode ? 'bg-neutral-900/50 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}
+        `}>
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Mode Buttons */}
+            <div className="flex items-center gap-1">
+              <span className={`text-xs font-medium mr-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                Mode:
+              </span>
+              {(['opacity', 'size', 'heatmap'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setAttentionMode(mode)}
+                  className={`
+                    flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all
+                    ${attentionMode === mode
+                      ? 'bg-purple-500 text-white'
+                      : isDarkMode
+                        ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                        : 'bg-white text-neutral-600 hover:bg-neutral-200 border border-neutral-200'}
+                  `}
+                >
+                  {mode === 'opacity' && <Eye size={12} />}
+                  {mode === 'size' && <AlignLeft size={12} />}
+                  {mode === 'heatmap' && <Zap size={12} />}
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Threshold Slider */}
+            <div className="flex items-center gap-2 flex-1 min-w-[150px]">
+              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                Focus:
+              </span>
+              <input
+                type="range"
+                min="0.1"
+                max="0.9"
+                step="0.05"
+                value={threshold}
+                onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-purple-500"
+                style={{
+                  background: isDarkMode
+                    ? `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) 100%)`
+                    : `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) 100%)`
+                }}
+              />
+              <span className={`text-xs w-8 text-right ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                {Math.round(threshold * 100)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Story Content */}
       <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
-        {renderStoryWithHighlights()}
-      </div>
-
-      {/* Stage indicator badge */}
-      <div className={`
-        absolute bottom-4 right-4 px-2 py-1 rounded text-xs font-medium
-        ${stage === 1
-          ? 'bg-blue-500/20 text-blue-400'
-          : stage === 2
-            ? 'bg-purple-500/20 text-purple-400'
-            : 'bg-green-500/20 text-green-400'}
-      `}>
-        Stage {stage}
+        {renderStoryWithImportance()}
       </div>
 
       {/* Keyword Hover Modal */}
@@ -345,7 +549,7 @@ const ChatWindow: React.FC<{
         <div className="flex items-center gap-2">
           <MessageCircle size={18} className="text-purple-500" />
           <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-            Chat with Claude
+            Chat with Story
           </span>
         </div>
         <button

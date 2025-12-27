@@ -820,6 +820,8 @@ export const detectKeywordsInText = (
  * Stage 1: Pure narrative, ZERO technical jargon
  * Stage 2: Same story structure with ~6 technical terms naturally woven in
  * Stage 3: Same story structure with ALL 10 technical terms
+ *
+ * CRITICAL: Stories must be historically accurate with real teams, players, and moments
  */
 export const generateMasteryStory = async (
   topic: string,
@@ -837,7 +839,14 @@ CRITICAL RULES:
 - The story must capture the ESSENCE of "${topic}" through a ${domain} analogy
 - Write as if explaining to someone who only knows ${domain}
 - Make it engaging, memorable, and roughly 150-200 words
-- The reader should understand the core concept WITHOUT any technical language`,
+- The reader should understand the core concept WITHOUT any technical language
+
+HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
+- Use REAL teams, players, coaches, or figures from ${domain}
+- Reference ACTUAL historical moments, games, matches, or events
+- Include SPECIFIC statistics, scores, dates, or measurable details when relevant
+- The story should feel grounded in real ${domain} history, not generic/fictional
+- Example: Instead of "a quarterback throws a pass", say "Tom Brady's 28-3 comeback in Super Bowl LI"`,
 
     2: `STAGE 2 - SAME STORY WITH 6 TECHNICAL TERMS:
 Take the previous story and LIGHTLY enhance it by naturally weaving in 6 technical terms.
@@ -853,7 +862,8 @@ CRITICAL RULES:
 - Naturally insert the 6 terms - don't force them
 - When using a term, you may add the technical word in parentheses: "${domain} term (technical term)"
 - The story should still read naturally and flow well
-- Roughly 150-200 words`,
+- Roughly 150-200 words
+- MAINTAIN all historical accuracy from Stage 1 (real names, dates, statistics)`,
 
     3: `STAGE 3 - FULL STORY WITH ALL 10 TECHNICAL TERMS:
 Take the previous story and enhance it by naturally weaving in ALL 10 technical terms.
@@ -869,7 +879,8 @@ CRITICAL RULES:
 - Naturally integrate ALL 10 terms
 - Use the ${domain} equivalent terms with technical terms in parentheses
 - The story should feel cohesive, not like a term-stuffing exercise
-- Roughly 180-250 words for the fuller version`
+- Roughly 180-250 words for the fuller version
+- MAINTAIN all historical accuracy from previous stages (real names, dates, statistics)`
   };
 
   const prompt = `You are creating a ${domain} narrative story to teach "${topic}" through analogy.
@@ -882,6 +893,19 @@ STORY REQUIREMENTS:
 3. Captures the ESSENCE of the technical concept through the analogy
 4. Engaging and memorable - not dry or academic
 5. The ${domain} elements should map directly to the technical concept
+
+HISTORICAL ACCURACY (MANDATORY):
+- Feature REAL people, teams, organizations, or figures from ${domain}
+- Reference ACTUAL events, moments, games, performances, or achievements
+- Include SPECIFIC details: dates, scores, statistics, records, achievements
+- Ground the story in ${domain} history that enthusiasts would recognize
+- NO fictional scenarios - this must be a real ${domain} moment that happened
+
+Examples of good historical grounding:
+- NFL: "The 1985 Bears' 46 defense revolutionized..." or "When Peyton Manning called 'Omaha' at the line..."
+- Basketball: "Michael Jordan's flu game in the 1997 Finals..." or "Stephen Curry's 402 three-pointers in 2015-16..."
+- Cooking: "When Julia Child first attempted beef bourguignon on live television..."
+- Music: "The Beatles' Abbey Road studio session where they recorded..."
 
 Return ONLY the story text (no JSON, no explanations, just the story).`;
 
