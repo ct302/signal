@@ -2008,8 +2008,9 @@ export default function App() {
         <button
           onClick={() => {
             if (ambianceMode === 'study') {
-              // Toggle control panel visibility when already in study mode
-              setShowStudyControls(!showStudyControls);
+              // Exit study mode
+              setAmbianceMode('none');
+              setShowStudyControls(true); // Reset for next time
             } else {
               // Enter study mode and show controls
               setAmbianceMode('study');
@@ -2021,7 +2022,7 @@ export default function App() {
               ? 'bg-amber-500 border-amber-600 text-white ring-2 ring-amber-400/50'
               : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-amber-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-amber-500')
           }`}
-          title={ambianceMode === 'study' ? 'Toggle Study Controls' : 'Study Mode (1)'}
+          title={ambianceMode === 'study' ? 'Exit Study Mode' : 'Study Mode (1)'}
         >
           <Coffee size={20} />
         </button>
