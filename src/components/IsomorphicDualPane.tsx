@@ -255,9 +255,17 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         if (matchedConcept) {
           // FIRST OCCURRENCE ONLY - skip if already highlighted
           if (highlightedConceptIds.has(matchedConcept.id)) {
-            // Render as plain LaTeX without highlighting
+            // Render as plain LaTeX without highlighting, but still apply spotlight dimming
+            const spotlightActive = hoveredConcept !== null;
+            const isThisConceptHovered = hoveredConcept === matchedConcept.id;
             result.push(
-              <span key={`latex-${partIndex}`} className="transition-opacity duration-300">
+              <span
+                key={`latex-${partIndex}`}
+                className="transition-all duration-300"
+                style={{
+                  opacity: spotlightActive && !isThisConceptHovered ? 0.3 : 1,
+                }}
+              >
                 {renderLatex(part)}
               </span>
             );
@@ -277,13 +285,12 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 key={`latex-${partIndex}`}
                 data-concept-id={matchedConcept.id}
                 data-type={paneType}
-                className={`inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-300
-                  ${spotlightActive && !isSpotlit ? 'opacity-40' : ''}
-                `}
+                className="inline-block px-1.5 py-0.5 rounded-md cursor-pointer transition-all duration-300"
                 style={{
                   backgroundColor: isSpotlit ? color + '50' : color + '15',
                   border: `2px solid ${isSpotlit ? color : color + '40'}`,
                   boxShadow: isSpotlit ? `0 2px 8px ${color}30` : undefined,
+                  opacity: spotlightActive && !isSpotlit ? 0.3 : 1,
                 }}
                 onMouseEnter={() => setHoveredConcept(matchedConcept!.id)}
                 onMouseLeave={() => setHoveredConcept(null)}
@@ -368,9 +375,17 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
             // FIRST OCCURRENCE ONLY - skip highlighting if already done
             if (highlightedConceptIds.has(matchedConcept.id)) {
-              // Render as plain text
+              // Render as plain text, but still apply spotlight dimming
+              const spotlightActive = hoveredConcept !== null;
+              const isThisConceptHovered = hoveredConcept === matchedConcept.id;
               result.push(
-                <span key={`phrase-${partIndex}-${i}`} className="transition-opacity duration-300">
+                <span
+                  key={`phrase-${partIndex}-${i}`}
+                  className="transition-all duration-300"
+                  style={{
+                    opacity: spotlightActive && !isThisConceptHovered ? 0.3 : 1,
+                  }}
+                >
                   {phraseText}
                 </span>
               );
@@ -390,15 +405,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   key={`phrase-${partIndex}-${i}`}
                   data-concept-id={matchedConcept.id}
                   data-type={paneType}
-                  className={`inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-300
-                    ${spotlightActive && !isSpotlit ? 'opacity-40' : ''}
-                  `}
+                  className="inline-block px-1.5 py-0.5 rounded cursor-pointer transition-all duration-300"
                   style={{
                     backgroundColor: isSpotlit ? color + '50' : color + '15',
                     color: isSpotlit ? (isDarkMode ? '#fff' : '#000') : color,
                     fontWeight: isSpotlit ? 700 : 600,
                     border: `2px solid ${isSpotlit ? color : color + '40'}`,
                     boxShadow: isSpotlit ? `0 2px 8px ${color}30` : undefined,
+                    opacity: spotlightActive && !isSpotlit ? 0.3 : 1,
                   }}
                   onMouseEnter={() => setHoveredConcept(matchedConcept.id)}
                   onMouseLeave={() => setHoveredConcept(null)}
