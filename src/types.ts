@@ -234,4 +234,110 @@ export interface MasteryHistoryEntry {
   stageAttempts: StageAttempt[];
 }
 
+/**
+ * Story versions for each mastery stage
+ * Stage 1: Pure narrative, zero technical jargon
+ * Stage 2: Same story with ~6 technical terms woven in
+ * Stage 3: Same story with all 10 technical terms
+ */
+export interface MasteryStory {
+  stage: MasteryStage;
+  content: string;                    // The narrative story text
+  highlightedTerms: string[];         // Technical terms embedded in this version
+  generatedAt: Date;
+}
+
+/**
+ * A keyword position in the story for highlighting
+ */
+export interface StoryKeywordPosition {
+  term: string;
+  analogyTerm: string;
+  startIndex: number;
+  endIndex: number;
+  techDefinition3: string;
+  analogyDefinition3: string;
+  techDefinition6: string;
+  analogyDefinition6: string;
+}
+
+/**
+ * Chat message in mastery mode conversation
+ */
+export interface MasteryChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+/**
+ * Complete mastery history entry with full data for Overview mode
+ */
+export interface CompleteMasteryHistory {
+  id: string;
+  topic: string;
+  domain: string;
+  domainEmoji: string;
+  completedAt: Date;
+  startedAt: Date;
+
+  // Stories for each stage
+  stories: {
+    stage1: MasteryStory;
+    stage2: MasteryStory;
+    stage3: MasteryStory;
+  };
+
+  // User responses for each stage
+  userResponses: {
+    stage1: string;
+    stage2: string;
+    stage3: string;
+  };
+
+  // AI intuition extractions for each stage
+  intuitions: {
+    stage1: ExtractedIntuition;
+    stage2: ExtractedIntuition;
+    stage3: ExtractedIntuition;
+  };
+
+  // Full glossary with all 10 keywords and 4 definitions each
+  glossary: MasteryKeyword[];
+
+  // Final scores
+  finalScores: {
+    stage1: number;
+    stage2: number;
+    stage3: number;
+  };
+
+  // Overall mastery summary from AI
+  masterySummary: {
+    keyStrength: string;           // User's unique strength in understanding
+    coreIntuition: string;         // The main intuition they demonstrated
+    uniqueApproach: string;        // What made their explanation unique
+  };
+}
+
+/**
+ * Share data for generating share links
+ */
+export interface MasteryShareData {
+  topic: string;
+  domain: string;
+  domainEmoji: string;
+  completedAt: string;
+  finalScores: {
+    stage1: number;
+    stage2: number;
+    stage3: number;
+  };
+  masterySummary: {
+    keyStrength: string;
+    coreIntuition: string;
+  };
+}
+
 export {};

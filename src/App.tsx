@@ -24,7 +24,8 @@ import {
   Network,
   Columns,
   Type,
-  GraduationCap
+  GraduationCap,
+  Medal
 } from 'lucide-react';
 
 // Types
@@ -41,7 +42,8 @@ import {
   QuizDifficulty,
   DisambiguationData,
   HistoryItem,
-  ProximityResult
+  ProximityResult,
+  CompleteMasteryHistory
 } from './types';
 
 // Constants
@@ -208,6 +210,9 @@ export default function App() {
   const [isConstellationMode, setIsConstellationMode] = useState(false);
   const [isDualPaneMode, setIsDualPaneMode] = useState(false);
   const [isMasteryMode, setIsMasteryMode] = useState(false);
+  const [masteryHistory, setMasteryHistory] = useState<CompleteMasteryHistory[]>([]);
+  const [showMasteryHistory, setShowMasteryHistory] = useState(false);
+  const [selectedMasteryEntry, setSelectedMasteryEntry] = useState<CompleteMasteryHistory | null>(null);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -734,6 +739,47 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showHistory, setShowHistory]);
+
+  // Load mastery history from localStorage
+  useEffect(() => {
+    const loadMasteryHistory = () => {
+      try {
+        const stored = localStorage.getItem('signal_mastery_history');
+        if (stored) {
+          const history = JSON.parse(stored);
+          setMasteryHistory(history);
+        }
+      } catch (err) {
+        console.error('Failed to load mastery history:', err);
+      }
+    };
+
+    loadMasteryHistory();
+
+    // Listen for storage changes (in case mastery mode updates it)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'signal_mastery_history') {
+        loadMasteryHistory();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Reload mastery history when returning from mastery mode
+  useEffect(() => {
+    if (!isMasteryMode) {
+      const stored = localStorage.getItem('signal_mastery_history');
+      if (stored) {
+        try {
+          setMasteryHistory(JSON.parse(stored));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [isMasteryMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1692,6 +1738,21 @@ export default function App() {
                         <span className="hidden sm:inline">Mastery</span>
                       </button>
                     )}
+                    {/* Mastery History Button - Shows gold medals for mastered topics */}
+                    {masteryHistory.length > 0 && (
+                      <button
+                        onClick={() => setShowMasteryHistory(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          showMasteryHistory
+                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title={`${masteryHistory.length} Mastered Topics`}
+                      >
+                        <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
+                        <span className="hidden sm:inline">{masteryHistory.length}</span>
+                      </button>
+                    )}
                     {/* Text Scale Control */}
                     {hasStarted && (
                       <button
@@ -2382,6 +2443,177 @@ export default function App() {
           isDarkMode={isDarkMode}
           onClose={() => setIsMasteryMode(false)}
         />
+      )}
+
+      {/* Mastery History Modal */}
+      {showMasteryHistory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+          <div className={`max-w-2xl w-full mx-4 max-h-[80vh] rounded-2xl overflow-hidden flex flex-col ${isDarkMode ? 'bg-neutral-900' : 'bg-white'}`}>
+            {/* Header */}
+            <div className={`flex items-center justify-between px-6 py-4 border-b ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+              <div className="flex items-center gap-3">
+                <Medal className="text-yellow-500" size={24} />
+                <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  Mastered Topics
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowMasteryHistory(false)}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-neutral-700' : 'hover:bg-neutral-100'}`}
+              >
+                <X size={20} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-600'} />
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid gap-3">
+                {masteryHistory.map((entry) => (
+                  <button
+                    key={entry.id}
+                    onClick={() => {
+                      setSelectedMasteryEntry(entry);
+                      setShowMasteryHistory(false);
+                    }}
+                    className={`p-4 rounded-xl text-left transition-all hover:scale-[1.02] ${
+                      isDarkMode
+                        ? 'bg-neutral-800 hover:bg-neutral-700'
+                        : 'bg-neutral-100 hover:bg-neutral-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <Medal className="w-10 h-10 text-yellow-500" />
+                        <span className="absolute -bottom-1 -right-1 text-lg">{entry.domainEmoji}</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className={`font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                          {entry.topic}
+                        </div>
+                        <div className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                          via {entry.domain} • {new Date(entry.completedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                          {entry.finalScores.stage1}%
+                        </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
+                          {entry.finalScores.stage2}%
+                        </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${isDarkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                          {entry.finalScores.stage3}%
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {masteryHistory.length === 0 && (
+                <div className={`text-center py-12 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                  <Medal className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                  <p>No mastered topics yet</p>
+                  <p className="text-sm mt-1">Complete Mastery Mode to earn medals!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Mastery Overview */}
+      {selectedMasteryEntry && (
+        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: isDarkMode ? '#0a0a0a' : '#fafafa' }}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-6 py-4 border-b ${isDarkMode ? 'border-neutral-800 bg-neutral-900' : 'border-neutral-200 bg-white'}`}>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Medal className="w-10 h-10 text-yellow-500" />
+                <span className="absolute -bottom-1 -right-1 text-lg">{selectedMasteryEntry.domainEmoji}</span>
+              </div>
+              <div>
+                <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  {selectedMasteryEntry.topic}
+                </h2>
+                <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                  Mastered on {new Date(selectedMasteryEntry.completedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedMasteryEntry(null)}
+              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 hover:bg-red-500 text-neutral-300 hover:text-white' : 'bg-neutral-100 hover:bg-red-500 text-neutral-600 hover:text-white'}`}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Summary */}
+              <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-yellow-900/20 to-orange-900/20 border border-yellow-500/30' : 'bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200'}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Trophy className="text-yellow-500" size={24} />
+                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                    Your Mastery Summary
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className={`text-xs uppercase font-bold ${isDarkMode ? 'text-yellow-400/70' : 'text-yellow-600'}`}>Key Strength</div>
+                    <p className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>{selectedMasteryEntry.masterySummary.keyStrength}</p>
+                  </div>
+                  <div>
+                    <div className={`text-xs uppercase font-bold ${isDarkMode ? 'text-yellow-400/70' : 'text-yellow-600'}`}>Core Intuition</div>
+                    <p className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>{selectedMasteryEntry.masterySummary.coreIntuition}</p>
+                  </div>
+                  <div>
+                    <div className={`text-xs uppercase font-bold ${isDarkMode ? 'text-yellow-400/70' : 'text-yellow-600'}`}>What Made You Unique</div>
+                    <p className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>{selectedMasteryEntry.masterySummary.uniqueApproach}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scores */}
+              <div className="grid grid-cols-3 gap-4">
+                {[1, 2, 3].map((stage) => (
+                  <div key={stage} className={`p-4 rounded-xl text-center ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
+                    <div className={`text-3xl font-bold ${stage === 1 ? 'text-blue-500' : stage === 2 ? 'text-purple-500' : 'text-green-500'}`}>
+                      {selectedMasteryEntry.finalScores[`stage${stage}` as keyof typeof selectedMasteryEntry.finalScores]}%
+                    </div>
+                    <div className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Stage {stage}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Glossary */}
+              <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>Glossary</h3>
+                <div className="grid gap-3">
+                  {selectedMasteryEntry.glossary.map((keyword) => (
+                    <div key={keyword.id} className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`font-bold ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>{keyword.term}</span>
+                        <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>↔</span>
+                        <span className={`font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{keyword.analogyTerm}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>
+                          <span className={isDarkMode ? 'text-purple-400' : 'text-purple-600'}>Tech:</span> {keyword.techDefinition6}
+                        </div>
+                        <div className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>
+                          <span className={isDarkMode ? 'text-blue-400' : 'text-blue-600'}>Analogy:</span> {keyword.analogyDefinition6}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

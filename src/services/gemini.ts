@@ -1,6 +1,6 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -814,3 +814,217 @@ export const detectKeywordsInText = (
 
   return detected;
 };
+
+/**
+ * Generate a stage-specific mastery story
+ * Stage 1: Pure narrative, ZERO technical jargon
+ * Stage 2: Same story structure with ~6 technical terms naturally woven in
+ * Stage 3: Same story structure with ALL 10 technical terms
+ */
+export const generateMasteryStory = async (
+  topic: string,
+  domain: string,
+  stage: MasteryStage,
+  keywords: MasteryKeyword[],
+  previousStory?: string // For continuity in stages 2-3
+): Promise<MasteryStory> => {
+  const stageInstructions: Record<MasteryStage, string> = {
+    1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
+Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
+
+CRITICAL RULES:
+- NO technical terms whatsoever - not even simple ones
+- The story must capture the ESSENCE of "${topic}" through a ${domain} analogy
+- Write as if explaining to someone who only knows ${domain}
+- Make it engaging, memorable, and roughly 150-200 words
+- The reader should understand the core concept WITHOUT any technical language`,
+
+    2: `STAGE 2 - SAME STORY WITH 6 TECHNICAL TERMS:
+Take the previous story and LIGHTLY enhance it by naturally weaving in 6 technical terms.
+
+PREVIOUS STORY (maintain this structure):
+${previousStory || '(Generate fresh story with terms)'}
+
+TECHNICAL TERMS TO INCLUDE (use their ${domain} equivalents in the story, with technical terms in parentheses):
+${keywords.slice(0, 6).map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
+
+CRITICAL RULES:
+- Keep 95% of the original story intact
+- Naturally insert the 6 terms - don't force them
+- When using a term, you may add the technical word in parentheses: "${domain} term (technical term)"
+- The story should still read naturally and flow well
+- Roughly 150-200 words`,
+
+    3: `STAGE 3 - FULL STORY WITH ALL 10 TECHNICAL TERMS:
+Take the previous story and enhance it by naturally weaving in ALL 10 technical terms.
+
+PREVIOUS STORY (maintain this structure):
+${previousStory || '(Generate fresh story with all terms)'}
+
+ALL 10 TECHNICAL TERMS TO INCLUDE:
+${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
+
+CRITICAL RULES:
+- Keep the core structure and flow of the story
+- Naturally integrate ALL 10 terms
+- Use the ${domain} equivalent terms with technical terms in parentheses
+- The story should feel cohesive, not like a term-stuffing exercise
+- Roughly 180-250 words for the fuller version`
+  };
+
+  const prompt = `You are creating a ${domain} narrative story to teach "${topic}" through analogy.
+
+${stageInstructions[stage]}
+
+STORY REQUIREMENTS:
+1. Written in present tense, active voice
+2. Uses vivid ${domain}-specific imagery and scenarios
+3. Captures the ESSENCE of the technical concept through the analogy
+4. Engaging and memorable - not dry or academic
+5. The ${domain} elements should map directly to the technical concept
+
+Return ONLY the story text (no JSON, no explanations, just the story).`;
+
+  try {
+    const storyContent = await callApi(prompt, false);
+
+    // Clean up the response
+    const cleanContent = storyContent
+      .trim()
+      .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
+      .replace(/^Story:\s*/i, ''); // Remove "Story:" prefix if any
+
+    const highlightedTerms = stage === 1
+      ? []
+      : stage === 2
+        ? keywords.slice(0, 6).map(k => k.term)
+        : keywords.map(k => k.term);
+
+    return {
+      stage,
+      content: cleanContent,
+      highlightedTerms,
+      generatedAt: new Date()
+    };
+  } catch (error) {
+    console.error('Failed to generate mastery story:', error);
+    // Return fallback story
+    return {
+      stage,
+      content: `Imagine ${topic} as a ${domain} scenario. The fundamental principles work similarly to what you already know from ${domain}.`,
+      highlightedTerms: [],
+      generatedAt: new Date()
+    };
+  }
+};
+
+/**
+ * Generate chat response for mastery mode Q&A
+ * Has context about: current story, user responses, keyword definitions
+ */
+export const generateMasteryChatResponse = async (
+  topic: string,
+  domain: string,
+  currentStage: MasteryStage,
+  currentStory: string,
+  userResponses: string[],
+  keywords: MasteryKeyword[],
+  chatHistory: MasteryChatMessage[],
+  newMessage: string
+): Promise<string> => {
+  const recentHistory = chatHistory.slice(-6); // Last 6 messages for context
+
+  const prompt = `You are a helpful tutor assisting a student who is learning "${topic}" through ${domain} analogies.
+
+CURRENT STAGE: ${currentStage}
+CURRENT STORY THE STUDENT IS READING:
+${currentStory}
+
+${userResponses.length > 0 ? `STUDENT'S PREVIOUS RESPONSES:\n${userResponses.map((r, i) => `Stage ${i + 1}: "${r.slice(0, 200)}..."`).join('\n')}` : ''}
+
+AVAILABLE KEYWORDS AND DEFINITIONS:
+${keywords.slice(0, currentStage === 1 ? 0 : currentStage === 2 ? 6 : 10).map(k =>
+  `- ${k.term} (${k.analogyTerm}): ${currentStage === 3 ? k.techDefinition6 : k.techDefinition3}`
+).join('\n')}
+
+RECENT CHAT:
+${recentHistory.map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.content}`).join('\n')}
+
+Student's new message: "${newMessage}"
+
+TUTOR GUIDELINES:
+- Be helpful, concise, and encouraging
+- Use ${domain} vocabulary when explaining
+- If they ask about the analogy correctness, validate or correct their understanding
+- If they're confused, clarify using both ${domain} and technical perspectives
+- Keep responses to 2-4 sentences unless more detail is needed
+- Don't give away answers directly - guide them to understanding
+
+Respond as the tutor (just the response, no "Tutor:" prefix):`;
+
+  try {
+    const response = await callApi(prompt, false);
+    return response.trim();
+  } catch (error) {
+    console.error('Failed to generate chat response:', error);
+    return "I'm having trouble responding right now. Please try asking again.";
+  }
+};
+
+/**
+ * Generate mastery summary after completing all 3 stages
+ * Extracts the user's key strengths and unique approach
+ */
+export const generateMasterySummary = async (
+  topic: string,
+  domain: string,
+  userResponses: { stage1: string; stage2: string; stage3: string },
+  intuitions: { stage1: any; stage2: any; stage3: any }
+): Promise<{ keyStrength: string; coreIntuition: string; uniqueApproach: string }> => {
+  const prompt = `Analyze this student's mastery journey for learning "${topic}" through ${domain} analogies.
+
+STAGE 1 RESPONSE (Pure Intuition - no keywords):
+"${userResponses.stage1}"
+Intuition extracted: ${intuitions.stage1?.insight || 'N/A'}
+
+STAGE 2 RESPONSE (6 keywords):
+"${userResponses.stage2}"
+Intuition extracted: ${intuitions.stage2?.insight || 'N/A'}
+
+STAGE 3 RESPONSE (All 10 keywords):
+"${userResponses.stage3}"
+Intuition extracted: ${intuitions.stage3?.insight || 'N/A'}
+
+As a teacher, provide an encouraging summary of their learning journey:
+
+Return ONLY this JSON:
+{
+  "keyStrength": "1-2 sentences about what this student did particularly well - be specific about their understanding",
+  "coreIntuition": "1-2 sentences about the core insight they demonstrated about ${topic}",
+  "uniqueApproach": "1-2 sentences about what made their explanation unique or memorable"
+}`;
+
+  try {
+    const text = await callApi(prompt, true);
+    const result = safeJsonParse(text);
+
+    if (result) {
+      return {
+        keyStrength: result.keyStrength || 'Demonstrated solid understanding through analogical reasoning.',
+        coreIntuition: result.coreIntuition || `Grasped the fundamental concept of ${topic} through ${domain}.`,
+        uniqueApproach: result.uniqueApproach || 'Used personal perspective to make the concept memorable.'
+      };
+    }
+
+    return getDefaultMasterySummary(topic, domain);
+  } catch (error) {
+    console.error('Failed to generate mastery summary:', error);
+    return getDefaultMasterySummary(topic, domain);
+  }
+};
+
+const getDefaultMasterySummary = (topic: string, domain: string) => ({
+  keyStrength: 'Successfully completed all three stages of mastery verification.',
+  coreIntuition: `Demonstrated understanding of ${topic} through ${domain} analogies.`,
+  uniqueApproach: 'Applied personal knowledge to explain complex concepts.'
+});
