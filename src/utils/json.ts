@@ -39,6 +39,56 @@ const restoreBackslashes = (obj: any): any => {
 };
 
 /**
+ * Fix literal newlines inside JSON string values (which are invalid JSON)
+ * Converts actual newlines to escaped \n sequences
+ */
+const fixNewlinesInStrings = (jsonStr: string): string => {
+  // Match string values and replace literal newlines with \n
+  // This regex finds strings and replaces newlines inside them
+  let result = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < jsonStr.length; i++) {
+    const char = jsonStr[i];
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString && (char === '\n' || char === '\r')) {
+      // Replace literal newlines inside strings with escaped version
+      result += '\\n';
+      continue;
+    }
+
+    if (inString && char === '\t') {
+      // Replace literal tabs inside strings with escaped version
+      result += '\\t';
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
+/**
  * Safely parse JSON with fallback handling for common issues
  */
 export const safeJsonParse = (text: string | null | undefined): any => {
@@ -65,15 +115,22 @@ export const safeJsonParse = (text: string | null | undefined): any => {
   try {
     return JSON.parse(jsonString);
   } catch (e1) {
-    // Step 4: NUCLEAR OPTION v2 - replace backslashes with placeholder, parse, restore
+    // Step 4: Fix literal newlines inside strings, then try again
     try {
-      const withPlaceholders = replaceBackslashesWithPlaceholder(jsonString);
-      const parsed = JSON.parse(withPlaceholders);
-      return restoreBackslashes(parsed);
-    } catch (e2: any) {
-      console.error("JSON parsing failed completely:", e2);
-      console.error("Raw response (first 500 chars):", jsonString.substring(0, 500));
-      return null;
+      const fixedNewlines = fixNewlinesInStrings(jsonString);
+      return JSON.parse(fixedNewlines);
+    } catch (e2) {
+      // Step 5: NUCLEAR OPTION - fix newlines + replace backslashes with placeholder
+      try {
+        const fixedNewlines = fixNewlinesInStrings(jsonString);
+        const withPlaceholders = replaceBackslashesWithPlaceholder(fixedNewlines);
+        const parsed = JSON.parse(withPlaceholders);
+        return restoreBackslashes(parsed);
+      } catch (e3: any) {
+        console.error("JSON parsing failed completely:", e3);
+        console.error("Raw response (first 500 chars):", jsonString.substring(0, 500));
+        return null;
+      }
     }
   }
 };
