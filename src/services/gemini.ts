@@ -47,8 +47,16 @@ const buildApiUrl = (config: ProviderConfig): string => {
   }
 };
 
+// Options for API calls
+interface ApiCallOptions {
+  jsonMode?: boolean;
+  webSearch?: boolean; // Enable OpenRouter web search plugin
+}
+
 // Build request body based on provider
-const buildRequestBody = (prompt: string, config: ProviderConfig, jsonMode: boolean = false): object => {
+const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
+  const { jsonMode = false, webSearch = false } = options;
+
   switch (config.provider) {
     case 'google':
       return {
@@ -74,12 +82,22 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, jsonMode: bool
         stream: false,
         ...(jsonMode && { format: 'json' })
       };
-    case 'openrouter':
-      return {
+    case 'openrouter': {
+      const body: Record<string, any> = {
         model: config.model,
         messages: [{ role: 'user', content: prompt }],
         ...(jsonMode && { response_format: { type: 'json_object' } })
       };
+
+      // Add web search plugin when enabled (uses OpenRouter's built-in web search)
+      // Pricing: $4 per 1000 results, with max_results: 3 = ~$0.012 per request
+      if (webSearch) {
+        body.plugins = [{ id: 'web', max_results: 3 }];
+        console.log('[OpenRouter] Web search enabled with max_results: 3');
+      }
+
+      return body;
+    }
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -126,16 +144,16 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
 };
 
 // Unified API call
-const callApi = async (prompt: string, jsonMode: boolean = false): Promise<string> => {
+const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<string> => {
   const config = getProviderConfig();
-  
+
   if (!config.apiKey && config.provider !== 'ollama') {
     throw new Error(`No API key configured for ${config.provider}. Please add your API key in Settings.`);
   }
 
   const url = buildApiUrl(config);
   const headers = buildHeaders(config);
-  const body = buildRequestBody(prompt, config, jsonMode);
+  const body = buildRequestBody(prompt, config, options);
 
   const response = await fetchWithRetry(url, {
     method: 'POST',
@@ -270,100 +288,25 @@ export const routeQuery = async (
 };
 
 /**
- * Fetch web data using DuckDuckGo instant answers API
- * Note: This may have CORS issues in some browsers - fails gracefully
- */
-const fetchWebData = async (query: string): Promise<string | null> => {
-  try {
-    // Try DuckDuckGo Instant Answer API (free, no key)
-    const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
-
-    const response = await fetch(ddgUrl);
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    // Extract useful information
-    const parts: string[] = [];
-
-    if (data.Abstract) {
-      parts.push(data.Abstract);
-    }
-
-    if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
-      const topics = data.RelatedTopics
-        .slice(0, 5)
-        .filter((t: any) => t.Text)
-        .map((t: any) => t.Text);
-      if (topics.length > 0) {
-        parts.push('Related information: ' + topics.join('. '));
-      }
-    }
-
-    if (data.Infobox && data.Infobox.content) {
-      const infoItems = data.Infobox.content
-        .slice(0, 5)
-        .filter((item: any) => item.label && item.value)
-        .map((item: any) => `${item.label}: ${item.value}`);
-      if (infoItems.length > 0) {
-        parts.push('Key facts: ' + infoItems.join(', '));
-      }
-    }
-
-    return parts.length > 0 ? parts.join('\n\n') : null;
-
-  } catch (error) {
-    console.error('Web fetch error:', error);
-    return null;
-  }
-};
-
-/**
- * Main enrichment function - routes query and fetches data if needed
- * Returns enriched context for content generation
+ * Main enrichment function - checks routing signals
+ * Note: Actual web data fetching is now handled by OpenRouter's native web search plugin
+ * which is enabled via the `plugins` parameter when granularity signals are detected.
+ * This function is kept for backward compatibility and logging purposes.
  */
 export const enrichWithRouting = async (
   topic: string,
   domain: string
 ): Promise<EnrichedContext> => {
-  // Get routing decision
+  // Get routing decision (checks for granularity signals)
   const routingDecision = await routeQuery(topic, domain);
 
-  // If no action needed, return unenriched context
-  if (routingDecision.action === 'none') {
-    return {
-      originalTopic: topic,
-      originalDomain: domain,
-      wasEnriched: false,
-      routingDecision
-    };
-  }
-
-  // Fetch data based on routing decision
-  let fetchedData: string | null = null;
-
-  if (routingDecision.query) {
-    fetchedData = await fetchWebData(routingDecision.query);
-  }
-
-  // Build enriched prompt context
-  let enrichedPromptContext: string | undefined;
-  if (fetchedData) {
-    enrichedPromptContext = `
-VERIFIED REFERENCE DATA (use these facts for accuracy):
-${fetchedData}
-
-Use the above verified data to ensure historical accuracy in your response.
-`;
-  }
-
+  // Note: OpenRouter's web search plugin handles data fetching automatically
+  // when the webSearch option is passed to callApi
   return {
     originalTopic: topic,
     originalDomain: domain,
-    wasEnriched: !!fetchedData,
-    routingDecision,
-    fetchedData: fetchedData || undefined,
-    enrichedPromptContext
+    wasEnriched: routingDecision.action === 'web_search',
+    routingDecision
   };
 };
 
@@ -378,6 +321,7 @@ const getShortDomain = (domain: string): string => {
 /**
  * Enrich domain on selection - called once when user selects their expertise domain
  * Returns cached enrichment data to be reused for all subsequent generations
+ * Note: Actual web data is now fetched by OpenRouter's native web search plugin
  */
 export const enrichDomainOnSelection = async (domain: string): Promise<CachedDomainEnrichment> => {
   const shortDomain = getShortDomain(domain);
@@ -385,31 +329,16 @@ export const enrichDomainOnSelection = async (domain: string): Promise<CachedDom
   // Check for granularity signals in the domain itself
   const { isGranular, signals } = detectGranularitySignals('', domain);
 
-  // If domain has granular signals (specific years, seasons, etc.), fetch enrichment data
   if (isGranular) {
     console.log(`[Domain Enrichment] Detected granular domain: ${signals.join(', ')}`);
-
-    // Build a search query focused on the domain
-    const searchQuery = `${shortDomain} history facts statistics`;
-    const fetchedData = await fetchWebData(searchQuery);
-
-    if (fetchedData) {
-      console.log(`[Domain Enrichment] Successfully fetched data for domain: ${shortDomain}`);
-      return {
-        domain,
-        shortDomain,
-        wasEnriched: true,
-        fetchedData,
-        enrichedAt: new Date()
-      };
-    }
+    console.log(`[Domain Enrichment] Web search will be enabled for generations with: ${shortDomain}`);
   }
 
-  // No enrichment needed or fetch failed
+  // Return domain info - actual web search is handled by OpenRouter's plugin
   return {
     domain,
     shortDomain,
-    wasEnriched: false,
+    wasEnriched: isGranular, // Marks that this domain has granular signals
     enrichedAt: new Date()
   };
 };
@@ -446,8 +375,8 @@ const getComplexityPrompt = (level: number): string => {
 
 /**
  * Generate analogy content for a topic
- * Automatically enriches with web data when granular references are detected
- * Accepts optional cached domain enrichment to avoid redundant fetches
+ * Automatically enables OpenRouter web search when granular references are detected
+ * Web search data is injected by OpenRouter's native plugin (no manual fetching needed)
  */
 export const generateAnalogy = async (
   topic: string,
@@ -458,28 +387,11 @@ export const generateAnalogy = async (
   const complexityInstructions = getComplexityPrompt(complexity);
   const shortDomain = getShortDomain(domain);
 
-  // Build enrichment from multiple sources:
-  // 1. Cached domain enrichment (fetched once on domain selection)
-  // 2. Topic-specific routing (if topic has granular signals)
-  let enrichmentParts: string[] = [];
-
-  // Add cached domain enrichment if available
-  if (cachedDomainEnrichment?.wasEnriched && cachedDomainEnrichment.fetchedData) {
-    enrichmentParts.push(`DOMAIN REFERENCE DATA (verified facts about ${shortDomain}):\n${cachedDomainEnrichment.fetchedData}`);
-  }
-
-  // Also check topic for granular signals
-  const enrichedContext = await enrichWithRouting(topic, domain);
-  if (enrichedContext.wasEnriched && enrichedContext.fetchedData) {
-    enrichmentParts.push(`TOPIC REFERENCE DATA:\n${enrichedContext.fetchedData}`);
-  }
-
-  const enrichmentSection = enrichmentParts.length > 0
-    ? `\nVERIFIED REFERENCE DATA (use these facts for historical accuracy):\n${enrichmentParts.join('\n\n')}\n`
-    : '';
+  // Note: Web search is now handled by OpenRouter's native plugin
+  // When granularity signals are detected, the webSearch option is passed to callApi
+  // and OpenRouter automatically injects relevant web search results
 
   const prompt = `Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
-${enrichmentSection}
 
 ${complexityInstructions}
 
@@ -555,7 +467,13 @@ CRITICAL RULES:
 6. The analogy should feel like a REAL STORY from ${shortDomain} history, not a forced comparison
 7. Return ONLY valid JSON, no markdown code blocks`;
 
-  const text = await callApi(prompt, true);
+  // Check for granularity signals to determine if web search should be enabled
+  const { isGranular } = detectGranularitySignals(topic, domain);
+  if (isGranular) {
+    console.log(`[generateAnalogy] Granularity signals detected - enabling web search for: "${topic}"`);
+  }
+
+  const text = await callApi(prompt, { jsonMode: true, webSearch: isGranular });
   return safeJsonParse(text);
 };
 
@@ -592,7 +510,7 @@ Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4 
 Return ONLY valid JSON, no other text.`;
 
   try {
-    const responseText = await callApi(prompt, true);
+    const responseText = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(responseText);
     return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
   } catch {
@@ -613,7 +531,7 @@ export const fetchDefinition = async (term: string, context: string, level: numb
   }
 
   try {
-    return await callApi(promptText, false);
+    return await callApi(promptText);
   } catch {
     return "Could not load definition.";
   }
@@ -698,7 +616,7 @@ Return ONLY this JSON:
   }
 
   try {
-    const text = await callApi(prompt, true);
+    const text = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(text);
     if (result) {
       result.difficulty = difficulty;
@@ -721,7 +639,7 @@ export const askTutor = async (
   const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short.`;
 
   try {
-    return await callApi(prompt, false);
+    return await callApi(prompt);
   } catch {
     return "Sorry, I couldn't process that question.";
   }
@@ -785,7 +703,7 @@ Return ONLY this JSON (no markdown):
 {"isTooClose": true/false, "reason": "brief explanation if too close"}`;
 
   try {
-    const responseText = await callApi(prompt, true);
+    const responseText = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(responseText);
 
     if (result?.isTooClose) {
@@ -900,7 +818,7 @@ Return ONLY this JSON (no markdown):
 }`;
 
   try {
-    const text = await callApi(prompt, true);
+    const text = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(text);
 
     if (result?.keywords && Array.isArray(result.keywords)) {
@@ -1050,7 +968,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, true);
+    const text = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(text);
 
     if (result) {
@@ -1145,7 +1063,7 @@ export const detectKeywordsInText = (
  * Stage 3: Same story structure with ALL 10 technical terms
  *
  * CRITICAL: Stories must be historically accurate with real teams, players, and moments
- * Automatically enriches with web data when granular references are detected
+ * Web search is enabled via OpenRouter's native plugin for historical accuracy
  */
 export const generateMasteryStory = async (
   topic: string,
@@ -1154,15 +1072,8 @@ export const generateMasteryStory = async (
   keywords: MasteryKeyword[],
   previousStory?: string // For continuity in stages 2-3
 ): Promise<MasteryStory> => {
-  // For Stage 1, enrich with external data for historical accuracy
-  // Stages 2-3 build on Stage 1's story, so they don't need separate enrichment
-  let enrichmentSection = '';
-  if (stage === 1) {
-    const enrichedContext = await enrichWithRouting(topic, domain);
-    if (enrichedContext.wasEnriched && enrichedContext.enrichedPromptContext) {
-      enrichmentSection = `\nHISTORICAL REFERENCE DATA (use these verified facts for accuracy):\n${enrichedContext.fetchedData || ''}\n`;
-    }
-  }
+  // Note: Web search is now handled by OpenRouter's native plugin
+  // Enabled via the webSearch option in callApi for Stage 1 and granular topics
 
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
@@ -1220,7 +1131,7 @@ CRITICAL RULES:
   const prompt = `You are creating a ${domain} narrative story to teach "${topic}" through analogy.
 
 ${stageInstructions[stage]}
-${enrichmentSection}
+
 STORY REQUIREMENTS:
 1. Written in present tense, active voice
 2. Uses vivid ${domain}-specific imagery and scenarios
@@ -1239,7 +1150,15 @@ HISTORICAL ACCURACY (MANDATORY):
 Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
-    const storyContent = await callApi(prompt, false);
+    // Enable web search for Stage 1 stories to get accurate historical data
+    // Also check if topic/domain have granularity signals
+    const { isGranular } = detectGranularitySignals(topic, domain);
+    const useWebSearch = stage === 1 || isGranular;
+    if (useWebSearch) {
+      console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - historical accuracy needed`);
+    }
+
+    const storyContent = await callApi(prompt, { webSearch: useWebSearch });
 
     // Clean up the response
     const cleanContent = storyContent
@@ -1316,7 +1235,7 @@ TUTOR GUIDELINES:
 Respond as the tutor (just the response, no "Tutor:" prefix):`;
 
   try {
-    const response = await callApi(prompt, false);
+    const response = await callApi(prompt);
     return response.trim();
   } catch (error) {
     console.error('Failed to generate chat response:', error);
@@ -1358,7 +1277,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, true);
+    const text = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(text);
 
     if (result) {

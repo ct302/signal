@@ -371,15 +371,15 @@ export interface EnrichedContext {
 }
 
 /**
- * Cached domain enrichment - fetched once when domain is selected,
- * reused for all subsequent generations in the session
+ * Cached domain enrichment - checked once when domain is selected,
+ * used to determine if web search should be enabled for generations
+ * Note: Actual web data fetching is handled by OpenRouter's native plugin
  */
 export interface CachedDomainEnrichment {
   domain: string;              // The domain this enrichment is for
   shortDomain: string;         // Short name (without disambiguation)
-  wasEnriched: boolean;        // Whether enrichment data was fetched
-  fetchedData?: string;        // Historical/factual data about the domain
-  enrichedAt: Date;            // When this was fetched
+  wasEnriched: boolean;        // Whether domain has granularity signals (enables web search)
+  enrichedAt: Date;            // When this was checked
 }
 
 export {};
