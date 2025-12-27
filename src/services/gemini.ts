@@ -176,45 +176,57 @@ export const isRoutingEnabled = (): boolean => {
 
 /**
  * Detect granularity signals that suggest we need fresh data
- * Returns true if the domain reference appears to be specific/granular
+ * Domain-agnostic: works for any expertise domain (sports, TV, music, cooking, etc.)
  */
 const detectGranularitySignals = (topic: string, domain: string): { isGranular: boolean; signals: string[] } => {
   const combined = `${topic} ${domain}`.toLowerCase();
   const signals: string[] = [];
 
-  // Year patterns (specific seasons, years)
+  // Year patterns (specific seasons, years, decades)
   const yearMatch = combined.match(/\b(19|20)\d{2}\b/);
   if (yearMatch) {
     signals.push(`specific year: ${yearMatch[0]}`);
   }
 
-  // Season/Episode patterns
-  if (/\b(s\d+e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+)\b/i.test(combined)) {
-    signals.push('specific episode/season reference');
+  // Season/Episode patterns (TV shows, podcasts, series)
+  if (/\b(s\d+e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|chapter\s*\d+|volume\s*\d+|part\s*\d+)\b/i.test(combined)) {
+    signals.push('specific episode/season/chapter reference');
   }
 
-  // Specific game/match patterns
-  if (/\b(game\s*\d+|super\s*bowl\s*[ivxlcdm]+|week\s*\d+|round\s*\d+|finals?)\b/i.test(combined)) {
-    signals.push('specific game/match reference');
+  // Numbered events (games, rounds, editions, issues)
+  if (/\b(game\s*\d+|match\s*\d+|round\s*\d+|edition\s*\d+|issue\s*#?\d+|book\s*\d+|album\s*\d+)\b/i.test(combined)) {
+    signals.push('specific numbered event/item');
   }
 
-  // Statistical indicators
-  if (/\b(stats?|statistics|record|score|yards|points|goals|wins|losses)\b/i.test(combined)) {
-    signals.push('statistical data requested');
+  // Championship/finale patterns (domain-agnostic)
+  if (/\b(finals?|championship|premiere|finale|pilot|debut|opener|closer)\b/i.test(combined)) {
+    signals.push('significant event reference');
+  }
+
+  // Statistical/measurable indicators (works across domains)
+  if (/\b(stats?|statistics|record|score|rating|ranking|chart|sales|views|downloads|streams)\b/i.test(combined)) {
+    signals.push('statistical/measurable data');
   }
 
   // Recent time indicators
-  if (/\b(recent|latest|current|this\s+year|last\s+year|202[3-9]|today)\b/i.test(combined)) {
+  if (/\b(recent|latest|current|this\s+year|last\s+year|202[3-9]|today|yesterday|this\s+week)\b/i.test(combined)) {
     signals.push('recent/current data requested');
   }
 
-  // Specific person + context (likely needs verification)
-  const specificPersonPatterns = [
-    /\b(tom\s+brady|patrick\s+mahomes|lebron|jordan|curry)\b.*\b(game|season|stats?|record)\b/i,
-    /\b(game|season|stats?|record)\b.*\b(tom\s+brady|patrick\s+mahomes|lebron|jordan|curry)\b/i
-  ];
-  if (specificPersonPatterns.some(p => p.test(combined))) {
-    signals.push('specific person + context combination');
+  // Specific proper nouns with context (names + verifiable context)
+  // Look for capitalized words followed by verifiable terms
+  if (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b.*\b(career|biography|history|timeline|discography|filmography|bibliography)\b/i.test(`${topic} ${domain}`)) {
+    signals.push('biographical/historical reference');
+  }
+
+  // Award/recognition patterns
+  if (/\b(award|grammy|oscar|emmy|pulitzer|nobel|mvp|winner|nominated|nomination)\b/i.test(combined)) {
+    signals.push('award/recognition reference');
+  }
+
+  // Location-specific patterns
+  if (/\b(at\s+the|in\s+the|held\s+at|performed\s+at|filmed\s+at|recorded\s+at)\b/i.test(combined)) {
+    signals.push('location-specific reference');
   }
 
   return {
@@ -623,32 +635,30 @@ REQUIRED JSON STRUCTURE (strict compliance):
 
 NARRATIVE STORYTELLING REQUIREMENT (CRITICAL):
 The analogy_explanation must read like a DOCUMENTARY or STORY, not a generic comparison:
-- Use REAL names: players, coaches, teams, figures from ${shortDomain}
-- Use REAL events: games, matches, seasons, moments that actually happened
-- Use REAL statistics: scores, records, dates, measurable achievements
-- Example for NFL: "When Tom Brady orchestrated the 28-3 comeback in Super Bowl LI, each play call represented a tensor transformation..."
-- Example for Cooking: "Julia Child's first live television attempt at beef bourguignon illustrated how..."
-- NEVER use generic phrases like "imagine a quarterback" - use "when Patrick Mahomes faced the 49ers defense..."
+- Use REAL names: actual people, characters, figures, or entities from ${shortDomain}
+- Use REAL events: actual moments, episodes, performances, or milestones that happened in ${shortDomain}
+- Use REAL details: specific dates, numbers, achievements, or measurable facts from ${shortDomain}
+- NEVER use generic phrases like "imagine a person doing X" - always reference SPECIFIC ${shortDomain} moments
+- Write as if creating a documentary about ${shortDomain} that happens to explain the technical concept
 
 CONCEPT_MAP RULES (CRITICAL - THIS IS AN ISOMORPHIC MAPPING):
 The concept_map creates an ANALOGICAL ISOMORPHISM - mapping technical concepts to their ${shortDomain} equivalents.
-Each mapping should connect a technical term to what a ${shortDomain} expert would call the equivalent concept.
+Each mapping connects a technical term to what a ${shortDomain} expert would naturally call the equivalent concept.
 
-✅ GOOD concept_map examples (for NFL domain):
-  - {"tech_term": "Jacobian matrix", "analogy_term": "play-calling chart"}
-  - {"tech_term": "partial derivative", "analogy_term": "individual route adjustment"}
-  - {"tech_term": "gradient", "analogy_term": "optimal drive direction"}
-  - {"tech_term": "eigenvalue", "analogy_term": "key player impact rating"}
+✅ GOOD concept_map pattern:
+  - The analogy_term is vocabulary NATIVE to ${shortDomain}
+  - A ${shortDomain} enthusiast would recognize and use the analogy_term
+  - The analogy_term captures the SAME FUNCTION as the tech_term in the ${shortDomain} context
 
-❌ BAD concept_map examples (NEVER do this):
-  - {"tech_term": "Jacobian matrix", "analogy_term": "Jacobian matrix"} ← WRONG: same term!
-  - {"tech_term": "derivative", "analogy_term": "derivative"} ← WRONG: not a ${shortDomain} term!
-  - {"tech_term": "matrix", "analogy_term": "mathematical matrix"} ← WRONG: still technical!
+❌ BAD concept_map patterns (NEVER do this):
+  - {"tech_term": "X", "analogy_term": "X"} ← WRONG: same term!
+  - {"tech_term": "X", "analogy_term": "technical X"} ← WRONG: still technical jargon!
+  - Using any term that a ${shortDomain} novice wouldn't recognize ← WRONG!
 
 The analogy_term MUST be:
-1. A term native to ${shortDomain} vocabulary (something a ${shortDomain} fan would recognize)
-2. DIFFERENT from the tech_term (never the same word)
-3. Functionally equivalent in the analogy (plays the same role)
+1. A term native to ${shortDomain} vocabulary (something a ${shortDomain} enthusiast would naturally use)
+2. DIFFERENT from the tech_term (never the same word or a technical synonym)
+3. Functionally equivalent in the analogy (plays the same role in the ${shortDomain} context)
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
@@ -1286,11 +1296,11 @@ CRITICAL RULES:
 - The reader should understand the core concept WITHOUT any technical language
 
 HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
-- Use REAL teams, players, coaches, or figures from ${domain}
-- Reference ACTUAL historical moments, games, matches, or events
-- Include SPECIFIC statistics, scores, dates, or measurable details when relevant
+- Use REAL people, characters, figures, or entities from ${domain}
+- Reference ACTUAL historical moments, events, episodes, or milestones from ${domain}
+- Include SPECIFIC details: dates, numbers, achievements, or measurable facts
 - The story should feel grounded in real ${domain} history, not generic/fictional
-- Example: Instead of "a quarterback throws a pass", say "Tom Brady's 28-3 comeback in Super Bowl LI"`,
+- NEVER use generic phrases - always reference SPECIFIC ${domain} moments that actually happened`,
 
     2: `STAGE 2 - SAME STORY WITH 6 TECHNICAL TERMS:
 Take the previous story and LIGHTLY enhance it by naturally weaving in 6 technical terms.
@@ -1339,17 +1349,12 @@ STORY REQUIREMENTS:
 5. The ${domain} elements should map directly to the technical concept
 
 HISTORICAL ACCURACY (MANDATORY):
-- Feature REAL people, teams, organizations, or figures from ${domain}
-- Reference ACTUAL events, moments, games, performances, or achievements
-- Include SPECIFIC details: dates, scores, statistics, records, achievements
+- Feature REAL people, characters, figures, or entities that ${domain} enthusiasts would recognize
+- Reference ACTUAL events, moments, episodes, performances, or achievements from ${domain}
+- Include SPECIFIC details: dates, numbers, statistics, records, achievements
 - Ground the story in ${domain} history that enthusiasts would recognize
-- NO fictional scenarios - this must be a real ${domain} moment that happened
-
-Examples of good historical grounding:
-- NFL: "The 1985 Bears' 46 defense revolutionized..." or "When Peyton Manning called 'Omaha' at the line..."
-- Basketball: "Michael Jordan's flu game in the 1997 Finals..." or "Stephen Curry's 402 three-pointers in 2015-16..."
-- Cooking: "When Julia Child first attempted beef bourguignon on live television..."
-- Music: "The Beatles' Abbey Road studio session where they recorded..."
+- NO fictional scenarios - this must reference real ${domain} moments that actually happened
+- Write as if creating a documentary about ${domain} that happens to explain the technical concept
 
 Return ONLY the story text (no JSON, no explanations, just the story).`;
 
