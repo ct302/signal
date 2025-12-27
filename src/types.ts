@@ -130,7 +130,11 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   ollama: [],
-  openrouter: ['meta-llama/llama-3.3-70b-instruct', 'meta-llama/llama-3.2-90b-vision-instruct', 'anthropic/claude-3.5-sonnet', 'openai/gpt-4o']
+  openrouter: [
+    'google/gemini-2.0-flash-exp:free',
+    'openai/gpt-oss-120b:free',
+    'meta-llama/llama-3.3-70b-instruct:free'
+  ]
 };
 
 export {};

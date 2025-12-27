@@ -20,11 +20,11 @@ const getProviderConfig = (): ProviderConfig => {
       // Fall through to default
     }
   }
-  // Default to OpenRouter with LLAMA 3.3 70B for testing
+  // Default to OpenRouter with Gemini 2.0 Flash (free tier)
   return {
     provider: 'openrouter',
     apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'meta-llama/llama-3.3-70b-instruct',
+    model: 'google/gemini-2.0-flash-exp:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };

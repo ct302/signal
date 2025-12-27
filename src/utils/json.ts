@@ -1,44 +1,41 @@
+// Unique placeholder that won't appear in normal text
+const BACKSLASH_PLACEHOLDER = '___BKSLSH___';
+
 /**
- * Protect LaTeX commands that conflict with JSON escape sequences
- * \f (form feed), \t (tab), \n (newline), \r (carriage return), \b (backspace)
- * Also protect common math commands that might not be properly escaped
+ * NUCLEAR OPTION v2: Replace backslashes with placeholder, parse, then restore.
+ * This completely sidesteps JSON escape sequence issues with LaTeX.
  */
-const protectLatexEscapes = (text: string): string => {
-  return text
-    // Protect \f commands (frac, forall, flat)
-    .replace(/\\(frac|forall|flat)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
-    // Protect \t commands (text, to, tan, theta, times, tau, tilde, top)
-    .replace(/\\(text|to|tan|theta|times|tau|tilde|top|textbf)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
-    // Protect \n commands (nabla, neq, nu, neg, newline, not, nolimits)
-    .replace(/\\(nabla|neq|nu|neg|newline|not|nolimits)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \r commands (rightarrow, rho, rangle, right, Rightarrow)
-    .replace(/\\(rightarrow|rho|rangle|right|Rightarrow)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \b commands (beta, bar, boldsymbol, binom, brace, big, Big)
-    .replace(/\\(beta|bar|boldsymbol|binom|brace|big|Big)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
-    // Protect \m commands (mathbf, mathrm, mathcal, mathbb, mod, max, min)
-    .replace(/\\(mathbf|mathrm|mathcal|mathbb|mathit|mod|max|min)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
-    // Protect \c commands (cdot, cos, cot, cap, cup, circ)
-    .replace(/\\(cdot|cos|cot|cap|cup|circ|chi)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \a commands (approx, alpha, ast, angle)
-    .replace(/\\(approx|alpha|ast|angle)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \s commands (sqrt, sin, sum, sigma, subset, supset, sim)
-    .replace(/\\(sqrt|sin|sum|sigma|subset|supset|sim|star)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1')
-    // Protect \l commands (lambda, langle, left, leq, log, ln, ldots, lim)
-    .replace(/\\(lambda|langle|left|leq|log|ln|ldots|lim|limits)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \g commands (gamma, geq, gg)
-    .replace(/\\(gamma|geq|gg)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \p commands (pi, pm, partial, phi, psi, prime, prod)
-    .replace(/\\(pi|pm|partial|phi|psi|prime|prod)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \d commands (delta, div, det)
-    .replace(/\\(delta|div|det)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \e commands (epsilon, eta, exp, equiv, exists)
-    .replace(/\\(epsilon|eta|exp|equiv|exists)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \i commands (int, infty, in, iota)
-    .replace(/\\(int|infty|in|iota)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \o commands (omega, oplus, otimes)
-    .replace(/\\(omega|oplus|otimes)(?=[^a-zA-Z]|$)/g, '\\\\$1')
-    // Protect \v commands (vec, vee)
-    .replace(/\\(vec|vee|varepsilon)(?=[^a-zA-Z]|$|\{)/g, '\\\\$1');
+const replaceBackslashesWithPlaceholder = (str: string): string => {
+  // First, handle already-escaped quotes \" -> keep them as escaped quotes
+  let result = str.replace(/\\"/g, '___ESCAPED_QUOTE___');
+
+  // Now replace remaining backslashes with placeholder
+  result = result.replace(/\\/g, BACKSLASH_PLACEHOLDER);
+
+  // Restore escaped quotes
+  result = result.replace(/___ESCAPED_QUOTE___/g, '\\"');
+
+  return result;
+};
+
+/**
+ * Restore backslash placeholders in all string values of parsed object
+ */
+const restoreBackslashes = (obj: any): any => {
+  if (typeof obj === 'string') {
+    return obj.replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\');
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(restoreBackslashes);
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const key in obj) {
+      result[key] = restoreBackslashes(obj[key]);
+    }
+    return result;
+  }
+  return obj;
 };
 
 /**
@@ -47,26 +44,35 @@ const protectLatexEscapes = (text: string): string => {
 export const safeJsonParse = (text: string | null | undefined): any => {
   if (!text) return null;
 
+  // Step 1: Strip markdown code blocks
   let clean = text
-    .replace(/```json\s*/g, "")
+    .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
-    .replace(/\s*```$/g, "")
     .trim();
 
   if (!clean) return null;
 
-  // Protect LaTeX commands before JSON parsing
-  clean = protectLatexEscapes(clean);
+  // Step 2: Extract JSON object if wrapped in other text
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error("No JSON object found in response");
+    return null;
+  }
 
+  let jsonString = jsonMatch[0];
+
+  // Step 3: First attempt - try parsing as-is (might already be valid)
   try {
-    return JSON.parse(clean);
-  } catch (e) {
-    // Try fixing remaining escape issues
-    const fixed = clean.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+    return JSON.parse(jsonString);
+  } catch (e1) {
+    // Step 4: NUCLEAR OPTION v2 - replace backslashes with placeholder, parse, restore
     try {
-      return JSON.parse(fixed);
-    } catch (e2) {
+      const withPlaceholders = replaceBackslashesWithPlaceholder(jsonString);
+      const parsed = JSON.parse(withPlaceholders);
+      return restoreBackslashes(parsed);
+    } catch (e2: any) {
       console.error("JSON parsing failed completely:", e2);
+      console.error("Raw response (first 500 chars):", jsonString.substring(0, 500));
       return null;
     }
   }
