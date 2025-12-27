@@ -2347,10 +2347,10 @@ export default function App() {
       {/* Dual Pane Isomorphic View */}
       {isDualPaneMode && (
         <IsomorphicDualPane
-          segments={segments}
           conceptMap={conceptMap}
           importanceMap={importanceMap}
           isDarkMode={isDarkMode}
+          analogyDomain={analogyDomain}
           onClose={() => setIsDualPaneMode(false)}
         />
       )}
