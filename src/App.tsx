@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Eye,
   Zap,
@@ -15,7 +15,15 @@ import {
   MessageCircle,
   Palette,
   Loader2,
-  BrainCircuit
+  BrainCircuit,
+  BookOpen,
+  HelpCircle,
+  X,
+  Snowflake,
+  Coffee,
+  Network,
+  Columns,
+  Type
 } from 'lucide-react';
 
 // Types
@@ -29,8 +37,10 @@ import {
   TutorHistoryEntry,
   TutorResponse,
   QuizData,
+  QuizDifficulty,
   DisambiguationData,
-  HistoryItem
+  HistoryItem,
+  ProximityResult
 } from './types';
 
 // Constants
@@ -53,6 +63,7 @@ import { useMobile, useKatex, useDrag, useHistory } from './hooks';
 import {
   generateAnalogy,
   checkAmbiguity,
+  checkDomainProximity,
   fetchDefinition as fetchDefinitionApi,
   generateQuiz,
   askTutor
@@ -68,7 +79,10 @@ import {
   QuizModal,
   SynthesisModal,
   DefinitionPopup,
-  MiniDefinitionPopup
+  MiniDefinitionPopup,
+  ConstellationMode,
+  IsomorphicDualPane,
+  ProximityWarningModal
 } from './components';
 
 export default function App() {
@@ -136,6 +150,7 @@ export default function App() {
   const [threshold, setThreshold] = useState(0.3);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isNarrativeMode, setIsNarrativeMode] = useState(false);
+  const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1); // Text scale multiplier
 
   // Definition State
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
@@ -166,20 +181,56 @@ export default function App() {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
+  const [quizQuestionNumber, setQuizQuestionNumber] = useState(1);
+  const [quizRetryCount, setQuizRetryCount] = useState(0);
+  const [quizCurrentConcept, setQuizCurrentConcept] = useState<string>('');
+  const [quizCurrentCorrectAnswer, setQuizCurrentCorrectAnswer] = useState<string>('');
+  const MAX_QUIZ_RETRIES = 2;
 
   // Synthesis State
   const [synthesisThreshold, setSynthesisThreshold] = useState(0.3);
   const [isSynthesisColorMode, setIsSynthesisColorMode] = useState(false);
 
+  // Main Content Complexity State
+  const [mainComplexity, setMainComplexity] = useState<5 | 50 | 100>(50);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Ambiance Mode State
+  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [showStudyControls, setShowStudyControls] = useState(true);
+  const [brownNoiseEnabled, setBrownNoiseEnabled] = useState(false);
+  const [deskLampEnabled, setDeskLampEnabled] = useState(true);
+  const [vignetteEnabled, setVignetteEnabled] = useState(true);
+  const brownNoiseRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
+  const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
+  const [isConstellationMode, setIsConstellationMode] = useState(false);
+  const [isDualPaneMode, setIsDualPaneMode] = useState(false);
+
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
+  const [isDisambiguating, setIsDisambiguating] = useState(false);
+
+  // Proximity Warning State
+  const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
 
   // Copy State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Selection State (for multi-word definition)
+  const [showDefineButton, setShowDefineButton] = useState(false);
+  const [defineButtonPosition, setDefineButtonPosition] = useState<Position | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<string>("");
+  const [isSelectingText, setIsSelectingText] = useState(false);
+  const [morphLockedForSelection, setMorphLockedForSelection] = useState(false);
+
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const controlsPanelRef = useRef<HTMLDivElement>(null);
+  const controlsButtonRef = useRef<HTMLButtonElement>(null);
+  const historyPanelRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
@@ -235,12 +286,21 @@ export default function App() {
 
     setLastSubmittedTopic(topicName);
     setHasStarted(true);
+
+    // Reset quiz state for new topic
+    setQuizQuestionNumber(1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+    setQuizFeedback(null);
+    setShowQuizModal(false);
   };
 
   // Handlers
   const handleSubmit = async () => {
     if (!topic.trim()) return;
     if (disambiguation) setDisambiguation(null);
+    if (proximityWarning) setProximityWarning(null);
 
     const result = await checkAmbiguity(topic, 'topic');
     if (result.isAmbiguous || (result.options && result.options.length > 0)) {
@@ -251,10 +311,20 @@ export default function App() {
       setDomainError("Invalid topic or typo.");
       return;
     }
-    await fetchAnalogy(result.corrected || topic);
+
+    const confirmedTopic = result.corrected || topic;
+
+    // Check if topic is too close to the domain
+    const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
+    if (proximityResult.isTooClose) {
+      setProximityWarning({ topic: confirmedTopic, result: proximityResult });
+      return;
+    }
+
+    await fetchAnalogy(confirmedTopic);
   };
 
-  const fetchAnalogy = async (confirmedTopic: string) => {
+  const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {
     setIsLoading(true);
     setShowContext(true);
     setShowFollowUp(false);
@@ -262,7 +332,7 @@ export default function App() {
     setContextData(null);
 
     try {
-      const parsed = await generateAnalogy(confirmedTopic, analogyDomain);
+      const parsed = await generateAnalogy(confirmedTopic, analogyDomain, complexity);
       if (parsed) {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
@@ -271,6 +341,26 @@ export default function App() {
       console.error("API call failed", e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Regenerate with a different complexity level
+  const handleComplexityChange = async (level: 5 | 50 | 100) => {
+    if (isRegenerating || isLoading || !lastSubmittedTopic) return;
+    if (level === mainComplexity) return;
+
+    setMainComplexity(level);
+    setIsRegenerating(true);
+
+    try {
+      const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level);
+      if (parsed) {
+        loadContent(parsed, lastSubmittedTopic);
+      }
+    } catch (e) {
+      console.error("Regeneration failed", e);
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -361,22 +451,61 @@ export default function App() {
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName !== 'SPAN' || !target.id?.startsWith('word-')) return;
+    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
+    if (viewMode === 'morph') return;
 
+    let target = e.target as HTMLElement;
+
+    // Walk up the DOM tree to find a word span (needed for KaTeX or nested elements)
+    let wordSpan: HTMLElement | null = null;
+    let currentElement: HTMLElement | null = target;
+    for (let i = 0; i < 5 && currentElement; i++) {
+      if (currentElement.tagName === 'SPAN' && currentElement.id?.startsWith('word-')) {
+        wordSpan = currentElement;
+        break;
+      }
+      currentElement = currentElement.parentElement;
+    }
+
+    // Get selected text from the selection or the word span
     const selection = window.getSelection();
     let selectedText = selection?.toString().trim();
-    if (!selectedText) selectedText = target.textContent?.trim() || "";
+
+    // If we found a word span, use its text content if no selection
+    if (wordSpan) {
+      if (!selectedText) {
+        selectedText = wordSpan.textContent?.trim() || "";
+      }
+      target = wordSpan;
+    } else if (!selectedText) {
+      // No word span found and no selection - try using the target's text
+      selectedText = target.textContent?.trim() || "";
+    }
+
     if (!selectedText) return;
 
     const rect = target.getBoundingClientRect();
+    const popupMinHeight = 250; // Approximate minimum popup height
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Smart positioning: show above if not enough space below
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+
     if (defPosition && selectedTerm) {
       setMiniSelectedTerm(selectedText);
-      setMiniDefPosition({ top: rect.bottom + window.scrollY + 10, left: rect.left + window.scrollX });
+      const top = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      setMiniDefPosition({ top, left: rect.left + window.scrollX });
       fetchDefinition(selectedText, defText, miniDefComplexity, true);
     } else {
       setSelectedTerm(selectedText);
-      setDefPosition({ top: rect.bottom + window.scrollY + 10, left: rect.left + window.scrollX, placement: 'below' });
+      const top = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
       const context = isAnalogyVisualMode
         ? segments.map(s => s.analogy).join(' ')
         : segments.map(s => s.tech).join(' ');
@@ -416,23 +545,396 @@ export default function App() {
     fetchDefinition(term, context, level, isMini);
   };
 
-  const fetchQuiz = async () => {
+  // Handle word click in definition popup for nested definitions (max 1 level)
+  const handleDefWordClick = (word: string, rect: DOMRect) => {
+    // Only open mini definition if we're in main definition popup (not already nested)
+    if (!defPosition || miniDefPosition) return;
+
+    const popupMinHeight = 200;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+
+    setMiniSelectedTerm(word);
+    const top = showAbove
+      ? rect.top + window.scrollY - popupMinHeight - 10
+      : rect.bottom + window.scrollY + 10;
+    setMiniDefPosition({ top, left: rect.left + window.scrollX });
+    fetchDefinition(word, defText, miniDefComplexity, true);
+  };
+
+  // === Selection Handlers for Multi-Word Definition ===
+
+  // Clear selection state
+  const clearSelectionState = useCallback(() => {
+    setShowDefineButton(false);
+    setDefineButtonPosition(null);
+    setPendingSelection("");
+    setIsSelectingText(false);
+    setMorphLockedForSelection(false);
+  }, []);
+
+  // Handle selection start (mousedown/touchstart) - no longer locks morph since definitions disabled in morph mode
+  const handleSelectionStart = useCallback(() => {
+    // Definitions are disabled in morph mode, so no action needed
+    // Selection handling only active in Expert Lock and Tech Lock modes
+  }, []);
+
+  // Handle selection end (mouseup/touchend) - detect selection and show button
+  const handleSelectionEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
+    if (viewMode === 'morph') {
+      setMorphLockedForSelection(false);
+      setIsSelectingText(false);
+      return;
+    }
+
+    // Small delay to let the selection complete
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+    }
+
+    selectionTimeoutRef.current = setTimeout(() => {
+      const selection = window.getSelection();
+      const selectedText = selection?.toString().trim();
+
+      if (selectedText && selectedText.length > 0) {
+        // Get the selection range to position the button
+        const range = selection?.getRangeAt(0);
+        if (range) {
+          const rect = range.getBoundingClientRect();
+
+          // Position the button above the selection (or below if near top)
+          const buttonTop = rect.top < 60
+            ? rect.bottom + window.scrollY + 8
+            : rect.top + window.scrollY - 40;
+          const buttonLeft = rect.left + window.scrollX + (rect.width / 2) - 40; // Center the button
+
+          setPendingSelection(selectedText);
+          setDefineButtonPosition({
+            top: buttonTop,
+            left: Math.max(10, buttonLeft), // Don't go off-screen left
+            placement: rect.top < 60 ? 'below' : 'above'
+          });
+          setShowDefineButton(true);
+        }
+      } else {
+        // No selection - clear state but keep morph locked briefly
+        setShowDefineButton(false);
+        setPendingSelection("");
+
+        // Unlock morph after a brief delay (allows for re-selection attempts)
+        setTimeout(() => {
+          if (!window.getSelection()?.toString().trim()) {
+            setMorphLockedForSelection(false);
+            setIsSelectingText(false);
+          }
+        }, 300);
+      }
+    }, 10);
+  }, [viewMode]);
+
+  // Handle clicking the Define button
+  const handleDefineSelection = useCallback(() => {
+    if (!pendingSelection) return;
+
+    // Clear the browser selection
+    window.getSelection()?.removeAllRanges();
+
+    // Get position for the definition popup
+    const buttonPos = defineButtonPosition;
+    const popupTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
+    const popupLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
+
+    // Open definition popup
+    if (defPosition && selectedTerm) {
+      // Already have a popup open - use mini popup
+      setMiniSelectedTerm(pendingSelection);
+      setMiniDefPosition({ top: popupTop, left: popupLeft });
+      fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+    } else {
+      // Open main popup
+      setSelectedTerm(pendingSelection);
+      setDefPosition({ top: popupTop, left: popupLeft, placement: 'below' });
+      const context = isAnalogyVisualMode
+        ? segments.map(s => s.analogy).join(' ')
+        : segments.map(s => s.tech).join(' ');
+      fetchDefinition(pendingSelection, context, defComplexity, false);
+    }
+
+    // Clear selection state
+    clearSelectionState();
+  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState]);
+
+  // Close define button when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      // Don't clear if clicking the define button itself
+      const target = e.target as HTMLElement;
+      if (target.closest('.define-selection-button')) return;
+
+      // Clear selection state when clicking outside content area
+      if (showDefineButton && contentRef.current && !contentRef.current.contains(target)) {
+        clearSelectionState();
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDefineButton, clearSelectionState]);
+
+  // Close controls panel when clicking outside
+  useEffect(() => {
+    if (!showControls) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking the panel itself or the toggle button
+      if (controlsPanelRef.current?.contains(target)) return;
+      if (controlsButtonRef.current?.contains(target)) return;
+
+      setShowControls(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showControls]);
+
+  // Close history panel when clicking outside
+  useEffect(() => {
+    if (!showHistory) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking the panel itself
+      if (historyPanelRef.current?.contains(target)) return;
+      // Don't close if clicking the history toggle button in header
+      if (target.closest('[data-history-toggle]')) return;
+
+      setShowHistory(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showHistory, setShowHistory]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'escape':
+          // Close popups/modals in order of priority
+          if (isDualPaneMode) setIsDualPaneMode(false);
+          else if (isConstellationMode) setIsConstellationMode(false);
+          else if (showShortcutsLegend) setShowShortcutsLegend(false);
+          else if (showQuizModal) setShowQuizModal(false);
+          else if (showSynthesis) setShowSynthesis(false);
+          else if (miniDefPosition) setMiniDefPosition(null);
+          else if (defPosition) {
+            setDefPosition(null);
+            setSelectedTerm(null);
+            setMiniDefPosition(null);
+          }
+          else if (showControls) setShowControls(false);
+          else if (showFollowUp) setShowFollowUp(false);
+          else if (disambiguation) setDisambiguation(null);
+          break;
+        case 'm':
+          // Toggle to Morph mode
+          if (!hasStarted) return;
+          setViewMode('morph');
+          setIsNarrativeMode(false);
+          break;
+        case 'e':
+          // Expert Lock (analogy/domain view)
+          if (!hasStarted) return;
+          setViewMode('nfl');
+          setIsNarrativeMode(false);
+          break;
+        case 't':
+          // Tech Lock
+          if (!hasStarted) return;
+          setViewMode('tech');
+          setIsNarrativeMode(false);
+          break;
+        case 's':
+          // Story mode toggle
+          if (!hasStarted) return;
+          setIsNarrativeMode(!isNarrativeMode);
+          break;
+        case 'q':
+          // Quiz me
+          if (!hasStarted || isQuizLoading || isLoading) return;
+          fetchQuiz(false);
+          break;
+        case 'd':
+          // Dark mode toggle
+          setIsDarkMode(!isDarkMode);
+          break;
+        case 'i':
+          // Immersive mode toggle
+          setIsImmersive(!isImmersive);
+          break;
+        case 'c':
+          // Controls panel toggle
+          setShowControls(!showControls);
+          break;
+        case 'h':
+          // History panel toggle
+          setShowHistory(!showHistory);
+          break;
+        case '?':
+          // Show keyboard shortcuts legend
+          setShowShortcutsLegend(!showShortcutsLegend);
+          break;
+        case 'g':
+          // Toggle constellation/graph mode
+          if (!hasStarted) return;
+          setIsConstellationMode(!isConstellationMode);
+          break;
+        case 'p':
+          // Toggle dual-pane isomorphic view
+          if (!hasStarted) return;
+          setIsDualPaneMode(!isDualPaneMode);
+          break;
+        case 't':
+          // Cycle text scale
+          if (!hasStarted) return;
+          setTextScale(current => {
+            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+            const currentIndex = scales.indexOf(current);
+            return scales[(currentIndex + 1) % scales.length];
+          });
+          break;
+        case '1':
+          // Study mode
+          setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
+          break;
+        case '2':
+          // Holiday mode
+          setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday');
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode, textScale]);
+
+  // Brown noise audio for Study Mode
+  useEffect(() => {
+    if (ambianceMode === 'study' && brownNoiseEnabled) {
+      // Create deep brown noise using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const bufferSize = 4096;
+      const brownNoise = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      let lastOut = 0.0;
+
+      // Generate deeper brown noise with lower coefficient
+      brownNoise.onaudioprocess = (e) => {
+        const output = e.outputBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          // Lower coefficient (0.008) = deeper/bassier brown noise
+          output[i] = (lastOut + (0.008 * white)) / 1.008;
+          lastOut = output[i];
+          output[i] *= 5.0; // Boost volume to compensate for lower coefficient
+        }
+      };
+
+      // Add low-pass filter for extra depth
+      const lowPassFilter = audioContext.createBiquadFilter();
+      lowPassFilter.type = 'lowpass';
+      lowPassFilter.frequency.value = 250; // Cut high frequencies for rumbling bass
+      lowPassFilter.Q.value = 0.7;
+
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.25; // Slightly higher volume for deep bass
+
+      brownNoise.connect(lowPassFilter);
+      lowPassFilter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      brownNoiseRef.current = { ctx: audioContext, gain: gainNode };
+
+      return () => {
+        brownNoise.disconnect();
+        lowPassFilter.disconnect();
+        gainNode.disconnect();
+        audioContext.close();
+        brownNoiseRef.current = null;
+      };
+    } else if (brownNoiseRef.current) {
+      brownNoiseRef.current.ctx.close();
+      brownNoiseRef.current = null;
+    }
+  }, [ambianceMode, brownNoiseEnabled]);
+
+  // Get difficulty based on question number
+  const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
+    if (questionNum === 1) return 'easy';
+    if (questionNum === 2) return 'medium';
+    if (questionNum === 3) return 'hard';
+    return 'advanced';
+  };
+
+  const fetchQuiz = async (isRetry: boolean = false) => {
     if (isQuizLoading) return;
     setIsQuizLoading(true);
     setQuizFeedback(null);
 
     const context = segments.map(s => `Technical: ${s.tech} | Analogy: ${s.analogy}`).join('\n');
+    const difficulty = getQuizDifficulty(quizQuestionNumber);
+
     try {
-      const quiz = await generateQuiz(lastSubmittedTopic, analogyDomain, context);
+      let quiz: QuizData | null;
+
+      if (isRetry && quizCurrentConcept && quizCurrentCorrectAnswer) {
+        // Retry mode - rephrase same question
+        quiz = await generateQuiz(
+          lastSubmittedTopic,
+          analogyDomain,
+          context,
+          difficulty,
+          { concept: quizCurrentConcept, correctAnswer: quizCurrentCorrectAnswer }
+        );
+      } else {
+        // Normal mode - new question
+        quiz = await generateQuiz(lastSubmittedTopic, analogyDomain, context, difficulty);
+      }
+
       if (quiz) {
         setQuizData(quiz);
         setShowQuizModal(true);
+        // Store concept info for potential retry
+        if (!isRetry) {
+          setQuizCurrentConcept(quiz.concept || '');
+          setQuizCurrentCorrectAnswer(quiz.options[quiz.correctIndex] || '');
+        }
       }
     } catch (e) {
       console.error("Quiz failed", e);
     } finally {
       setIsQuizLoading(false);
     }
+  };
+
+  const handleQuizRetry = () => {
+    setQuizRetryCount(prev => prev + 1);
+    fetchQuiz(true);
+  };
+
+  const handleNextQuestion = () => {
+    setQuizQuestionNumber(prev => prev + 1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+    fetchQuiz(false);
   };
 
   const handleQuizOptionClick = (idx: number) => {
@@ -488,16 +990,29 @@ export default function App() {
   };
 
   const loadFromHistory = (entry: HistoryItem) => {
+    // Reset all state first to prevent stale data bleeding through
+    resetAllState({ keepDomain: true });
+
+    // Now load the history entry
     setTopic(entry.topic);
+    setLastSubmittedTopic(entry.topic);
     setAnalogyDomain(entry.domain);
     loadContent(entry.data, entry.topic);
     setShowHistory(false);
+    setHasStarted(true);
+    setShowContext(true);
   };
+
+  // Check if morph should be locked (definition popup open OR user is selecting text)
+  const isDefinitionPopupOpen = !!(defPosition || miniDefPosition);
+  const isMorphLocked = isDefinitionPopupOpen || morphLockedForSelection;
 
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(true);
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
   };
@@ -505,12 +1020,15 @@ export default function App() {
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(false);
-    if (defPosition) return;
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     if (viewMode === 'morph') setIsHovering(false);
   };
 
   const handleTouchToggle = () => {
+    // Lock morph when definition popup is open or user is selecting
+    if (isMorphLocked) return;
     if (isMobile && viewMode === 'morph' && hasStarted) setIsHovering(!isHovering);
   };
 
@@ -528,15 +1046,87 @@ export default function App() {
     return { text: "Tech Locked", icon: <Lock size={14} /> };
   };
 
-  const resetAll = () => {
+  // Comprehensive state reset - clears everything except history and domain selection
+  const resetAllState = (options: { keepDomain?: boolean; keepTopic?: boolean } = {}) => {
+    // Content State
+    setSegments([]);
+    setConceptMap([]);
+    setImportanceMap([]);
     setProcessedWords([]);
-    setIsHovering(false);
-    setDefPosition(null);
-    setMiniDefPosition(null);
+    setContextData(null);
+    setSynthesisSummary("");
+    setSynthesisCitation("");
+
+    // UI State
+    setIsLoading(false);
     setHasStarted(false);
-    setTopic("");
-    setLastSubmittedTopic("");
+    setIsHovering(false);
+    setIsScrolling(false);
+    setIsTransitioning(false);
+    setShowContext(false);
+    setShowSynthesis(false);
+
+    // Topic State
+    if (!options.keepTopic) {
+      setTopic("");
+      setLastSubmittedTopic("");
+    }
+
+    // Definition State
+    setSelectedTerm(null);
+    setDefPosition(null);
+    setDefText("");
+    setIsLoadingDef(false);
+
+    // Mini Definition State
+    setMiniSelectedTerm(null);
+    setMiniDefPosition(null);
+    setMiniDefText("");
+    setIsLoadingMiniDef(false);
+
+    // Tutor State
     setShowFollowUp(false);
+    setFollowUpQuery("");
+    setTutorResponse(null);
+    setIsTutorLoading(false);
+    setTutorHistory([]);
+
+    // Quiz State
+    setShowQuizModal(false);
+    setQuizData(null);
+    setQuizFeedback(null);
+    setIsQuizLoading(false);
+    setQuizQuestionNumber(1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+
+    // Disambiguation State
+    setDisambiguation(null);
+    setIsDisambiguating(false);
+    setProximityWarning(null);
+
+    // Selection State
+    setShowDefineButton(false);
+    setDefineButtonPosition(null);
+    setPendingSelection("");
+    setIsSelectingText(false);
+    setMorphLockedForSelection(false);
+
+    // Complexity State
+    setMainComplexity(50);
+    setIsRegenerating(false);
+
+    // View modes - reset to defaults
+    setViewMode('morph');
+    setIsNarrativeMode(false);
+    setIsConstellationMode(false);
+    setIsDualPaneMode(false);
+  };
+
+  // Legacy reset function for backwards compatibility
+  const resetAll = () => {
+    resetAllState();
   };
 
   // Render helpers
@@ -575,7 +1165,9 @@ export default function App() {
     isColorMode: boolean,
     setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
     customMap: ConceptMapItem[] | null,
-    textColor: string
+    textColor: string,
+    textScale?: number,
+    onWordClick?: (word: string, rect: DOMRect) => void
   ) => {
     if (!text) return null;
     const processed = wrapBareLatex(text);
@@ -631,14 +1223,16 @@ export default function App() {
                   }
                 }
 
-                const scale = isImportant ? 1.1 : 0.9;
+                const scale = (isImportant ? 1.1 : 0.9) * (textScale || 1);
                 const opacity = isImportant ? 1 : 0.7;
                 const fontWeight = isImportant ? 600 : 400;
+                const cleanWord = word.replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+                const isClickable = onWordClick && cleanWord.length > 2;
 
                 return (
                   <span
                     key={`${i}-${j}`}
-                    className={colorClassName}
+                    className={`${colorClassName} ${isClickable ? 'cursor-pointer hover:underline hover:decoration-dotted' : ''}`}
                     style={{
                       fontSize: `${scale}em`,
                       opacity: opacity,
@@ -646,6 +1240,11 @@ export default function App() {
                       transition: 'all 0.2s ease',
                       display: 'inline-block'
                     }}
+                    onClick={isClickable ? (e) => {
+                      e.stopPropagation();
+                      const rect = (e.target as HTMLElement).getBoundingClientRect();
+                      onWordClick(cleanWord, rect);
+                    } : undefined}
                   >
                     {word}
                   </span>
@@ -689,7 +1288,15 @@ export default function App() {
     if (item.isSpace) return <span key={index}>{item.text}</span>;
 
     const isImportant = item.weight >= threshold;
-    let style: React.CSSProperties = { display: 'inline-block', transition: 'all 0.3s ease' };
+    // Only show clickable cursor in locked modes (not morph mode)
+    const isClickableMode = viewMode !== 'morph';
+    let style: React.CSSProperties = {
+      display: 'inline-block',
+      // Smooth morph transitions with cubic bezier easing
+      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      // Make important words look clickable only in locked modes
+      cursor: isImportant && isClickableMode ? 'pointer' : 'default',
+    };
     let segmentColorClass = "";
     let heatmapColorClass = "";
     const isSelected = selectedTerm && cleanText(item.text).toLowerCase().includes(selectedTerm.toLowerCase());
@@ -758,20 +1365,26 @@ export default function App() {
           ? latexContent.slice(1, -1)
           : latexContent;
 
+      // Add hover class for important clickable words (only in locked modes)
+      const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+
       if (!isKatexLoaded || !window.katex) {
-        return <span id={wordId} key={index} className={classes} title="Math loading...">{rawContent}</span>;
+        return <span id={wordId} key={index} className={`${classes} ${hoverClass}`} title="Math loading...">{rawContent}</span>;
       }
 
       try {
         const html = window.katex.renderToString(rawContent, { throwOnError: false, displayMode: false });
         const mathStyle = { ...style, display: 'inline-block', margin: '0 4px' };
-        return <span id={wordId} key={index} style={mathStyle} className={`${classes} not-italic normal-case`} dangerouslySetInnerHTML={{ __html: html }} />;
+        return <span id={wordId} key={index} style={mathStyle} className={`${classes} ${hoverClass} not-italic normal-case`} dangerouslySetInnerHTML={{ __html: html }} />;
       } catch (e) {
-        return <span id={wordId} key={index} style={style} className={classes}>{item.text}</span>;
+        return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
       }
     }
 
-    return <span id={wordId} key={index} style={style} className={classes}>{item.text}</span>;
+    // Add hover class for important clickable words (only in locked modes)
+    const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+
+    return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
   };
 
   // Process words effect
@@ -858,16 +1471,45 @@ export default function App() {
         <DisambiguationModal
           disambiguation={disambiguation}
           isDarkMode={isDarkMode}
-          onSelect={(opt) => {
+          isLoading={isDisambiguating}
+          onSelect={async (opt) => {
+            setIsDisambiguating(true);
+            // Clear current state before proceeding
+            resetAllState({ keepDomain: true, keepTopic: true });
+
             if (disambiguation.type === 'topic') {
               setTopic(opt);
               setDisambiguation(null);
-              fetchAnalogy(opt);
+              await fetchAnalogy(opt);
             } else {
-              handleSetDomain(opt);
+              await handleSetDomain(opt);
             }
+            setIsDisambiguating(false);
           }}
-          onCancel={() => setDisambiguation(null)}
+          onCancel={() => {
+            setDisambiguation(null);
+            setIsDisambiguating(false);
+          }}
+        />
+      )}
+
+      {/* Proximity Warning Modal */}
+      {proximityWarning && (
+        <ProximityWarningModal
+          topic={proximityWarning.topic}
+          domain={analogyDomain}
+          proximityResult={proximityWarning.result}
+          isDarkMode={isDarkMode}
+          onClose={() => setProximityWarning(null)}
+          onSwitchDomain={(newDomain) => {
+            handleSetDomain(newDomain);
+            setProximityWarning(null);
+          }}
+          onProceedAnyway={() => {
+            const topicToUse = proximityWarning.topic;
+            setProximityWarning(null);
+            fetchAnalogy(topicToUse);
+          }}
         />
       )}
 
@@ -893,12 +1535,14 @@ export default function App() {
 
       {/* History Panel */}
       {showHistory && (
-        <HistoryPanel
-          history={history}
-          isDarkMode={isDarkMode}
-          onLoadEntry={loadFromHistory}
-          onDeleteEntry={deleteHistoryItem}
-        />
+        <div ref={historyPanelRef}>
+          <HistoryPanel
+            history={history}
+            isDarkMode={isDarkMode}
+            onLoadEntry={loadFromHistory}
+            onDeleteEntry={deleteHistoryItem}
+          />
+        </div>
       )}
 
       {/* Main Content */}
@@ -927,7 +1571,13 @@ export default function App() {
 
               {/* Main Content Card */}
               <div
-                className={`rounded-2xl shadow-lg overflow-hidden border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}
+                className={`rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
+                  isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
+                } ${
+                  viewMode === 'morph' && isHovering
+                    ? (isDarkMode ? 'ring-2 ring-blue-500/30' : 'ring-2 ring-blue-400/30')
+                    : ''
+                }`}
                 onMouseEnter={handleMouseEnterWrapper}
                 onMouseLeave={handleMouseLeaveWrapper}
                 onClick={handleTouchToggle}
@@ -946,18 +1596,100 @@ export default function App() {
                       {modeLabel.icon}
                       <span>{modeLabel.text}</span>
                     </button>
+                    {/* Show selecting indicator when morph is locked for selection */}
+                    {morphLockedForSelection && viewMode === 'morph' && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                        Selecting...
+                      </span>
+                    )}
                     {hasStarted && (
                       <button
                         onClick={() => setIsNarrativeMode(!isNarrativeMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isNarrativeMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
                             : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
                       >
-                        <BookOpenText size={14} />
+                        <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Story</span>
                       </button>
+                    )}
+                    {/* ELI Complexity Buttons */}
+                    {hasStarted && (
+                      <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
+                        {([5, 50, 100] as const).map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => handleComplexityChange(level)}
+                            disabled={isRegenerating || isLoading}
+                            className={`px-2 py-1 text-[10px] font-bold transition-colors ${
+                              mainComplexity === level
+                                ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
+                                : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
+                            } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={level === 5 ? "Explain like I'm 5" : level === 100 ? "Advanced Academic" : "Standard"}
+                          >
+                            ELI{level}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {/* Constellation Mode Button */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setIsConstellationMode(!isConstellationMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isConstellationMode
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Constellation Mode (G)"
+                      >
+                        <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Graph</span>
+                      </button>
+                    )}
+                    {/* Dual Pane Mode Button */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isDualPaneMode
+                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Dual Pane Isomorphic View (P)"
+                      >
+                        <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Dual</span>
+                      </button>
+                    )}
+                    {/* Text Scale Control */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => {
+                          const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                          const currentIndex = scales.indexOf(textScale);
+                          setTextScale(scales[(currentIndex + 1) % scales.length]);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          textScale > 1
+                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
+                      >
+                        <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                      </button>
+                    )}
+                    {/* Regenerating indicator */}
+                    {isRegenerating && (
+                      <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                        <Loader2 size={10} className="animate-spin" />
+                        Regenerating...
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -983,14 +1715,64 @@ export default function App() {
                 </div>
 
                 {/* Content Body */}
-                <div className="p-6 md:p-8" onDoubleClick={handleDoubleClick}>
-                  <p className={`text-lg md:text-xl leading-relaxed transition-all duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'} ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}>
+                <div
+                  ref={contentRef}
+                  className="p-6 md:p-8 relative select-text min-h-[400px]"
+                  onDoubleClick={handleDoubleClick}
+                  onMouseDown={handleSelectionStart}
+                  onMouseUp={handleSelectionEnd}
+                  onTouchStart={handleSelectionStart}
+                  onTouchEnd={handleSelectionEnd}
+                >
+                  <p
+                    className={`leading-relaxed transition-all duration-500 ease-in-out ${
+                      isTransitioning
+                        ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
+                        : 'opacity-100 blur-0 scale-100 translate-y-0'
+                    } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                    style={{
+                      fontSize: `${1.125 * textScale}rem`,
+                      lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
+                    }}
+                  >
                     {processedWords.map((word, i) => renderWord(word, i))}
                   </p>
+
+                  {/* Floating Define Button */}
+                  {showDefineButton && defineButtonPosition && pendingSelection && (
+                    <button
+                      className="define-selection-button fixed z-[300] flex items-center gap-1.5 px-3 py-2 bg-neutral-900 text-white text-xs font-medium rounded-lg shadow-xl border border-neutral-700 hover:bg-neutral-800 hover:scale-105 active:scale-95 transition-all duration-150"
+                      style={{
+                        top: defineButtonPosition.top,
+                        left: defineButtonPosition.left,
+                      }}
+                      onClick={handleDefineSelection}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDefineSelection();
+                      }}
+                    >
+                      <BookOpen size={14} />
+                      <span>Define</span>
+                      {pendingSelection.split(/\s+/).length > 1 && (
+                        <span className="text-neutral-400 text-[10px]">
+                          ({pendingSelection.split(/\s+/).length} words)
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Content Footer */}
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
+                  {/* Selection hint - only show when not in morph mode */}
+                  {viewMode !== 'morph' && (
+                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-[10px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                      <BookOpen size={10} />
+                      <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-4">
                     <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
                     <input
@@ -1046,7 +1828,8 @@ export default function App() {
               <div className="flex flex-wrap gap-2 justify-center">
                 <button
                   onClick={() => setShowFollowUp(!showFollowUp)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  disabled={isLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     showFollowUp
                       ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                       : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
@@ -1055,9 +1838,9 @@ export default function App() {
                   <MessageCircle size={14} />Ask Question
                 </button>
                 <button
-                  onClick={fetchQuiz}
-                  disabled={isQuizLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
+                  onClick={() => fetchQuiz(false)}
+                  disabled={isQuizLoading || isLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
                 >
                   {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
                   Quiz Me
@@ -1095,7 +1878,7 @@ export default function App() {
 
       {/* Controls Panel */}
       {showControls && (
-        <div className={`fixed bottom-20 right-6 z-50 rounded-xl shadow-xl p-4 space-y-3 w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+        <div ref={controlsPanelRef} className={`fixed bottom-20 right-6 z-50 rounded-xl shadow-xl p-4 space-y-3 w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
           <div className="flex justify-between items-center pb-2 border-b border-neutral-200">
             <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Attention Mode</span>
           </div>
@@ -1160,7 +1943,9 @@ export default function App() {
           onStartResize={startResize}
           onEliClick={(level) => handleDefEliClick(level, false)}
           onCopy={copyToClipboard}
+          onWordClick={!miniDefPosition ? handleDefWordClick : undefined}
           renderAttentiveText={renderAttentiveText}
+          renderRichText={renderRichText}
         />
       )}
 
@@ -1172,13 +1957,14 @@ export default function App() {
           quizPos={quizPos}
           isMobile={isMobile}
           isQuizLoading={isQuizLoading}
+          retryCount={quizRetryCount}
+          maxRetries={MAX_QUIZ_RETRIES}
+          questionNumber={quizQuestionNumber}
           onOptionClick={handleQuizOptionClick}
           onClose={() => setShowQuizModal(false)}
           onStartDrag={startDrag}
-          onNextQuestion={() => {
-            setQuizFeedback(null);
-            fetchQuiz();
-          }}
+          onNextQuestion={handleNextQuestion}
+          onRetry={handleQuizRetry}
           renderRichText={renderRichText}
         />
       )}
@@ -1204,11 +1990,53 @@ export default function App() {
           onEliClick={(level) => handleDefEliClick(level, true)}
           onCopy={copyToClipboard}
           renderAttentiveText={renderAttentiveText}
+          renderRichText={renderRichText}
         />
       )}
 
       {/* Floating Action Buttons */}
       <div className={`fixed bottom-6 right-6 flex gap-2 z-[60] transition-transform duration-500 ${isImmersive ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+        {/* Shortcuts Help Button */}
+        <button
+          onClick={() => setShowShortcutsLegend(true)}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-blue-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-blue-500'}`}
+          title="Keyboard Shortcuts (?)"
+        >
+          <HelpCircle size={20} />
+        </button>
+        {/* Ambiance Mode Buttons */}
+        <button
+          onClick={() => {
+            if (ambianceMode === 'study') {
+              // Exit study mode
+              setAmbianceMode('none');
+              setShowStudyControls(true); // Reset for next time
+            } else {
+              // Enter study mode and show controls
+              setAmbianceMode('study');
+              setShowStudyControls(true);
+            }
+          }}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            ambianceMode === 'study'
+              ? 'bg-amber-500 border-amber-600 text-white ring-2 ring-amber-400/50'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-amber-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-amber-500')
+          }`}
+          title={ambianceMode === 'study' ? 'Exit Study Mode' : 'Study Mode (1)'}
+        >
+          <Coffee size={20} />
+        </button>
+        <button
+          onClick={() => setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday')}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            ambianceMode === 'holiday'
+              ? 'bg-red-500 border-red-600 text-white'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500')
+          }`}
+          title="Holiday Mode (2)"
+        >
+          <Snowflake size={20} />
+        </button>
         {hasStarted && (
           <button
             onClick={resetAll}
@@ -1219,6 +2047,7 @@ export default function App() {
           </button>
         )}
         <button
+          ref={controlsButtonRef}
           onClick={() => setShowControls(!showControls)}
           className="bg-black text-white p-3 rounded-full shadow-lg hover:scale-105 transition-transform"
           title="Toggle Controls"
@@ -1226,6 +2055,293 @@ export default function App() {
           {showControls ? <MoveHorizontal size={20} /> : <Zap size={20} />}
         </button>
       </div>
+
+      {/* Keyboard Shortcuts Legend Modal */}
+      {showShortcutsLegend && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowShortcutsLegend(false)}>
+          <div
+            className={`relative w-full max-w-md mx-4 p-6 rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowShortcutsLegend(false)}
+              className={`absolute top-4 right-4 p-1 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+            >
+              <X size={20} />
+            </button>
+            <h2 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+              Keyboard Shortcuts
+            </h2>
+            <div className="space-y-3">
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>View Modes</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>M</kbd>
+                  <span>Morph Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>E</kbd>
+                  <span>Expert Lock</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
+                  <span>Tech Lock</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>S</kbd>
+                  <span>Story Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>G</kbd>
+                  <span>Graph Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>P</kbd>
+                  <span>Dual Pane</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
+                  <span>Text Size</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>D</kbd>
+                  <span>Dark Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>I</kbd>
+                  <span>Immersive</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>C</kbd>
+                  <span>Controls</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>H</kbd>
+                  <span>History</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Ambiance</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>1</kbd>
+                  <span>Study Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
+                  <span>Holiday Mode</span>
+                </div>
+              </div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Q</kbd>
+                  <span>Quiz Me</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Esc</kbd>
+                  <span>Close Modal</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>?</kbd>
+                  <span>This Menu</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ambiance Overlay Effects */}
+      {ambianceMode === 'study' && (
+        <>
+          {/* Clickable backdrop - only visible when control panel is open */}
+          {showStudyControls && (
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={() => setShowStudyControls(false)}
+            />
+          )}
+          {/* Main overlay container - covers everything including header */}
+          <div className="fixed inset-0 pointer-events-none z-[9999]">
+            {/* Base dark overlay - simulates dark room */}
+            <div
+              className="absolute inset-0"
+              style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}
+            />
+
+            {/* Strong Blue Vignette - late night studying feel */}
+            {vignetteEnabled && (
+              <div
+                className="absolute inset-0 animate-study-pulse"
+                style={{
+                  background: 'radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(30, 58, 138, 0.35) 60%, rgba(23, 37, 84, 0.55) 85%, rgba(15, 23, 42, 0.7) 100%)'
+                }}
+              />
+            )}
+
+            {/* Desk Lamp Spotlight - centered on content area */}
+            {deskLampEnabled && (
+              <div
+                className="absolute inset-0 animate-lamp-flicker"
+                style={{
+                  background: 'radial-gradient(ellipse 60% 50% at 50% 55%, rgba(255, 251, 235, 0.35) 0%, rgba(254, 243, 199, 0.2) 30%, rgba(251, 191, 36, 0.1) 50%, transparent 70%)',
+                  mixBlendMode: 'screen'
+                }}
+              />
+            )}
+          </div>
+
+          {/* Study Mode Control Panel - only shown when showStudyControls is true */}
+          {showStudyControls && (
+            <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
+              <div className="bg-neutral-900/95 backdrop-blur-sm rounded-xl p-3 border border-neutral-700 shadow-2xl flex flex-col gap-2">
+                {/* Header with close button */}
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-700 mb-1">
+                  <span className="text-xs font-medium text-neutral-300">Study Mode</span>
+                  <button
+                    onClick={() => {
+                      setAmbianceMode('none');
+                      setShowStudyControls(true); // Reset for next time
+                    }}
+                    className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white transition-colors"
+                    title="Exit Study Mode"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    brownNoiseEnabled
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Brown Noise"
+                >
+                  <span className="text-sm">🎵</span>
+                  <span>Brown Noise</span>
+                </button>
+                <button
+                  onClick={() => setDeskLampEnabled(!deskLampEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    deskLampEnabled
+                      ? 'bg-yellow-500 text-neutral-900 shadow-lg shadow-yellow-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Desk Lamp Spotlight"
+                >
+                  <span className="text-sm">💡</span>
+                  <span>Desk Lamp</span>
+                </button>
+                <button
+                  onClick={() => setVignetteEnabled(!vignetteEnabled)}
+                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
+                    vignetteEnabled
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                  }`}
+                  title="Toggle Blue Vignette"
+                >
+                  <span className="text-sm">🌙</span>
+                  <span>Night Mode</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {ambianceMode === 'holiday' && (
+        <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
+          {/* Base holiday tint - red and green */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.12) 0%, transparent 50%, rgba(22, 101, 52, 0.12) 100%)'
+            }}
+          />
+          {/* Snow particles - larger and more visible */}
+          <div className="absolute inset-0">
+            {Array.from({ length: 60 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full animate-snowfall"
+                style={{
+                  left: `${(i * 1.7) % 100}%`,
+                  width: `${3 + (i % 4)}px`,
+                  height: `${3 + (i % 4)}px`,
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  boxShadow: '0 0 4px rgba(255, 255, 255, 0.5)',
+                  animationDelay: `${(i * 0.15) % 10}s`,
+                  animationDuration: `${4 + (i % 6)}s`,
+                }}
+              />
+            ))}
+          </div>
+          {/* Twinkling Christmas lights along edges */}
+          <div className="absolute top-0 left-0 right-0 h-2 flex justify-around">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div
+                key={`light-top-${i}`}
+                className="w-2 h-2 rounded-full animate-twinkle"
+                style={{
+                  backgroundColor: i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15',
+                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15'}`,
+                  animationDelay: `${i * 0.2}s`,
+                }}
+              />
+            ))}
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-2 flex justify-around">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div
+                key={`light-bottom-${i}`}
+                className="w-2 h-2 rounded-full animate-twinkle"
+                style={{
+                  backgroundColor: i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15',
+                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15'}`,
+                  animationDelay: `${i * 0.15 + 0.5}s`,
+                }}
+              />
+            ))}
+          </div>
+          {/* Holiday vignette */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(127, 29, 29, 0.15) 100%)'
+            }}
+          />
+        </div>
+      )}
+
+      {/* Constellation Mode */}
+      {isConstellationMode && (
+        <ConstellationMode
+          conceptMap={conceptMap}
+          importanceMap={importanceMap}
+          isAnalogyMode={isAnalogyVisualMode}
+          isDarkMode={isDarkMode}
+          onClose={() => setIsConstellationMode(false)}
+          domainName={analogyDomain}
+          topicName={lastSubmittedTopic}
+        />
+      )}
+
+      {/* Dual Pane Isomorphic View */}
+      {isDualPaneMode && (
+        <IsomorphicDualPane
+          segments={segments}
+          conceptMap={conceptMap}
+          importanceMap={importanceMap}
+          isDarkMode={isDarkMode}
+          onClose={() => setIsDualPaneMode(false)}
+        />
+      )}
     </div>
   );
 }

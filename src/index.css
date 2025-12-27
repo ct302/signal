@@ -16,3 +16,106 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
+
+/* Ambiance Effects */
+@keyframes snowfall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-snowfall {
+  animation: snowfall linear infinite;
+}
+
+/* Radial gradient for vignette effect */
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at center, var(--tw-gradient-from) 0%, var(--tw-gradient-via) 50%, var(--tw-gradient-to) 100%);
+}
+
+/* Study mode blue light pulse - subtle breathing effect */
+@keyframes studyPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-study-pulse {
+  animation: studyPulse 4s ease-in-out infinite;
+}
+
+/* Christmas lights twinkling */
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  25% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  75% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.animate-twinkle {
+  animation: twinkle 1.5s ease-in-out infinite;
+}
+
+/* Desk lamp warm glow flicker - subtle candlelight effect */
+@keyframes lampFlicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  20% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0.92;
+  }
+  40% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.98;
+  }
+  60% {
+    opacity: 0.93;
+  }
+  70% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.96;
+  }
+  90% {
+    opacity: 1;
+  }
+}
+
+.animate-lamp-flicker {
+  animation: lampFlicker 3s ease-in-out infinite;
+}

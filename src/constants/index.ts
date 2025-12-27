@@ -2,7 +2,17 @@
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // Default API key for demo purposes (users can override in Settings)
-export const DEFAULT_GEMINI_API_KEY = 'AIzaSyAFaKclEBd8HcVaAcWXFmQZ0nICRXjNUXM';
+export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
+
+// OpenRouter API key (demo/testing)
+export const DEFAULT_OPENROUTER_API_KEY = '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';
+
+// OpenRouter models - hardcoded selection
+export const OPENROUTER_MODELS = [
+  'google/gemini-2.0-flash-exp:free',
+  'openai/gpt-oss-120b:free',
+  'meta-llama/llama-3.3-70b-instruct:free'
+];
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
@@ -28,7 +38,7 @@ export const STOP_WORDS = new Set([
 export const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\[a-zA-Z]+(?:[_^]\{[^}]*\}|\{[^}]*\})*)/g;
 
 // LaTeX command regex for wrapping
-export const LATEX_CMD_REGEX = /\\(frac|lim|sum|int|prod|sqrt|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|rho|tau|eta|nu|xi|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|left|right|text|mathrm|mathbf|vec|hat|bar|dot|ddot|tilde|prime)/;
+export const LATEX_CMD_REGEX = /\\(frac|lim|sum|int|prod|sqrt|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|rho|tau|eta|nu|xi|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|left|right|text|mathrm|mathbf|mathcal|mathbb|boldsymbol|textbf|vec|hat|bar|dot|ddot|tilde|prime|circ|bullet|star|forall|exists|subset|supset|cup|cap|in|notin|land|lor|neg|implies|iff|oplus|otimes|odot)/;
 
 // Concept colors for isomorphic mapping
 export const CONCEPT_COLORS = [
@@ -51,6 +61,90 @@ export const QUICK_START_DOMAINS = [
   { emoji: '🎵', name: 'Music' },
   { emoji: '🎬', name: 'Movies' }
 ];
+
+// Domain categories for proximity checking and suggestions
+export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Array<{ name: string; emoji: string }> }> = {
+  sports: {
+    keywords: ['nfl', 'football', 'nba', 'basketball', 'mlb', 'baseball', 'nhl', 'hockey', 'soccer', 'mls', 'tennis', 'golf', 'boxing', 'mma', 'ufc', 'wrestling', 'olympics', 'sports', 'athlete', 'player', 'team', 'game', 'score', 'championship', 'super bowl', 'world series', 'playoffs'],
+    related: [
+      { name: 'NBA', emoji: '🏀' },
+      { name: 'MLB', emoji: '⚾' },
+      { name: 'NHL', emoji: '🏒' },
+      { name: 'Soccer', emoji: '⚽' },
+      { name: 'Tennis', emoji: '🎾' }
+    ]
+  },
+  gaming: {
+    keywords: ['video games', 'gaming', 'esports', 'playstation', 'xbox', 'nintendo', 'steam', 'rpg', 'fps', 'moba', 'minecraft', 'fortnite', 'league of legends', 'valorant', 'call of duty', 'gamer', 'twitch', 'streamer'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Card Games', emoji: '🃏' },
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Anime', emoji: '🎌' }
+    ]
+  },
+  cooking: {
+    keywords: ['cooking', 'baking', 'cuisine', 'recipe', 'chef', 'kitchen', 'food', 'restaurant', 'culinary', 'ingredients', 'meal', 'dish', 'flavor', 'gordon ramsay', 'masterchef'],
+    related: [
+      { name: 'Chemistry', emoji: '🧪' },
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Wine', emoji: '🍷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  music: {
+    keywords: ['music', 'song', 'album', 'band', 'artist', 'concert', 'guitar', 'piano', 'drums', 'singer', 'musician', 'spotify', 'genre', 'rock', 'pop', 'hip hop', 'jazz', 'classical', 'beethoven', 'taylor swift'],
+    related: [
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Dance', emoji: '💃' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Poetry', emoji: '📜' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  movies: {
+    keywords: ['movies', 'film', 'cinema', 'director', 'actor', 'actress', 'hollywood', 'oscar', 'screenplay', 'blockbuster', 'marvel', 'dc', 'disney', 'netflix', 'streaming'],
+    related: [
+      { name: 'TV Shows', emoji: '📺' },
+      { name: 'Books', emoji: '📚' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Music', emoji: '🎵' },
+      { name: 'Video Games', emoji: '🎮' }
+    ]
+  },
+  chess: {
+    keywords: ['chess', 'chessboard', 'grandmaster', 'magnus carlsen', 'checkmate', 'pawn', 'rook', 'bishop', 'knight', 'queen', 'king', 'opening', 'endgame', 'gambit'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Poker', emoji: '🃏' },
+      { name: 'Go', emoji: '⚫' },
+      { name: 'Strategy Games', emoji: '🎯' },
+      { name: 'Mathematics', emoji: '📐' }
+    ]
+  },
+  military: {
+    keywords: ['military', 'army', 'navy', 'air force', 'marines', 'war', 'battle', 'soldier', 'general', 'strategy', 'tactics', 'weapons', 'defense'],
+    related: [
+      { name: 'History', emoji: '📜' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Politics', emoji: '🏛️' },
+      { name: 'Engineering', emoji: '⚙️' },
+      { name: 'Space', emoji: '🚀' }
+    ]
+  },
+  nature: {
+    keywords: ['nature', 'wildlife', 'animals', 'plants', 'ecosystem', 'forest', 'ocean', 'mountains', 'weather', 'climate', 'biology', 'ecology'],
+    related: [
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Photography', emoji: '📷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Science', emoji: '🔬' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  }
+};
 
 // Local storage keys
 export const STORAGE_KEYS = {

@@ -1,0 +1,449 @@
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers } from 'lucide-react';
+
+interface ConceptMapItem {
+  id: number;
+  tech_term: string;
+  analogy_term: string;
+}
+
+interface ImportanceMapItem {
+  term: string;
+  importance: number;
+}
+
+interface ConstellationModeProps {
+  conceptMap: ConceptMapItem[];
+  importanceMap: ImportanceMapItem[];
+  isAnalogyMode: boolean;
+  isDarkMode: boolean;
+  onClose: () => void;
+  domainName?: string;
+  topicName?: string;
+}
+
+// Color palette for concepts
+const CONCEPT_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#06b6d4'
+];
+
+// Helper to strip LaTeX delimiters for display
+const cleanLabel = (text: string): string => {
+  return text
+    .replace(/\$\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\\(/g, '')
+    .replace(/\\\)/g, '')
+    .replace(/\\\[/g, '')
+    .replace(/\\\]/g, '')
+    .replace(/\^{([^}]+)}/g, '^$1')
+    .replace(/_{([^}]+)}/g, '_$1')
+    .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
+    .replace(/\\[a-zA-Z]+/g, (match) => {
+      const commands: { [key: string]: string } = {
+        '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',
+        '\\gamma': 'γ', '\\delta': 'δ', '\\theta': 'θ', '\\lambda': 'λ',
+        '\\mu': 'μ', '\\pi': 'π', '\\sum': 'Σ', '\\prod': 'Π',
+        '\\int': '∫', '\\infty': '∞', '\\sqrt': '√', '\\cdot': '·',
+        '\\times': '×', '\\div': '÷', '\\pm': '±', '\\leq': '≤',
+        '\\geq': '≥', '\\neq': '≠', '\\approx': '≈',
+        '\\circ': '∘', '\\bullet': '•', '\\star': '★',
+        '\\forall': '∀', '\\exists': '∃', '\\in': '∈', '\\notin': '∉',
+        '\\subset': '⊂', '\\supset': '⊃', '\\cup': '∪', '\\cap': '∩',
+        '\\land': '∧', '\\lor': '∨', '\\neg': '¬',
+        '\\implies': '⟹', '\\iff': '⟺',
+        '\\oplus': '⊕', '\\otimes': '⊗', '\\odot': '⊙',
+      };
+      return commands[match] || '';
+    })
+    .replace(/\{([^}]*)\}/g, '$1')
+    .trim();
+};
+
+// Relationship labels
+const RELATIONSHIP_LABELS = [
+  'maps to',
+  'corresponds to',
+  'is like',
+  'functions as',
+  'represents',
+  'parallels',
+  'mirrors',
+  'aligns with'
+];
+
+// Dynamic explanation templates
+const generateDynamicExplanation = (
+  analogyTerm: string,
+  techTerm: string,
+  domainName: string,
+  topicName: string,
+  index: number
+): string => {
+  const explanationTemplates = [
+    `Think of how ${analogyTerm} operates in ${domainName} - it coordinates, directs, and influences outcomes. In the same way, ${techTerm} orchestrates the behavior and flow within ${topicName}, serving as a central organizing principle.`,
+    `In ${domainName}, ${analogyTerm} provides structure and rules that govern interactions. Similarly, ${techTerm} establishes the foundational framework in ${topicName}, defining how elements relate and transform.`,
+    `Just as ${analogyTerm} measures and quantifies relationships in ${domainName}, ${techTerm} provides the mathematical machinery to measure and compute relationships in ${topicName}.`,
+    `The role of ${analogyTerm} in ${domainName} is to track changes and transformations. ${techTerm} performs an analogous function in ${topicName}, capturing how quantities change across different perspectives.`,
+    `When you understand how ${analogyTerm} connects different parts of ${domainName}, you grasp the essence of ${techTerm} - both serve as bridges that link related concepts and enable transformation between them.`,
+    `${analogyTerm} in ${domainName} acts as a reference point for understanding position and movement. ${techTerm} serves the same purpose in ${topicName}, providing a framework for describing location and change.`,
+    `The power of ${analogyTerm} lies in how it simplifies complex ${domainName} scenarios into manageable parts. ${techTerm} achieves the same simplification in ${topicName}, breaking down complexity into structured components.`,
+    `In ${domainName}, ${analogyTerm} enables prediction and strategy. ${techTerm} similarly empowers prediction and calculation in ${topicName}, using the same underlying logical patterns.`
+  ];
+  return explanationTemplates[index % explanationTemplates.length];
+};
+
+export const ConstellationMode: React.FC<ConstellationModeProps> = ({
+  conceptMap,
+  importanceMap,
+  isDarkMode,
+  onClose,
+  domainName = 'Your Expertise',
+  topicName = 'New Topic'
+}) => {
+  const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
+  const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Get importance for a concept
+  const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
+    const techTerm = cleanLabel(concept.tech_term).toLowerCase();
+    const analogyTerm = cleanLabel(concept.analogy_term).toLowerCase();
+    for (const imp of importanceMap) {
+      const term = imp.term.toLowerCase();
+      if (term.includes(techTerm) || techTerm.includes(term) ||
+          term.includes(analogyTerm) || analogyTerm.includes(term)) {
+        return imp.importance;
+      }
+    }
+    return 0.5;
+  }, [importanceMap]);
+
+  // Build concept data with colors and importance
+  const conceptData = conceptMap.map((concept, index) => ({
+    concept,
+    index,
+    importance: getConceptImportance(concept),
+    color: CONCEPT_COLORS[index % CONCEPT_COLORS.length],
+    relationshipLabel: RELATIONSHIP_LABELS[index % RELATIONSHIP_LABELS.length]
+  }));
+
+  // Handle concept click
+  const handleConceptClick = (conceptId: number) => {
+    if (selectedConcept === conceptId) {
+      setShowExplanation(!showExplanation);
+    } else {
+      setSelectedConcept(conceptId);
+      setShowExplanation(true);
+    }
+  };
+
+  // Get selected concept data
+  const selectedConceptData = selectedConcept !== null
+    ? conceptData.find(c => c.concept.id === selectedConcept)
+    : null;
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700 bg-neutral-900/80 backdrop-blur-sm">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Layers className="text-blue-400" size={24} />
+            <h2 className="text-white text-xl font-bold">Knowledge Bridge</h2>
+          </div>
+          <div className="flex items-center gap-2 text-neutral-400 text-sm">
+            <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium">
+              {domainName}
+            </span>
+            <ArrowRight size={16} />
+            <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium">
+              {topicName}
+            </span>
+          </div>
+          <span className="text-neutral-500 text-sm ml-4">
+            {conceptMap.length} concept mappings
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Bridge Visualization */}
+        <div
+          ref={containerRef}
+          className={`flex-1 p-8 overflow-y-auto ${showExplanation && selectedConceptData ? 'w-2/3' : 'w-full'} transition-all duration-500`}
+        >
+          {/* Column Headers */}
+          <div className="flex justify-between mb-8 px-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="text-amber-400" size={24} />
+              <div>
+                <h3 className="text-amber-300 font-bold text-lg">What You Know</h3>
+                <p className="text-amber-400/60 text-sm">{domainName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <h3 className="text-blue-300 font-bold text-lg">What You're Learning</h3>
+                <p className="text-blue-400/60 text-sm">{topicName}</p>
+              </div>
+              <BookOpen className="text-blue-400" size={24} />
+            </div>
+          </div>
+
+          {/* Concept Bridges */}
+          <div className="space-y-4">
+            {conceptData.map((data) => {
+              const isSelected = selectedConcept === data.concept.id;
+              const isHovered = hoveredConcept === data.concept.id;
+              const isActive = isSelected || isHovered;
+              const otherSelected = selectedConcept !== null && !isSelected;
+
+              return (
+                <div
+                  key={data.concept.id}
+                  className={`relative flex items-center transition-all duration-300 ${
+                    otherSelected && !isActive ? 'opacity-30' : 'opacity-100'
+                  }`}
+                  onMouseEnter={() => setHoveredConcept(data.concept.id)}
+                  onMouseLeave={() => setHoveredConcept(null)}
+                  onClick={() => handleConceptClick(data.concept.id)}
+                >
+                  {/* Left Pill (Analogy/Expertise) */}
+                  <div
+                    className={`flex-shrink-0 px-5 py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[40%] ${
+                      isActive ? 'scale-105' : 'hover:scale-102'
+                    }`}
+                    style={{
+                      backgroundColor: isActive ? data.color + '30' : 'rgba(251, 191, 36, 0.1)',
+                      border: `2px solid ${isActive ? data.color : 'rgba(251, 191, 36, 0.3)'}`,
+                      boxShadow: isActive ? `0 4px 20px ${data.color}40` : undefined
+                    }}
+                  >
+                    <span className={`text-amber-200 font-semibold text-base ${isActive ? 'text-white' : ''}`}>
+                      {cleanLabel(data.concept.analogy_term)}
+                    </span>
+                  </div>
+
+                  {/* Bridge Line with Label */}
+                  <div className="flex-1 flex items-center justify-center px-4 relative">
+                    {/* Animated line */}
+                    <div
+                      className="absolute inset-x-0 h-0.5 top-1/2 -translate-y-1/2"
+                      style={{
+                        background: isActive
+                          ? `linear-gradient(90deg, ${data.color}, ${data.color}80, ${data.color})`
+                          : 'linear-gradient(90deg, rgba(251, 191, 36, 0.3), rgba(96, 165, 250, 0.3))'
+                      }}
+                    />
+
+                    {/* Animated dot on hover */}
+                    {isHovered && (
+                      <div
+                        className="absolute w-3 h-3 rounded-full animate-bridge-flow"
+                        style={{ backgroundColor: data.color }}
+                      />
+                    )}
+
+                    {/* Relationship Label */}
+                    <span
+                      className={`relative z-10 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 ${
+                        isActive
+                          ? 'bg-neutral-800 text-white'
+                          : 'bg-neutral-900 text-neutral-500'
+                      }`}
+                      style={{
+                        borderColor: isActive ? data.color : 'transparent',
+                        borderWidth: isActive ? 1 : 0
+                      }}
+                    >
+                      {data.relationshipLabel}
+                    </span>
+                  </div>
+
+                  {/* Right Pill (Tech/Learning) */}
+                  <div
+                    className={`flex-shrink-0 px-5 py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[40%] ${
+                      isActive ? 'scale-105' : 'hover:scale-102'
+                    }`}
+                    style={{
+                      backgroundColor: isActive ? data.color + '30' : 'rgba(96, 165, 250, 0.1)',
+                      border: `2px solid ${isActive ? data.color : 'rgba(96, 165, 250, 0.3)'}`,
+                      boxShadow: isActive ? `0 4px 20px ${data.color}40` : undefined
+                    }}
+                  >
+                    <span className={`text-blue-200 font-semibold text-base ${isActive ? 'text-white' : ''}`}>
+                      {cleanLabel(data.concept.tech_term)}
+                    </span>
+                  </div>
+
+                  {/* Importance Indicator (subtle bar below) */}
+                  <div
+                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-0.5 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${data.importance * 60 + 20}%`,
+                      backgroundColor: isActive ? data.color : 'rgba(255,255,255,0.1)',
+                      opacity: isActive ? 1 : 0.5
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Explanation Panel */}
+        {showExplanation && selectedConceptData && (
+          <div className="w-1/3 border-l border-neutral-700 bg-neutral-900/95 overflow-y-auto">
+            {/* Panel Header */}
+            <div className="sticky top-0 px-6 py-4 border-b border-neutral-700 bg-neutral-900">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-bold text-lg">Deep Dive</h3>
+                <button
+                  onClick={() => setShowExplanation(false)}
+                  className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-4 h-4 rounded-full"
+                  style={{ backgroundColor: selectedConceptData.color }}
+                />
+                <span className="text-neutral-300 text-sm">
+                  Mapping {selectedConceptData.index + 1} of {conceptMap.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Concept Comparison */}
+            <div className="p-6 space-y-6">
+              {/* Expertise Term */}
+              <div className="p-4 rounded-xl bg-amber-900/20 border border-amber-800/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="text-amber-400" size={16} />
+                  <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">
+                    What You Know
+                  </span>
+                </div>
+                <p className="text-white text-xl font-semibold">
+                  {cleanLabel(selectedConceptData.concept.analogy_term)}
+                </p>
+              </div>
+
+              {/* Arrow */}
+              <div className="flex justify-center">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700">
+                  <ChevronRight className="text-neutral-500" size={16} />
+                  <span className="text-neutral-400 text-sm font-medium">
+                    {selectedConceptData.relationshipLabel}
+                  </span>
+                  <ChevronRight className="text-neutral-500" size={16} />
+                </div>
+              </div>
+
+              {/* Learning Term */}
+              <div className="p-4 rounded-xl bg-blue-900/20 border border-blue-800/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="text-blue-400" size={16} />
+                  <span className="text-blue-300 text-xs font-bold uppercase tracking-wider">
+                    What You're Learning
+                  </span>
+                </div>
+                <p className="text-white text-xl font-semibold">
+                  {cleanLabel(selectedConceptData.concept.tech_term)}
+                </p>
+              </div>
+
+              {/* Importance Meter */}
+              <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-neutral-400 text-sm">Concept Importance</span>
+                  <span className="text-white font-bold">
+                    {Math.round(selectedConceptData.importance * 100)}%
+                  </span>
+                </div>
+                <div className="h-2 bg-neutral-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${selectedConceptData.importance * 100}%`,
+                      backgroundColor: selectedConceptData.color
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Why This Works */}
+              <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
+                <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <Layers size={16} className="text-purple-400" />
+                  Why This Works
+                </h4>
+                <p className="text-neutral-300 text-sm leading-relaxed">
+                  {generateDynamicExplanation(
+                    cleanLabel(selectedConceptData.concept.analogy_term),
+                    cleanLabel(selectedConceptData.concept.tech_term),
+                    domainName,
+                    topicName,
+                    selectedConceptData.index
+                  )}
+                </p>
+              </div>
+
+              <div className="text-center text-neutral-500 text-xs pt-4">
+                Click other concepts to explore more mappings
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900/80">
+        <div className="flex items-center justify-between">
+          <span className="text-neutral-400 text-sm">
+            Click any mapping to explore the connection in depth
+          </span>
+          <span className="text-neutral-500 text-xs">
+            Press Esc to close
+          </span>
+        </div>
+      </div>
+
+      {/* Animation keyframes */}
+      <style>{`
+        @keyframes bridge-flow {
+          0% { left: 10%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { left: 90%; opacity: 0; }
+        }
+        .animate-bridge-flow {
+          animation: bridge-flow 1.5s ease-in-out infinite;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default ConstellationMode;

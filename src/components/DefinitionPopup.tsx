@@ -1,5 +1,5 @@
-import React from 'react';
-import { CornerDownRight, X, Copy, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
 
 interface DefinitionPopupProps {
@@ -21,6 +21,7 @@ interface DefinitionPopupProps {
   onStartResize: (e: React.MouseEvent, target: string) => void;
   onEliClick: (level: number) => void;
   onCopy: (text: string, id: string) => void;
+  onWordClick?: (word: string, rect: DOMRect) => void;
   renderAttentiveText: (
     text: string,
     threshold: number,
@@ -28,8 +29,11 @@ interface DefinitionPopupProps {
     isColorMode: boolean,
     setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
     customMap: ConceptMapItem[] | null,
-    textColor: string
+    textColor: string,
+    textScale?: number,
+    onWordClick?: (word: string, rect: DOMRect) => void
   ) => React.ReactNode;
+  renderRichText: (text: string, colorClass?: string) => React.ReactNode;
 }
 
 export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
@@ -51,8 +55,11 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   onStartResize,
   onEliClick,
   onCopy,
-  renderAttentiveText
+  onWordClick,
+  renderAttentiveText,
+  renderRichText
 }) => {
+  const [textScale, setTextScale] = useState(1);
   const style: React.CSSProperties = isMobile
     ? {
         top: 'auto',
@@ -70,16 +77,14 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         height: 'auto',
         minWidth: '280px',
         minHeight: '200px',
-        maxHeight: '70vh',
-        overflow: 'auto',
-        resize: 'vertical' as const
+        maxHeight: '70vh'
       };
 
   return (
-    <div className="def-window fixed z-[200] w-full max-w-md px-4 flex flex-col" style={style}>
+    <div className="def-window fixed z-[200] flex flex-col" style={style}>
       <div
-        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none ${
-          isMobile ? 'rounded-t-2xl h-full' : 'rounded-xl'
+        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none h-full ${
+          isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
       >
         {/* Header */}
@@ -87,21 +92,40 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           onMouseDown={(e) => onStartDrag(e, 'def')}
           className={`header-drag-area ${isMobile ? '' : 'cursor-move'} flex justify-between items-start mb-2 border-b border-neutral-800 pb-2 flex-shrink-0`}
         >
-          <div className="flex items-center gap-2">
-            <CornerDownRight size={14} className="text-yellow-400" />
-            <span className="font-bold text-sm text-yellow-200 flex items-center gap-2 pr-4">
-              {selectedTerm}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <CornerDownRight size={14} className="text-yellow-400 flex-shrink-0" />
+            <span className="font-bold text-sm text-yellow-200 truncate">
+              {renderRichText(selectedTerm, "text-yellow-200")}
             </span>
           </div>
-          <div className="flex gap-2 text-neutral-400 items-center">
-            <button onClick={onClose} className="hover:text-white">
+          <div className="flex gap-1 text-neutral-400 items-center flex-shrink-0 ml-2">
+            {/* Text Scale Controls */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.max(0.8, s - 0.1)); }}
+              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              title="Decrease text size"
+            >
+              <ZoomOut size={12} />
+            </button>
+            <span className="text-[10px] text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.min(1.5, s + 0.1)); }}
+              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              title="Increase text size"
+            >
+              <ZoomIn size={12} />
+            </button>
+            <button onClick={onClose} className="hover:text-white ml-1">
               <X size={14} />
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="text-sm leading-relaxed text-neutral-200 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        <div
+          className="text-sm leading-relaxed text-neutral-200 flex-1 overflow-y-auto -mr-2 pr-2"
+          style={{ fontSize: `${textScale}em` }}
+        >
           {isLoadingDef ? (
             <span className="italic text-neutral-400">Defining...</span>
           ) : (
@@ -112,10 +136,17 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
               isDefColorMode,
               setIsDefColorMode,
               null,
-              "text-neutral-200"
+              "text-neutral-200",
+              textScale,
+              onWordClick
             )
           )}
         </div>
+        {onWordClick && !isLoadingDef && (
+          <div className="text-[9px] text-neutral-600 mt-1 text-center">
+            Click any word for a nested definition
+          </div>
+        )}
 
         {/* Footer Controls */}
         <div className="pt-3 border-t border-neutral-800 flex flex-col gap-3">

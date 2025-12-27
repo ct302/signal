@@ -67,6 +67,18 @@ export interface QuizData {
   options: string[];
   correctIndex: number;
   explanation?: string;
+  difficulty?: QuizDifficulty;
+  concept?: string; // The core concept being tested (for retry rephrasing)
+}
+
+export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'advanced';
+
+export interface QuizState {
+  questionNumber: number;
+  retryCount: number;
+  maxRetries: number;
+  currentConcept?: string;
+  currentCorrectAnswer?: string;
 }
 
 export interface DisambiguationData {
@@ -91,8 +103,14 @@ export interface AmbiguityResult {
   emoji?: string;
 }
 
+export interface ProximityResult {
+  isTooClose: boolean;
+  reason?: string;
+  suggestedDomains?: Array<{ name: string; emoji: string }>;
+}
+
 // Provider Configuration Types
-export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama';
+export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter';
 
 export interface ProviderConfig {
   provider: ProviderType;
@@ -111,7 +129,12 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
-  ollama: []
+  ollama: [],
+  openrouter: [
+    'google/gemini-2.0-flash-exp:free',
+    'openai/gpt-oss-120b:free',
+    'meta-llama/llama-3.3-70b-instruct:free'
+  ]
 };
 
 export {};

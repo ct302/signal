@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
 import { fetchOllamaModels } from '../services';
 
 interface SettingsProps {
@@ -12,15 +13,16 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: 'Google (Gemini)',
   openai: 'OpenAI (GPT)',
   anthropic: 'Anthropic (Claude)',
-  ollama: 'Ollama (Local)'
+  ollama: 'Ollama (Local)',
+  openrouter: 'OpenRouter'
 };
 
 export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ProviderConfig>({
-    provider: 'google',
-    apiKey: '',
-    model: 'gemini-2.0-flash',
+    provider: 'openrouter',
+    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    model: 'meta-llama/llama-3.3-70b-instruct',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);
@@ -34,6 +36,13 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
+        // Use default API key for providers if none stored
+        if (parsed.provider === 'google' && !parsed.apiKey) {
+          parsed.apiKey = DEFAULT_GEMINI_API_KEY;
+        }
+        if (parsed.provider === 'openrouter' && !parsed.apiKey) {
+          parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
+        }
         setConfig(parsed);
         if (parsed.provider === 'ollama') {
           loadOllamaModels(parsed.ollamaEndpoint);
@@ -102,20 +111,19 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     );
   }
 
-  return (
-    <>
-      {/* Backdrop with flexbox centering */}
+  // Use portal to render modal at document body level
+  return ReactDOM.createPortal(
+    <div
+      className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+      onClick={() => setIsOpen(false)}
+    >
+      {/* Modal */}
       <div
-        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-        onClick={() => setIsOpen(false)}
+        className={`w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl ${
+          isDarkMode ? 'bg-neutral-800' : 'bg-white'
+        }`}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal */}
-        <div
-          className={`w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl ${
-            isDarkMode ? 'bg-neutral-800' : 'bg-white'
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${
           isDarkMode ? 'border-neutral-700' : 'border-neutral-200'
@@ -273,9 +281,9 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
             Save Settings
           </button>
         </div>
-        </div>
       </div>
-    </>
+    </div>,
+    document.body
   );
 };
 
