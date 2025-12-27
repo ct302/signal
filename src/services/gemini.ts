@@ -1,6 +1,6 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -529,4 +529,288 @@ const getProximityResult = (domain: string, reason: string): ProximityResult => 
       { name: 'Nature', emoji: '🌿' }
     ]
   };
+};
+
+// ============================================
+// MASTERY MODE API FUNCTIONS
+// ============================================
+
+/**
+ * Generate 10 mastery keywords with dual definitions from concept_map
+ * Each keyword has:
+ * - 3-word definitions (for Stage 2)
+ * - 6-word definitions (for Stage 3)
+ * - Both technical and analogy domain definitions
+ */
+export const generateMasteryKeywords = async (
+  topic: string,
+  domain: string,
+  conceptMap: ConceptMapItem[],
+  importanceMap: ImportanceMapItem[],
+  analogyText: string
+): Promise<MasteryKeyword[]> => {
+  // Sort concept map by importance
+  const sortedConcepts = [...conceptMap].map((c, idx) => {
+    const importance = importanceMap.find(
+      imp => imp.term.toLowerCase().includes(c.tech_term.toLowerCase()) ||
+             c.tech_term.toLowerCase().includes(imp.term.toLowerCase())
+    )?.importance ?? 0.5;
+    return { ...c, importance, originalIndex: idx };
+  }).sort((a, b) => b.importance - a.importance);
+
+  // Take top 10 (or all if less than 10)
+  const topConcepts = sortedConcepts.slice(0, 10);
+
+  const prompt = `You are generating mastery keywords for a learning exercise about "${topic}" using "${domain}" as the analogy domain.
+
+CONTEXT (the analogy explanation):
+${analogyText.slice(0, 1500)}
+
+CONCEPT MAPPINGS TO USE:
+${topConcepts.map((c, i) => `${i + 1}. "${c.tech_term}" ↔ "${c.analogy_term}"`).join('\n')}
+
+For each concept mapping, generate TWO sets of definitions:
+1. A 3-word definition (first-principles, core essence) - for Stage 2
+2. A 6-word definition (first-principles, core essence) - for Stage 3
+
+CRITICAL RULES:
+- Each definition must be EXACTLY the word count specified (3 or 6 words)
+- Definitions must capture the CORE ESSENCE (first principles)
+- Technical definitions explain what it IS in technical terms
+- Analogy definitions explain what it IS in ${domain} terms (NO technical jargon)
+- Be concise and precise - every word must count
+
+Return ONLY this JSON (no markdown):
+{
+  "keywords": [
+    {
+      "id": 0,
+      "term": "technical term",
+      "analogyTerm": "${domain} equivalent term",
+      "techDefinition3": "exactly three words",
+      "analogyDefinition3": "exactly three words",
+      "techDefinition6": "exactly six words here now",
+      "analogyDefinition6": "exactly six words here now",
+      "importance": 0.95
+    }
+  ]
+}`;
+
+  try {
+    const text = await callApi(prompt, true);
+    const result = safeJsonParse(text);
+
+    if (result?.keywords && Array.isArray(result.keywords)) {
+      return result.keywords.map((k: any, idx: number) => ({
+        id: k.id ?? idx,
+        term: k.term || topConcepts[idx]?.tech_term || '',
+        analogyTerm: k.analogyTerm || topConcepts[idx]?.analogy_term || '',
+        techDefinition3: k.techDefinition3 || '',
+        analogyDefinition3: k.analogyDefinition3 || '',
+        techDefinition6: k.techDefinition6 || '',
+        analogyDefinition6: k.analogyDefinition6 || '',
+        importance: k.importance ?? topConcepts[idx]?.importance ?? 0.5
+      }));
+    }
+
+    // Fallback: generate basic keywords from concept map
+    return topConcepts.map((c, idx) => ({
+      id: idx,
+      term: c.tech_term,
+      analogyTerm: c.analogy_term,
+      techDefinition3: 'Core concept here',
+      analogyDefinition3: 'Core meaning here',
+      techDefinition6: 'The fundamental essence of this concept',
+      analogyDefinition6: 'The fundamental essence in domain terms',
+      importance: c.importance
+    }));
+  } catch (error) {
+    console.error('Failed to generate mastery keywords:', error);
+    // Return basic fallback
+    return topConcepts.slice(0, 10).map((c, idx) => ({
+      id: idx,
+      term: c.tech_term,
+      analogyTerm: c.analogy_term,
+      techDefinition3: 'Core concept here',
+      analogyDefinition3: 'Core meaning here',
+      techDefinition6: 'The fundamental essence of this concept',
+      analogyDefinition6: 'The fundamental essence in domain terms',
+      importance: c.importance
+    }));
+  }
+};
+
+/**
+ * Evaluate a user's mastery response
+ * Stage 1: General understanding, no keywords required
+ * Stage 2: Must incorporate 3 of 6 visible keywords
+ * Stage 3: Must incorporate 6 of 10 visible keywords
+ */
+export const evaluateMasteryResponse = async (
+  topic: string,
+  domain: string,
+  stage: MasteryStage,
+  userResponse: string,
+  availableKeywords: MasteryKeyword[],
+  analogyText: string
+): Promise<EvaluationResult> => {
+  const requiredKeywords = stage === 1 ? 0 : stage === 2 ? 3 : 6;
+  const keywordTerms = availableKeywords.map(k => k.term);
+  const analogyTerms = availableKeywords.map(k => k.analogyTerm);
+
+  const stageInstructions: Record<MasteryStage, string> = {
+    1: `STAGE 1 EVALUATION (Pure Intuition):
+The user had NO keywords available. They are explaining "${topic}" using their understanding of the "${domain}" analogy.
+- Evaluate if they captured the CORE ESSENCE of the concept
+- Score generously for directional correctness and intuitive understanding
+- They should explain in NARRATIVE STORY form using ${domain} vocabulary
+- NO technical jargon expected - this is pure intuition
+- Look for: Did they understand the fundamental concept? Can they explain it naturally?`,
+
+    2: `STAGE 2 EVALUATION (Guided Recall - 3 of 6 keywords):
+The user had these 6 keywords available: ${keywordTerms.slice(0, 6).join(', ')}
+(With ${domain} equivalents: ${analogyTerms.slice(0, 6).join(', ')})
+- They must incorporate AT LEAST 3 keywords naturally into their narrative
+- Evaluate if they correctly integrated these terms
+- They should still explain in NARRATIVE STORY form
+- Keywords can be used via their ${domain} equivalent terms
+- Partial credit for correct intuition with imperfect terminology`,
+
+    3: `STAGE 3 EVALUATION (Full Mastery - 6 of 10 keywords):
+The user had all 10 keywords with definitions available:
+${keywordTerms.map((t, i) => `- ${t} (${analogyTerms[i]})`).join('\n')}
+- They must incorporate AT LEAST 6 keywords naturally into their narrative
+- Evaluate technical precision while maintaining narrative flow
+- This is the final mastery test - be thorough but fair
+- Keywords can be used via their ${domain} equivalent terms`
+  };
+
+  const prompt = `You are a smart, concise proctor evaluating a student's understanding of "${topic}" through the lens of "${domain}".
+
+ORIGINAL ANALOGY CONTEXT:
+${analogyText.slice(0, 1000)}
+
+${stageInstructions[stage]}
+
+USER'S EXPLANATION:
+"${userResponse}"
+
+EVALUATION CRITERIA:
+1. Did they capture the core concept correctly?
+2. Is their explanation in narrative/story form (not technical jargon)?
+3. ${stage > 1 ? `Did they use at least ${requiredKeywords} keywords naturally?` : 'Did they show intuitive understanding?'}
+4. Is their explanation coherent and demonstrates real understanding?
+
+PROCTOR STYLE:
+- Be concise and helpful, not verbose
+- No hand-holding, but constructive
+- Point out what they got right AND what they missed
+- Score fairly: 70+ to pass
+
+Detect which keywords from this list appear in their response (check both technical and ${domain} terms):
+Technical terms: ${keywordTerms.join(', ')}
+${domain} terms: ${analogyTerms.join(', ')}
+
+Return ONLY this JSON:
+{
+  "score": 0-100,
+  "passed": true/false (true if score >= 70),
+  "feedback": "2-3 sentences of constructive feedback",
+  "keywordsDetected": ["list", "of", "keywords", "they", "used"],
+  "missedConcepts": ["key", "concepts", "they", "missed"],
+  "strengths": ["what", "they", "did", "well"],
+  "intuitions": {
+    "insight": "The key understanding they demonstrated in 1-2 sentences",
+    "keywordsCaptured": ["keywords", "they", "understood"],
+    "strength": "Their strongest point of understanding"
+  }
+}`;
+
+  try {
+    const text = await callApi(prompt, true);
+    const result = safeJsonParse(text);
+
+    if (result) {
+      return {
+        score: result.score ?? 50,
+        passed: result.passed ?? (result.score >= 70),
+        feedback: result.feedback ?? 'Unable to evaluate response.',
+        keywordsDetected: result.keywordsDetected ?? [],
+        missedConcepts: result.missedConcepts ?? [],
+        strengths: result.strengths ?? [],
+        intuitions: result.intuitions ?? {
+          insight: 'Understanding demonstrated.',
+          keywordsCaptured: [],
+          strength: 'Effort shown.'
+        }
+      };
+    }
+
+    return getDefaultEvaluationResult();
+  } catch (error) {
+    console.error('Failed to evaluate mastery response:', error);
+    return getDefaultEvaluationResult();
+  }
+};
+
+/**
+ * Default evaluation result for error cases
+ */
+const getDefaultEvaluationResult = (): EvaluationResult => ({
+  score: 50,
+  passed: false,
+  feedback: 'We had trouble evaluating your response. Please try again.',
+  keywordsDetected: [],
+  missedConcepts: [],
+  strengths: [],
+  intuitions: {
+    insight: 'Unable to extract insights.',
+    keywordsCaptured: [],
+    strength: 'Unable to determine.'
+  }
+});
+
+/**
+ * Smart keyword detection - checks if keywords appear in text
+ * Handles variations, plurals, and analogy equivalents
+ */
+export const detectKeywordsInText = (
+  text: string,
+  keywords: MasteryKeyword[]
+): string[] => {
+  const textLower = text.toLowerCase();
+  const detected: string[] = [];
+
+  for (const keyword of keywords) {
+    const termLower = keyword.term.toLowerCase();
+    const analogyLower = keyword.analogyTerm.toLowerCase();
+
+    // Check for technical term
+    if (textLower.includes(termLower)) {
+      detected.push(keyword.term);
+      continue;
+    }
+
+    // Check for analogy term
+    if (textLower.includes(analogyLower)) {
+      detected.push(keyword.term);
+      continue;
+    }
+
+    // Check for word stems (simple approach)
+    const termStem = termLower.replace(/s$|ing$|ed$|ly$/, '');
+    const analogyStem = analogyLower.replace(/s$|ing$|ed$|ly$/, '');
+
+    if (termStem.length > 3 && textLower.includes(termStem)) {
+      detected.push(keyword.term);
+      continue;
+    }
+
+    if (analogyStem.length > 3 && textLower.includes(analogyStem)) {
+      detected.push(keyword.term);
+      continue;
+    }
+  }
+
+  return detected;
 };

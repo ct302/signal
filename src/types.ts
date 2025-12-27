@@ -137,4 +137,101 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   ]
 };
 
+// ============================================
+// MASTERY MODE TYPES
+// ============================================
+
+export type MasteryStage = 1 | 2 | 3;
+
+/**
+ * A keyword with dual definitions (technical + analogy domain)
+ * Stage 2: 3-word definitions
+ * Stage 3: 6-word definitions
+ */
+export interface MasteryKeyword {
+  id: number;
+  term: string;                    // The keyword itself (technical term)
+  analogyTerm: string;             // The corresponding analogy domain term
+  techDefinition3: string;         // 3-word technical definition (Stage 2)
+  analogyDefinition3: string;      // 3-word analogy definition (Stage 2)
+  techDefinition6: string;         // 6-word technical definition (Stage 3)
+  analogyDefinition6: string;      // 6-word analogy definition (Stage 3)
+  importance: number;              // 0-1 ranking for ordering
+}
+
+/**
+ * AI-extracted intuitions from a user's response
+ * Explains WHY their understanding demonstrates mastery
+ */
+export interface ExtractedIntuition {
+  insight: string;                 // The key insight they demonstrated
+  keywordsCaptured: string[];      // Which keywords they correctly used
+  strength: string;                // What they did well
+}
+
+/**
+ * A single stage attempt by the user
+ */
+export interface StageAttempt {
+  stage: MasteryStage;
+  userResponse: string;            // The user's narrative explanation
+  availableKeywords: string[];     // Keywords that were visible at this stage
+  requiredKeywordCount: number;    // How many they needed to use (0, 3, or 6)
+  keywordsUsed: string[];          // Which keywords they actually used
+  score: number;                   // 0-100
+  passed: boolean;
+  feedback: string;                // AI proctor feedback
+  intuitions: ExtractedIntuition;  // AI-extracted learning insights
+  timestamp: Date;
+}
+
+/**
+ * The full mastery session containing all state
+ */
+export interface MasterySession {
+  id: string;
+  sourceData: {
+    topic: string;
+    domain: string;
+    domainEmoji: string;
+    analogyText: string;           // The original analogy explanation for context
+  };
+  keywords: MasteryKeyword[];      // All 10 keywords
+  currentStage: MasteryStage;
+  stageHistory: StageAttempt[];    // All attempts across all stages
+  isComplete: boolean;
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+/**
+ * Result from the AI proctor evaluation
+ */
+export interface EvaluationResult {
+  score: number;
+  passed: boolean;
+  feedback: string;
+  keywordsDetected: string[];
+  missedConcepts: string[];
+  strengths: string[];
+  intuitions: ExtractedIntuition;
+}
+
+/**
+ * Persisted mastery history entry for "Review My Learning"
+ */
+export interface MasteryHistoryEntry {
+  id: string;
+  topic: string;
+  domain: string;
+  domainEmoji: string;
+  completedAt: Date;
+  finalScores: {
+    stage1: number;
+    stage2: number;
+    stage3: number;
+  };
+  stageAttempts: StageAttempt[];
+}
+
 export {};

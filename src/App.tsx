@@ -23,7 +23,8 @@ import {
   Coffee,
   Network,
   Columns,
-  Type
+  Type,
+  GraduationCap
 } from 'lucide-react';
 
 // Types
@@ -82,7 +83,8 @@ import {
   MiniDefinitionPopup,
   ConstellationMode,
   IsomorphicDualPane,
-  ProximityWarningModal
+  ProximityWarningModal,
+  MasteryMode
 } from './components';
 
 export default function App() {
@@ -205,6 +207,7 @@ export default function App() {
   const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
   const [isConstellationMode, setIsConstellationMode] = useState(false);
   const [isDualPaneMode, setIsDualPaneMode] = useState(false);
+  const [isMasteryMode, setIsMasteryMode] = useState(false);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -741,7 +744,8 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (isDualPaneMode) setIsDualPaneMode(false);
+          if (isMasteryMode) setIsMasteryMode(false);
+          else if (isDualPaneMode) setIsDualPaneMode(false);
           else if (isConstellationMode) setIsConstellationMode(false);
           else if (showShortcutsLegend) setShowShortcutsLegend(false);
           else if (showQuizModal) setShowQuizModal(false);
@@ -814,14 +818,10 @@ export default function App() {
           if (!hasStarted) return;
           setIsDualPaneMode(!isDualPaneMode);
           break;
-        case 't':
-          // Cycle text scale
-          if (!hasStarted) return;
-          setTextScale(current => {
-            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
-            const currentIndex = scales.indexOf(current);
-            return scales[(currentIndex + 1) % scales.length];
-          });
+        case 'u':
+          // Toggle mastery mode (Test My Understanding)
+          if (!hasStarted || isLoading) return;
+          setIsMasteryMode(!isMasteryMode);
           break;
         case '1':
           // Study mode
@@ -836,7 +836,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, ambianceMode, textScale]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale]);
 
   // Brown noise audio for Study Mode
   useEffect(() => {
@@ -1677,6 +1677,21 @@ export default function App() {
                         <span className="hidden sm:inline">Dual</span>
                       </button>
                     )}
+                    {/* Mastery Mode Button */}
+                    {hasStarted && conceptMap.length > 0 && (
+                      <button
+                        onClick={() => setIsMasteryMode(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isMasteryMode
+                            ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Test My Understanding (U)"
+                      >
+                        <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Mastery</span>
+                      </button>
+                    )}
                     {/* Text Scale Control */}
                     {hasStarted && (
                       <button
@@ -2352,6 +2367,20 @@ export default function App() {
           isDarkMode={isDarkMode}
           analogyDomain={analogyDomain}
           onClose={() => setIsDualPaneMode(false)}
+        />
+      )}
+
+      {/* Mastery Mode */}
+      {isMasteryMode && (
+        <MasteryMode
+          topic={lastSubmittedTopic}
+          domain={analogyDomain}
+          domainEmoji={domainEmoji}
+          conceptMap={conceptMap}
+          importanceMap={importanceMap}
+          analogyText={segments.map(s => s.analogy).join(' ')}
+          isDarkMode={isDarkMode}
+          onClose={() => setIsMasteryMode(false)}
         />
       )}
     </div>
