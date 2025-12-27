@@ -659,13 +659,28 @@ export const evaluateMasteryResponse = async (
   const analogyTerms = availableKeywords.map(k => k.analogyTerm);
 
   const stageInstructions: Record<MasteryStage, string> = {
-    1: `STAGE 1 EVALUATION (Pure Intuition):
-The user had NO keywords available. They are explaining "${topic}" using their understanding of the "${domain}" analogy.
-- Evaluate if they captured the CORE ESSENCE of the concept
-- Score generously for directional correctness and intuitive understanding
-- They should explain in NARRATIVE STORY form using ${domain} vocabulary
-- NO technical jargon expected - this is pure intuition
-- Look for: Did they understand the fundamental concept? Can they explain it naturally?`,
+    1: `STAGE 1 EVALUATION (Pure Intuition - STRENGTH-BASED PASSING):
+The user had NO keywords available. They are explaining "${topic}" purely through ${domain} vocabulary.
+
+PASSING CRITERIA (if they hit 2+ of these, they PASS):
+✓ Used ${domain} vocabulary naturally (not technical jargon)
+✓ Captured directional correctness (understood the general idea)
+✓ Told a coherent narrative/story
+✓ Made meaningful analogical connections
+✓ Demonstrated intuitive grasp of the concept's essence
+
+CRITICAL RULES FOR STAGE 1:
+- DO NOT penalize for missing technical concepts like "components", "basis", "transformation rules", etc.
+- DO NOT expect technical vocabulary - that's for Stage 2 and 3
+- This stage tests: "Do they GET IT intuitively through analogy?"
+- If they explain it naturally using ${domain} terms and show understanding, they PASS
+- Score 70+ if they demonstrate 2-3 strengths in narrative/analogical explanation
+- Actually PENALIZE heavy use of technical jargon (defeats the purpose of Stage 1)
+
+WHAT SUCCESS LOOKS LIKE:
+- A student who explains tensors as "Tom Brady adjusting to defensive shifts" = PASS
+- A student who uses domain metaphors to capture transformation/change = PASS
+- A student who shows directional understanding without technical terms = PASS`,
 
     2: `STAGE 2 EVALUATION (Guided Recall - 3 of 6 keywords):
 The user had these 6 keywords available: ${keywordTerms.slice(0, 6).join(', ')}
@@ -696,16 +711,21 @@ USER'S EXPLANATION:
 "${userResponse}"
 
 EVALUATION CRITERIA:
+${stage === 1 ? `FOR STAGE 1 (strength-based):
+1. Count their STRENGTHS (narrative quality, domain vocabulary, analogical thinking, directional correctness)
+2. If they have 2+ strengths, score 70+ and PASS them
+3. DO NOT fail them for missing technical concepts - that's not what Stage 1 tests
+4. PENALIZE if they used too much technical jargon (wrong approach for Stage 1)` : `FOR STAGE ${stage}:
 1. Did they capture the core concept correctly?
-2. Is their explanation in narrative/story form (not technical jargon)?
-3. ${stage > 1 ? `Did they use at least ${requiredKeywords} keywords naturally?` : 'Did they show intuitive understanding?'}
-4. Is their explanation coherent and demonstrates real understanding?
+2. Did they use at least ${requiredKeywords} keywords naturally?
+3. Is their explanation coherent and demonstrates real understanding?
+4. Keywords can appear as technical terms OR their ${domain} equivalents`}
 
 PROCTOR STYLE:
 - Be concise and helpful, not verbose
 - No hand-holding, but constructive
 - Point out what they got right AND what they missed
-- Score fairly: 70+ to pass
+- ${stage === 1 ? 'Score 70+ if they show 2-3 narrative/analogical strengths' : 'Score fairly: 70+ to pass'}
 
 Detect which keywords from this list appear in their response (check both technical and ${domain} terms):
 Technical terms: ${keywordTerms.join(', ')}
