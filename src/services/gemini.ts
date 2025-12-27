@@ -51,11 +51,12 @@ const buildApiUrl = (config: ProviderConfig): string => {
 interface ApiCallOptions {
   jsonMode?: boolean;
   webSearch?: boolean; // Enable OpenRouter web search plugin
+  searchPrompt?: string; // Custom prompt for how to integrate web search results
 }
 
 // Build request body based on provider
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
-  const { jsonMode = false, webSearch = false } = options;
+  const { jsonMode = false, webSearch = false, searchPrompt } = options;
 
   switch (config.provider) {
     case 'google':
@@ -92,8 +93,13 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
       // Add web search plugin when enabled (uses OpenRouter's built-in web search)
       // Pricing: $4 per 1000 results, with max_results: 3 = ~$0.012 per request
       if (webSearch) {
-        body.plugins = [{ id: 'web', max_results: 3 }];
-        console.log('[OpenRouter] Web search enabled with max_results: 3');
+        const webPlugin: Record<string, any> = { id: 'web', max_results: 3 };
+        // Add custom search_prompt if provided - guides how results are integrated
+        if (searchPrompt) {
+          webPlugin.search_prompt = searchPrompt;
+        }
+        body.plugins = [webPlugin];
+        console.log('[OpenRouter] Web search enabled with max_results: 3' + (searchPrompt ? ', custom search_prompt' : ''));
       }
 
       return body;
@@ -425,7 +431,20 @@ export const generateAnalogy = async (
     console.log(`[generateAnalogy] Topic "${topic}" has granularity signals but NOT triggering web search (concepts are timeless)`);
   }
 
-  const prompt = `Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
+  // Front-load domain context for web search when needed
+  // This ensures the search engine finds relevant historical data about the specific domain
+  const webSearchContext = needsWebSearch
+    ? `IMPORTANT - SEARCH FOR THIS HISTORICAL CONTEXT FIRST:
+I need accurate historical information about: "${domain}"
+Search query: "${shortDomain} highlights memorable moments key events history"
+The narrative MUST be grounded in REAL facts from this specific context. Do NOT fabricate or hallucinate events.
+
+---
+
+`
+    : '';
+
+  const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
 ${complexityInstructions}
 
@@ -493,7 +512,16 @@ CRITICAL RULES:
 4. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
 5. Return ONLY valid JSON, no markdown code blocks`;
 
-  const text = await callApi(prompt, { jsonMode: true, webSearch: needsWebSearch });
+  // Build search prompt to guide how web results are used
+  const searchPromptText = needsWebSearch
+    ? `Use these web search results about "${shortDomain}" to write an accurate, historically-grounded narrative story. The story must reference REAL events, people, and facts from the search results - do not fabricate any details.`
+    : undefined;
+
+  const text = await callApi(prompt, {
+    jsonMode: true,
+    webSearch: needsWebSearch,
+    searchPrompt: searchPromptText
+  });
   return safeJsonParse(text);
 };
 
@@ -1095,6 +1123,33 @@ export const generateMasteryStory = async (
   // Note: Web search is now handled by OpenRouter's native plugin
   // Enabled via the webSearch option in callApi for Stage 1 and granular topics
 
+  // Check granularity EARLY so we can front-load domain context for web search
+  // Use DOMAIN granularity to decide web search (not topic)
+  // Domain like "2002 NFL Week 4" needs real historical data
+  // Topic like "tensor calculus" is timeless and doesn't need web search
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const useWebSearch = stage === 1 || domainGranularity.isGranular;
+
+  if (useWebSearch) {
+    console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
+    if (domainGranularity.isGranular) {
+      console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
+    }
+  }
+
+  // Front-load domain context for web search when needed
+  // This ensures the search engine finds relevant historical data about the specific domain
+  const webSearchContext = useWebSearch
+    ? `IMPORTANT - SEARCH FOR THIS HISTORICAL CONTEXT FIRST:
+I need accurate historical information about: "${domain}"
+Search query: "${domain} highlights memorable moments key events history"
+The narrative MUST be grounded in REAL facts from this specific context. Do NOT fabricate or hallucinate events.
+
+---
+
+`
+    : '';
+
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
 Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
@@ -1148,7 +1203,7 @@ CRITICAL RULES:
 - MAINTAIN all historical accuracy from previous stages (real names, dates, statistics)`
   };
 
-  const prompt = `You are creating a ${domain} narrative story to teach "${topic}" through analogy.
+  const prompt = `${webSearchContext}You are creating a ${domain} narrative story to teach "${topic}" through analogy.
 
 ${stageInstructions[stage]}
 
@@ -1170,21 +1225,15 @@ HISTORICAL ACCURACY (MANDATORY):
 Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
-    // Enable web search for Stage 1 stories to get accurate historical data
-    // Also check if topic/domain have granularity signals
-    // Use DOMAIN granularity to decide web search (not topic)
-    // Domain like "2002 NFL Week 4" needs real historical data
-    // Topic like "tensor calculus" is timeless and doesn't need web search
-    const { domainGranularity } = detectGranularitySignals(topic, domain);
-    const useWebSearch = stage === 1 || domainGranularity.isGranular;
-    if (useWebSearch) {
-      console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
-      if (domainGranularity.isGranular) {
-        console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
-      }
-    }
+    // Build search prompt to guide how web results are used
+    const searchPromptText = useWebSearch
+      ? `Use these web search results about "${domain}" to write an accurate, historically-grounded narrative story. The story must reference REAL events, people, and facts from the search results - do not fabricate any details.`
+      : undefined;
 
-    const storyContent = await callApi(prompt, { webSearch: useWebSearch });
+    const storyContent = await callApi(prompt, {
+      webSearch: useWebSearch,
+      searchPrompt: searchPromptText
+    });
 
     // Clean up the response
     const cleanContent = storyContent
