@@ -208,6 +208,7 @@ export default function App() {
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
+  const [isDisambiguating, setIsDisambiguating] = useState(false);
 
   // Proximity Warning State
   const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
@@ -989,10 +990,17 @@ export default function App() {
   };
 
   const loadFromHistory = (entry: HistoryItem) => {
+    // Reset all state first to prevent stale data bleeding through
+    resetAllState({ keepDomain: true });
+
+    // Now load the history entry
     setTopic(entry.topic);
+    setLastSubmittedTopic(entry.topic);
     setAnalogyDomain(entry.domain);
     loadContent(entry.data, entry.topic);
     setShowHistory(false);
+    setHasStarted(true);
+    setShowContext(true);
   };
 
   // Check if morph should be locked (definition popup open OR user is selecting text)
@@ -1038,15 +1046,87 @@ export default function App() {
     return { text: "Tech Locked", icon: <Lock size={14} /> };
   };
 
-  const resetAll = () => {
+  // Comprehensive state reset - clears everything except history and domain selection
+  const resetAllState = (options: { keepDomain?: boolean; keepTopic?: boolean } = {}) => {
+    // Content State
+    setSegments([]);
+    setConceptMap([]);
+    setImportanceMap([]);
     setProcessedWords([]);
-    setIsHovering(false);
-    setDefPosition(null);
-    setMiniDefPosition(null);
+    setContextData(null);
+    setSynthesisSummary("");
+    setSynthesisCitation("");
+
+    // UI State
+    setIsLoading(false);
     setHasStarted(false);
-    setTopic("");
-    setLastSubmittedTopic("");
+    setIsHovering(false);
+    setIsScrolling(false);
+    setIsTransitioning(false);
+    setShowContext(false);
+    setShowSynthesis(false);
+
+    // Topic State
+    if (!options.keepTopic) {
+      setTopic("");
+      setLastSubmittedTopic("");
+    }
+
+    // Definition State
+    setSelectedTerm(null);
+    setDefPosition(null);
+    setDefText("");
+    setIsLoadingDef(false);
+
+    // Mini Definition State
+    setMiniSelectedTerm(null);
+    setMiniDefPosition(null);
+    setMiniDefText("");
+    setIsLoadingMiniDef(false);
+
+    // Tutor State
     setShowFollowUp(false);
+    setFollowUpQuery("");
+    setTutorResponse(null);
+    setIsTutorLoading(false);
+    setTutorHistory([]);
+
+    // Quiz State
+    setShowQuizModal(false);
+    setQuizData(null);
+    setQuizFeedback(null);
+    setIsQuizLoading(false);
+    setQuizQuestionNumber(1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+
+    // Disambiguation State
+    setDisambiguation(null);
+    setIsDisambiguating(false);
+    setProximityWarning(null);
+
+    // Selection State
+    setShowDefineButton(false);
+    setDefineButtonPosition(null);
+    setPendingSelection("");
+    setIsSelectingText(false);
+    setMorphLockedForSelection(false);
+
+    // Complexity State
+    setMainComplexity(50);
+    setIsRegenerating(false);
+
+    // View modes - reset to defaults
+    setViewMode('morph');
+    setIsNarrativeMode(false);
+    setIsConstellationMode(false);
+    setIsDualPaneMode(false);
+  };
+
+  // Legacy reset function for backwards compatibility
+  const resetAll = () => {
+    resetAllState();
   };
 
   // Render helpers
@@ -1391,16 +1471,25 @@ export default function App() {
         <DisambiguationModal
           disambiguation={disambiguation}
           isDarkMode={isDarkMode}
-          onSelect={(opt) => {
+          isLoading={isDisambiguating}
+          onSelect={async (opt) => {
+            setIsDisambiguating(true);
+            // Clear current state before proceeding
+            resetAllState({ keepDomain: true, keepTopic: true });
+
             if (disambiguation.type === 'topic') {
               setTopic(opt);
               setDisambiguation(null);
-              fetchAnalogy(opt);
+              await fetchAnalogy(opt);
             } else {
-              handleSetDomain(opt);
+              await handleSetDomain(opt);
             }
+            setIsDisambiguating(false);
           }}
-          onCancel={() => setDisambiguation(null)}
+          onCancel={() => {
+            setDisambiguation(null);
+            setIsDisambiguating(false);
+          }}
         />
       )}
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Globe, ArrowRight, Loader2, HelpCircle, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Globe, ArrowRight, Loader2, HelpCircle } from 'lucide-react';
 import { QUICK_START_DOMAINS } from '../constants';
 import { DisambiguationData } from '../types';
 
@@ -10,7 +10,7 @@ interface DomainSelectionProps {
   domainError: string;
   disambiguation: DisambiguationData | null;
   setDisambiguation: (value: DisambiguationData | null) => void;
-  handleSetDomain: (override?: string | null) => void;
+  handleSetDomain: (override?: string | null) => Promise<void> | void;
 }
 
 export const DomainSelection: React.FC<DomainSelectionProps> = ({
@@ -22,36 +22,59 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
   setDisambiguation,
   handleSetDomain
 }) => {
+  const [isSelectingOption, setIsSelectingOption] = useState(false);
+
+  const handleOptionSelect = async (opt: string) => {
+    setIsSelectingOption(true);
+    await handleSetDomain(opt);
+    setIsSelectingOption(false);
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6 relative">
       {/* Disambiguation Modal */}
       {disambiguation && disambiguation.type === 'domain' && (
         <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
           <div className="max-w-md w-full bg-white border border-neutral-200 shadow-2xl rounded-2xl p-8 space-y-6">
-            <div className="flex items-center gap-3 text-amber-500">
-              <HelpCircle size={32} />
-              <h3 className="text-xl font-bold text-neutral-800">Did you mean...?</h3>
-            </div>
-            <p className="text-neutral-600">
-              Your input "<span className="font-medium">{disambiguation.original}</span>" is ambiguous. Please select an option:
-            </p>
-            <div className="space-y-2">
-              {disambiguation.options.map((opt, i) => (
+            {isSelectingOption ? (
+              // Loading state
+              <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <Loader2 size={48} className="animate-spin text-blue-500" />
+                <p className="text-lg font-medium text-neutral-700">
+                  Setting up your domain...
+                </p>
+              </div>
+            ) : (
+              // Selection state
+              <>
+                <div className="flex items-center gap-3 text-amber-500">
+                  <HelpCircle size={32} />
+                  <h3 className="text-xl font-bold text-neutral-800">Did you mean...?</h3>
+                </div>
+                <p className="text-neutral-600">
+                  Your input "<span className="font-medium">{disambiguation.original}</span>" is ambiguous. Please select an option:
+                </p>
+                <div className="space-y-2">
+                  {disambiguation.options.map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleOptionSelect(opt)}
+                      disabled={isSelectingOption}
+                      className="w-full text-left p-3 rounded-lg border border-neutral-200 hover:border-blue-500 hover:bg-blue-50 transition-colors text-neutral-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  key={i}
-                  onClick={() => handleSetDomain(opt)}
-                  className="w-full text-left p-3 rounded-lg border border-neutral-200 hover:border-blue-500 hover:bg-blue-50 transition-colors text-neutral-700 font-medium"
+                  onClick={() => setDisambiguation(null)}
+                  disabled={isSelectingOption}
+                  className="w-full text-center text-neutral-500 hover:text-neutral-700 text-sm disabled:opacity-50"
                 >
-                  {opt}
+                  Cancel
                 </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setDisambiguation(null)}
-              className="w-full text-center text-neutral-500 hover:text-neutral-700 text-sm"
-            >
-              Cancel
-            </button>
+              </>
+            )}
           </div>
         </div>
       )}
