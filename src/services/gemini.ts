@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, HUGGINGFACE_INFERENCE_URL } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
 
@@ -236,162 +236,42 @@ const detectGranularitySignals = (topic: string, domain: string): { isGranular: 
 };
 
 /**
- * Call FunctionGemma via HuggingFace to decide if we need external data
- * Falls back to heuristic detection if API unavailable
+ * Route query using heuristic detection
+ * Note: FunctionGemma API calls are disabled in browser due to CORS restrictions.
+ * The heuristic detection works well for most use cases.
+ * For server-side implementations, FunctionGemma can be enabled.
  */
 export const routeQuery = async (
   topic: string,
   domain: string
 ): Promise<RoutingDecision> => {
-  const apiKey = getHuggingFaceApiKey();
-
-  // First, use heuristic detection for granularity signals
+  // Use heuristic detection (works in browser without CORS issues)
   const { isGranular, signals } = detectGranularitySignals(topic, domain);
 
-  // If no API key, use heuristic-only routing
-  if (!apiKey) {
-    if (isGranular) {
-      // Construct a search query from the granular signals
-      const searchQuery = `${domain} ${signals.join(' ')} ${topic}`.slice(0, 100);
-      return {
-        action: 'web_search',
-        query: searchQuery,
-        reason: `Heuristic detection: ${signals.join(', ')}`,
-        confidence: 0.7
-      };
-    }
+  if (isGranular) {
+    // Construct a search query from the granular signals
+    const shortDomain = domain.indexOf('(') > 0
+      ? domain.substring(0, domain.indexOf('(')).trim()
+      : domain;
+    const searchQuery = `${shortDomain} ${topic}`.slice(0, 100);
     return {
-      action: 'none',
-      reason: 'No granularity signals detected (heuristic mode)',
-      confidence: 0.6
+      action: 'web_search',
+      query: searchQuery,
+      reason: `Detected: ${signals.join(', ')}`,
+      confidence: 0.7
     };
   }
 
-  // With API key, use FunctionGemma for smarter routing
-  try {
-    const functionSchema = {
-      name: "route_query",
-      description: "Decide if we need to fetch external data for accurate content generation",
-      parameters: {
-        type: "object",
-        properties: {
-          action: {
-            type: "string",
-            enum: ["none", "web_search", "get_statistics", "verify_facts"],
-            description: "Action to take: none (LLM has enough knowledge), web_search (need current/specific data), get_statistics (need exact numbers), verify_facts (need to check accuracy)"
-          },
-          query: {
-            type: "string",
-            description: "Search query if action requires fetching data"
-          },
-          reason: {
-            type: "string",
-            description: "Brief explanation of why this routing decision was made"
-          }
-        },
-        required: ["action", "reason"]
-      }
-    };
-
-    const prompt = `You are a routing assistant. Decide if generating content about "${topic}" using "${domain}" as an analogy requires fetching external data.
-
-CONTEXT:
-- Topic to explain: "${topic}"
-- Analogy domain: "${domain}"
-- Detected granularity signals: ${signals.length > 0 ? signals.join(', ') : 'none'}
-
-ROUTING RULES:
-1. action="none" if the LLM likely has accurate knowledge (general concepts, well-known facts)
-2. action="web_search" if:
-   - Specific years, seasons, episodes are mentioned
-   - Current/recent data is needed (2023+)
-   - Specific statistics, scores, or records are required
-   - Lesser-known or niche references
-3. action="get_statistics" if exact numbers, stats, or records are central to the content
-4. action="verify_facts" if specific historical claims need verification
-
-Available function:
-${JSON.stringify(functionSchema, null, 2)}
-
-Respond with a function call in this exact format:
-{"action": "...", "query": "...", "reason": "..."}`;
-
-    const response = await fetch(HUGGINGFACE_INFERENCE_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 150,
-          return_full_text: false
-        }
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HuggingFace API error: ${response.status}`);
-    }
-
-    const result = await response.json();
-    const generatedText = result[0]?.generated_text || '';
-
-    // Parse the function call response
-    const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = safeJsonParse(jsonMatch[0]);
-      if (parsed && parsed.action) {
-        return {
-          action: parsed.action,
-          query: parsed.query,
-          reason: parsed.reason || 'FunctionGemma routing',
-          confidence: 0.85
-        };
-      }
-    }
-
-    // Fallback to heuristic if parsing fails
-    if (isGranular) {
-      return {
-        action: 'web_search',
-        query: `${domain} ${topic}`,
-        reason: `FunctionGemma parse failed, using heuristic: ${signals.join(', ')}`,
-        confidence: 0.6
-      };
-    }
-
-    return {
-      action: 'none',
-      reason: 'FunctionGemma returned no actionable routing',
-      confidence: 0.5
-    };
-
-  } catch (error) {
-    console.error('FunctionGemma routing error:', error);
-
-    // Fallback to heuristic on error
-    if (isGranular) {
-      return {
-        action: 'web_search',
-        query: `${domain} ${topic}`,
-        reason: `API error, using heuristic: ${signals.join(', ')}`,
-        confidence: 0.6
-      };
-    }
-
-    return {
-      action: 'none',
-      reason: 'Routing unavailable, proceeding without enrichment',
-      confidence: 0.4
-    };
-  }
+  return {
+    action: 'none',
+    reason: 'No granularity signals detected',
+    confidence: 0.6
+  };
 };
 
 /**
- * Fetch web data using a simple search approach
- * Uses DuckDuckGo instant answers API (no key required) as fallback
+ * Fetch web data using DuckDuckGo instant answers API
+ * Note: This may have CORS issues in some browsers - fails gracefully
  */
 const fetchWebData = async (query: string): Promise<string | null> => {
   try {
