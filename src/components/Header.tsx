@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sparkles, History, Moon, Sun, Loader2 } from 'lucide-react';
 import { Settings } from './Settings';
 
@@ -18,6 +18,18 @@ interface HeaderProps {
   onSubmit: () => void;
 }
 
+/**
+ * Extract the short domain name (before parentheses disambiguation)
+ * e.g., "2002 NFL season (American football season...)" -> "2002 NFL season"
+ */
+const getShortDomainName = (domain: string): string => {
+  const parenIndex = domain.indexOf('(');
+  if (parenIndex > 0) {
+    return domain.substring(0, parenIndex).trim();
+  }
+  return domain;
+};
+
 export const Header: React.FC<HeaderProps> = ({
   analogyDomain,
   domainEmoji,
@@ -33,6 +45,9 @@ export const Header: React.FC<HeaderProps> = ({
   onDomainClick,
   onSubmit
 }) => {
+  const [isHoveringDomain, setIsHoveringDomain] = useState(false);
+  const shortDomain = getShortDomainName(analogyDomain);
+
   return (
     <header
       className={`sticky top-0 z-50 backdrop-blur-md border-b transition-all duration-500 ${
@@ -43,14 +58,25 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onDomainClick}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            onMouseEnter={() => setIsHoveringDomain(true)}
+            onMouseLeave={() => setIsHoveringDomain(false)}
+            className={`flex items-center gap-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+              isHoveringDomain ? 'px-3' : 'px-2'
+            } ${
               isDarkMode
                 ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
                 : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'
             }`}
+            title={shortDomain}
           >
             <span className="text-base">{domainEmoji}</span>
-            <span className="hidden sm:inline">{analogyDomain}</span>
+            <span
+              className={`overflow-hidden transition-all duration-200 whitespace-nowrap ${
+                isHoveringDomain ? 'max-w-[200px] opacity-100' : 'max-w-0 opacity-0'
+              }`}
+            >
+              {shortDomain}
+            </span>
           </button>
 
           <button

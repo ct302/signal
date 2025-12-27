@@ -370,4 +370,16 @@ export interface EnrichedContext {
   enrichedPromptContext?: string; // Formatted context for LLM
 }
 
+/**
+ * Cached domain enrichment - fetched once when domain is selected,
+ * reused for all subsequent generations in the session
+ */
+export interface CachedDomainEnrichment {
+  domain: string;              // The domain this enrichment is for
+  shortDomain: string;         // Short name (without disambiguation)
+  wasEnriched: boolean;        // Whether enrichment data was fetched
+  fetchedData?: string;        // Historical/factual data about the domain
+  enrichedAt: Date;            // When this was fetched
+}
+
 export {};

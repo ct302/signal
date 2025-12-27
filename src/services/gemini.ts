@@ -1,6 +1,6 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, HUGGINGFACE_INFERENCE_URL } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -476,6 +476,53 @@ Use the above verified data to ensure historical accuracy in your response.
 };
 
 /**
+ * Extract short domain name (before parentheses disambiguation)
+ */
+const getShortDomain = (domain: string): string => {
+  const parenIndex = domain.indexOf('(');
+  return parenIndex > 0 ? domain.substring(0, parenIndex).trim() : domain;
+};
+
+/**
+ * Enrich domain on selection - called once when user selects their expertise domain
+ * Returns cached enrichment data to be reused for all subsequent generations
+ */
+export const enrichDomainOnSelection = async (domain: string): Promise<CachedDomainEnrichment> => {
+  const shortDomain = getShortDomain(domain);
+
+  // Check for granularity signals in the domain itself
+  const { isGranular, signals } = detectGranularitySignals('', domain);
+
+  // If domain has granular signals (specific years, seasons, etc.), fetch enrichment data
+  if (isGranular) {
+    console.log(`[Domain Enrichment] Detected granular domain: ${signals.join(', ')}`);
+
+    // Build a search query focused on the domain
+    const searchQuery = `${shortDomain} history facts statistics`;
+    const fetchedData = await fetchWebData(searchQuery);
+
+    if (fetchedData) {
+      console.log(`[Domain Enrichment] Successfully fetched data for domain: ${shortDomain}`);
+      return {
+        domain,
+        shortDomain,
+        wasEnriched: true,
+        fetchedData,
+        enrichedAt: new Date()
+      };
+    }
+  }
+
+  // No enrichment needed or fetch failed
+  return {
+    domain,
+    shortDomain,
+    wasEnriched: false,
+    enrichedAt: new Date()
+  };
+};
+
+/**
  * Fetch available Ollama models
  */
 export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[]> => {
@@ -508,19 +555,38 @@ const getComplexityPrompt = (level: number): string => {
 /**
  * Generate analogy content for a topic
  * Automatically enriches with web data when granular references are detected
+ * Accepts optional cached domain enrichment to avoid redundant fetches
  */
-export const generateAnalogy = async (topic: string, domain: string, complexity: number = 50) => {
+export const generateAnalogy = async (
+  topic: string,
+  domain: string,
+  complexity: number = 50,
+  cachedDomainEnrichment?: CachedDomainEnrichment
+) => {
   const complexityInstructions = getComplexityPrompt(complexity);
+  const shortDomain = getShortDomain(domain);
 
-  // Check if we need to enrich with external data (granular references like specific years, episodes, stats)
+  // Build enrichment from multiple sources:
+  // 1. Cached domain enrichment (fetched once on domain selection)
+  // 2. Topic-specific routing (if topic has granular signals)
+  let enrichmentParts: string[] = [];
+
+  // Add cached domain enrichment if available
+  if (cachedDomainEnrichment?.wasEnriched && cachedDomainEnrichment.fetchedData) {
+    enrichmentParts.push(`DOMAIN REFERENCE DATA (verified facts about ${shortDomain}):\n${cachedDomainEnrichment.fetchedData}`);
+  }
+
+  // Also check topic for granular signals
   const enrichedContext = await enrichWithRouting(topic, domain);
+  if (enrichedContext.wasEnriched && enrichedContext.fetchedData) {
+    enrichmentParts.push(`TOPIC REFERENCE DATA:\n${enrichedContext.fetchedData}`);
+  }
 
-  // Build enrichment section if we fetched data
-  const enrichmentSection = enrichedContext.wasEnriched && enrichedContext.enrichedPromptContext
-    ? `\n${enrichedContext.enrichedPromptContext}\n`
+  const enrichmentSection = enrichmentParts.length > 0
+    ? `\nVERIFIED REFERENCE DATA (use these facts for historical accuracy):\n${enrichmentParts.join('\n\n')}\n`
     : '';
 
-  const prompt = `Create a comprehensive learning module for "${topic}" using "${domain}" as an analogical lens.
+  const prompt = `Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 ${enrichmentSection}
 
 ${complexityInstructions}
@@ -528,16 +594,16 @@ ${complexityInstructions}
 REQUIRED JSON STRUCTURE (strict compliance):
 {
   "technical_explanation": "Thorough technical explanation (2-3 paragraphs, 200+ words). Include mathematical notation in LaTeX ($...$) where appropriate.",
-  "analogy_explanation": "Vivid ${domain} analogy that parallels the technical content (2-3 paragraphs, 200+ words). Make it engaging and relatable. Use ${domain}-native vocabulary for concepts, NOT technical terms.",
+  "analogy_explanation": "A NARRATIVE STORY grounded in REAL ${shortDomain} history that parallels the technical content. Use SPECIFIC names, dates, games, statistics, and moments from ${shortDomain}. Write it as an engaging story (2-3 paragraphs, 200+ words). Use ${shortDomain}-native vocabulary for concepts, NOT technical terms. Make it feel like a ${shortDomain} documentary, not a generic analogy.",
   "segments": [
     {
       "tech": "A single sentence or concept from the technical explanation",
-      "analogy": "The corresponding ${domain} analogy sentence",
-      "narrative": "A brief story element (1-2 sentences) that makes this concept memorable"
+      "analogy": "The corresponding ${shortDomain} narrative moment - use specific historical details",
+      "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references that makes this concept memorable"
     }
   ],
   "concept_map": [
-    {"id": 0, "tech_term": "technical term from tech text", "analogy_term": "${domain}-native equivalent from analogy text"}
+    {"id": 0, "tech_term": "technical term from tech text", "analogy_term": "${shortDomain}-native equivalent from analogy text"}
   ],
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
@@ -555,9 +621,18 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
+NARRATIVE STORYTELLING REQUIREMENT (CRITICAL):
+The analogy_explanation must read like a DOCUMENTARY or STORY, not a generic comparison:
+- Use REAL names: players, coaches, teams, figures from ${shortDomain}
+- Use REAL events: games, matches, seasons, moments that actually happened
+- Use REAL statistics: scores, records, dates, measurable achievements
+- Example for NFL: "When Tom Brady orchestrated the 28-3 comeback in Super Bowl LI, each play call represented a tensor transformation..."
+- Example for Cooking: "Julia Child's first live television attempt at beef bourguignon illustrated how..."
+- NEVER use generic phrases like "imagine a quarterback" - use "when Patrick Mahomes faced the 49ers defense..."
+
 CONCEPT_MAP RULES (CRITICAL - THIS IS AN ISOMORPHIC MAPPING):
-The concept_map creates an ANALOGICAL ISOMORPHISM - mapping technical concepts to their ${domain} equivalents.
-Each mapping should connect a technical term to what a ${domain} expert would call the equivalent concept.
+The concept_map creates an ANALOGICAL ISOMORPHISM - mapping technical concepts to their ${shortDomain} equivalents.
+Each mapping should connect a technical term to what a ${shortDomain} expert would call the equivalent concept.
 
 ✅ GOOD concept_map examples (for NFL domain):
   - {"tech_term": "Jacobian matrix", "analogy_term": "play-calling chart"}
@@ -567,11 +642,11 @@ Each mapping should connect a technical term to what a ${domain} expert would ca
 
 ❌ BAD concept_map examples (NEVER do this):
   - {"tech_term": "Jacobian matrix", "analogy_term": "Jacobian matrix"} ← WRONG: same term!
-  - {"tech_term": "derivative", "analogy_term": "derivative"} ← WRONG: not a ${domain} term!
+  - {"tech_term": "derivative", "analogy_term": "derivative"} ← WRONG: not a ${shortDomain} term!
   - {"tech_term": "matrix", "analogy_term": "mathematical matrix"} ← WRONG: still technical!
 
 The analogy_term MUST be:
-1. A term native to ${domain} vocabulary (something a ${domain} fan would recognize)
+1. A term native to ${shortDomain} vocabulary (something a ${shortDomain} fan would recognize)
 2. DIFFERENT from the tech_term (never the same word)
 3. Functionally equivalent in the analogy (plays the same role)
 
@@ -587,7 +662,7 @@ CRITICAL RULES:
    - RIGHT: "$\\\\mathbf{x}$", "$\\\\frac{a}{b}$", "$\\\\cdot$"
    - Simple variables don't need backslash: "$x$", "$n$", "$e_i$"
    - Example: encryption "$E(m) = m \\\\cdot s + e$"
-6. The analogy should feel natural, not forced
+6. The analogy should feel like a REAL STORY from ${shortDomain} history, not a forced comparison
 7. Return ONLY valid JSON, no markdown code blocks`;
 
   const text = await callApi(prompt, true);

@@ -43,7 +43,8 @@ import {
   DisambiguationData,
   HistoryItem,
   ProximityResult,
-  CompleteMasteryHistory
+  CompleteMasteryHistory,
+  CachedDomainEnrichment
 } from './types';
 
 // Constants
@@ -69,7 +70,8 @@ import {
   checkDomainProximity,
   fetchDefinition as fetchDefinitionApi,
   generateQuiz,
-  askTutor
+  askTutor,
+  enrichDomainOnSelection
 } from './services';
 
 // Components
@@ -121,6 +123,7 @@ export default function App() {
   const [hasSelectedDomain, setHasSelectedDomain] = useState(false);
   const [isSettingDomain, setIsSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
+  const [cachedDomainEnrichment, setCachedDomainEnrichment] = useState<CachedDomainEnrichment | null>(null);
 
   // Topic State
   const [topic, setTopic] = useState("");
@@ -352,7 +355,7 @@ export default function App() {
     setContextData(null);
 
     try {
-      const parsed = await generateAnalogy(confirmedTopic, analogyDomain, complexity);
+      const parsed = await generateAnalogy(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
       if (parsed) {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
@@ -373,7 +376,7 @@ export default function App() {
     setIsRegenerating(true);
 
     try {
-      const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level);
+      const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (parsed) {
         loadContent(parsed, lastSubmittedTopic);
       }
@@ -384,9 +387,26 @@ export default function App() {
     }
   };
 
+  // Trigger domain enrichment asynchronously (non-blocking)
+  // This fetches verified data about granular domains for use in all subsequent generations
+  const triggerDomainEnrichment = async (domain: string) => {
+    try {
+      console.log(`[Domain Enrichment] Starting enrichment for: ${domain}`);
+      const enrichment = await enrichDomainOnSelection(domain);
+      setCachedDomainEnrichment(enrichment);
+      console.log(`[Domain Enrichment] Complete. Enriched: ${enrichment.wasEnriched}`);
+    } catch (error) {
+      console.error('[Domain Enrichment] Failed:', error);
+      // Non-fatal - continue without enrichment
+    }
+  };
+
   const handleSetDomain = async (overrideInput: string | null = null) => {
     const inputToUse = overrideInput || tempDomainInput;
     if (!inputToUse.trim()) return;
+
+    // Clear any previous domain enrichment when changing domains
+    setCachedDomainEnrichment(null);
 
     // Look up emoji from quick start domains first
     const quickStartMatch = QUICK_START_DOMAINS.find(
@@ -401,6 +421,8 @@ export default function App() {
       setHasSelectedDomain(true);
       setDisambiguation(null);
       setIsSettingDomain(false);
+      // Trigger enrichment asynchronously (non-blocking)
+      triggerDomainEnrichment(inputToUse);
       return;
     }
 
@@ -410,11 +432,14 @@ export default function App() {
       setDomainError("");
 
       const result = await checkAmbiguity(inputToUse, 'domain');
+      const finalDomain = result.corrected || inputToUse;
       setDomainEmoji(result.emoji || "🎯");
-      setAnalogyDomain(result.corrected || inputToUse);
+      setAnalogyDomain(finalDomain);
       setHasSelectedDomain(true);
       setDisambiguation(null);
       setIsSettingDomain(false);
+      // Trigger enrichment asynchronously (non-blocking)
+      triggerDomainEnrichment(finalDomain);
       return;
     }
 
@@ -433,10 +458,13 @@ export default function App() {
       return;
     }
 
+    const finalDomain = result.corrected || inputToUse;
     setDomainEmoji(result.emoji || "⚡");
-    setAnalogyDomain(result.corrected || inputToUse);
+    setAnalogyDomain(finalDomain);
     setHasSelectedDomain(true);
     setIsSettingDomain(false);
+    // Trigger enrichment asynchronously (non-blocking)
+    triggerDomainEnrichment(finalDomain);
   };
 
   const calculateIntelligentWeight = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): number => {
