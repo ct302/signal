@@ -254,11 +254,23 @@ export default function App() {
     }
 
     if (conceptMapArray && Array.isArray(conceptMapArray)) {
-      setConceptMap(conceptMapArray.map((c: any, i: number) => ({
-        id: c.id ?? i,
-        tech_term: cleanText(c.tech_term || c.techTerm || ""),
-        analogy_term: cleanText(c.analogy_term || c.analogyTerm || "")
-      })));
+      // Filter out invalid mappings where tech_term equals analogy_term (not a true isomorphism)
+      const validMappings = conceptMapArray
+        .map((c: any, i: number) => ({
+          id: c.id ?? i,
+          tech_term: cleanText(c.tech_term || c.techTerm || ""),
+          analogy_term: cleanText(c.analogy_term || c.analogyTerm || "")
+        }))
+        .filter((c: { tech_term: string; analogy_term: string }) => {
+          const techLower = c.tech_term.toLowerCase().trim();
+          const analogyLower = c.analogy_term.toLowerCase().trim();
+          // Reject if terms are identical or one contains the other entirely
+          if (techLower === analogyLower) return false;
+          if (techLower.length > 3 && analogyLower.includes(techLower)) return false;
+          if (analogyLower.length > 3 && techLower.includes(analogyLower)) return false;
+          return true;
+        });
+      setConceptMap(validMappings);
     }
 
     if (importanceMapArray && Array.isArray(importanceMapArray)) {

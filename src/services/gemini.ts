@@ -190,7 +190,7 @@ ${complexityInstructions}
 REQUIRED JSON STRUCTURE (strict compliance):
 {
   "technical_explanation": "Thorough technical explanation (2-3 paragraphs, 200+ words). Include mathematical notation in LaTeX ($...$) where appropriate.",
-  "analogy_explanation": "Vivid ${domain} analogy that parallels the technical content (2-3 paragraphs, 200+ words). Make it engaging and relatable.",
+  "analogy_explanation": "Vivid ${domain} analogy that parallels the technical content (2-3 paragraphs, 200+ words). Make it engaging and relatable. Use ${domain}-native vocabulary for concepts, NOT technical terms.",
   "segments": [
     {
       "tech": "A single sentence or concept from the technical explanation",
@@ -199,7 +199,7 @@ REQUIRED JSON STRUCTURE (strict compliance):
     }
   ],
   "concept_map": [
-    {"id": 0, "tech_term": "exact term from tech text", "analogy_term": "exact term from analogy text"}
+    {"id": 0, "tech_term": "technical term from tech text", "analogy_term": "${domain}-native equivalent from analogy text"}
   ],
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
@@ -217,19 +217,40 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
+CONCEPT_MAP RULES (CRITICAL - THIS IS AN ISOMORPHIC MAPPING):
+The concept_map creates an ANALOGICAL ISOMORPHISM - mapping technical concepts to their ${domain} equivalents.
+Each mapping should connect a technical term to what a ${domain} expert would call the equivalent concept.
+
+✅ GOOD concept_map examples (for NFL domain):
+  - {"tech_term": "Jacobian matrix", "analogy_term": "play-calling chart"}
+  - {"tech_term": "partial derivative", "analogy_term": "individual route adjustment"}
+  - {"tech_term": "gradient", "analogy_term": "optimal drive direction"}
+  - {"tech_term": "eigenvalue", "analogy_term": "key player impact rating"}
+
+❌ BAD concept_map examples (NEVER do this):
+  - {"tech_term": "Jacobian matrix", "analogy_term": "Jacobian matrix"} ← WRONG: same term!
+  - {"tech_term": "derivative", "analogy_term": "derivative"} ← WRONG: not a ${domain} term!
+  - {"tech_term": "matrix", "analogy_term": "mathematical matrix"} ← WRONG: still technical!
+
+The analogy_term MUST be:
+1. A term native to ${domain} vocabulary (something a ${domain} fan would recognize)
+2. DIFFERENT from the tech_term (never the same word)
+3. Functionally equivalent in the analogy (plays the same role)
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
-2. concept_map terms MUST be exact word matches from the text
-3. importance_map should include ALL significant terms (15-25 items)
-4. LaTeX FORMATTING (CRITICAL - JSON ESCAPING REQUIRED):
+2. concept_map: tech_term must appear in technical_explanation, analogy_term must appear in analogy_explanation
+3. concept_map: analogy_term must NEVER equal tech_term - they must be different words
+4. importance_map should include ALL significant terms (15-25 items)
+5. LaTeX FORMATTING (CRITICAL - JSON ESCAPING REQUIRED):
    - ALL math MUST be wrapped in dollar signs: $...$
    - In JSON strings, backslashes MUST be doubled: use \\\\ not \\
    - WRONG: "$mathbf{x}$" or "$\\mathbf{x}$"
    - RIGHT: "$\\\\mathbf{x}$", "$\\\\frac{a}{b}$", "$\\\\cdot$"
    - Simple variables don't need backslash: "$x$", "$n$", "$e_i$"
    - Example: encryption "$E(m) = m \\\\cdot s + e$"
-5. The analogy should feel natural, not forced
-6. Return ONLY valid JSON, no markdown code blocks`;
+6. The analogy should feel natural, not forced
+7. Return ONLY valid JSON, no markdown code blocks`;
 
   const text = await callApi(prompt, true);
   return safeJsonParse(text);
