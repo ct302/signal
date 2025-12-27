@@ -340,4 +340,34 @@ export interface MasteryShareData {
   };
 }
 
+// ============================================
+// FUNCTIONGEMMA ROUTING TYPES
+// ============================================
+
+export type RoutingAction = 'none' | 'web_search' | 'get_statistics' | 'verify_facts';
+
+/**
+ * Routing decision from FunctionGemma
+ * Determines if we need to fetch external data before generating content
+ */
+export interface RoutingDecision {
+  action: RoutingAction;
+  query?: string;              // Search query if action requires it
+  reason: string;              // Why this decision was made
+  confidence: number;          // 0-1 confidence in the decision
+}
+
+/**
+ * Enriched context after routing/fetching
+ * Passed to main LLM for grounded generation
+ */
+export interface EnrichedContext {
+  originalTopic: string;
+  originalDomain: string;
+  wasEnriched: boolean;
+  routingDecision: RoutingDecision;
+  fetchedData?: string;        // Raw data from web search if fetched
+  enrichedPromptContext?: string; // Formatted context for LLM
+}
+
 export {};

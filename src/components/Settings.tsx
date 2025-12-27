@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle, Sparkles } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
 import { fetchOllamaModels } from '../services';
+
+interface HuggingFaceConfig {
+  apiKey: string;
+}
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -26,9 +30,11 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showHfApiKey, setShowHfApiKey] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [hfConfig, setHfConfig] = useState<HuggingFaceConfig>({ apiKey: '' });
 
   // Load config from localStorage on mount
   useEffect(() => {
@@ -49,6 +55,16 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
         }
       } catch {
         // Use default config
+      }
+    }
+
+    // Load HuggingFace config
+    const hfStored = localStorage.getItem(STORAGE_KEYS.HUGGINGFACE_CONFIG);
+    if (hfStored) {
+      try {
+        setHfConfig(JSON.parse(hfStored));
+      } catch {
+        // Use default
       }
     }
   }, []);
@@ -80,6 +96,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const handleSave = () => {
     try {
       localStorage.setItem(STORAGE_KEYS.PROVIDER_CONFIG, JSON.stringify(config));
+      localStorage.setItem(STORAGE_KEYS.HUGGINGFACE_CONFIG, JSON.stringify(hfConfig));
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
@@ -244,8 +261,8 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
               value={config.model}
               onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
               className={`w-full px-3 py-2 rounded-lg border text-sm ${
-                isDarkMode 
-                  ? 'bg-neutral-700 border-neutral-600 text-white' 
+                isDarkMode
+                  ? 'bg-neutral-700 border-neutral-600 text-white'
                   : 'bg-white border-neutral-200 text-neutral-800'
               }`}
             >
@@ -253,6 +270,48 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
                 <option key={model} value={model}>{model}</option>
               ))}
             </select>
+          </div>
+
+          {/* Divider */}
+          <div className={`border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`} />
+
+          {/* Data Enrichment Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={16} className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} />
+              <label className={`text-sm font-medium ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
+                Data Enrichment (Optional)
+              </label>
+            </div>
+            <p className={`text-xs mb-3 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              Add a HuggingFace API key to enable smart routing via FunctionGemma.
+              When enabled, queries with specific references (years, seasons, statistics) are
+              automatically enriched with verified data for historical accuracy.
+            </p>
+            <div className="relative">
+              <input
+                type={showHfApiKey ? 'text' : 'password'}
+                value={hfConfig.apiKey}
+                onChange={(e) => setHfConfig({ apiKey: e.target.value })}
+                placeholder="hf_xxxxxxxxxxxxxxxxxxxxx"
+                className={`w-full px-3 py-2 pr-10 rounded-lg border text-sm ${
+                  isDarkMode
+                    ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500'
+                    : 'bg-white border-neutral-200 text-neutral-800 placeholder-neutral-400'
+                }`}
+              />
+              <button
+                onClick={() => setShowHfApiKey(!showHfApiKey)}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded ${
+                  isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-neutral-400 hover:text-neutral-600'
+                }`}
+              >
+                {showHfApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className={`mt-1 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              {hfConfig.apiKey ? 'Smart routing enabled' : 'Without this, basic pattern detection is used (still works!)'}
+            </p>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, HUGGINGFACE_INFERENCE_URL } from '../constants';
 import { fetchWithRetry, safeJsonParse } from '../utils';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext } from '../types';
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -147,6 +147,334 @@ const callApi = async (prompt: string, jsonMode: boolean = false): Promise<strin
   return extractResponseText(data, config);
 };
 
+// ============================================
+// FUNCTIONGEMMA ROUTING LAYER
+// ============================================
+
+/**
+ * Get HuggingFace API key from storage
+ */
+const getHuggingFaceApiKey = (): string | null => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.HUGGINGFACE_CONFIG);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.apiKey || null;
+    }
+  } catch {
+    // Fall through
+  }
+  return null;
+};
+
+/**
+ * Check if routing is enabled (has HuggingFace API key)
+ */
+export const isRoutingEnabled = (): boolean => {
+  return !!getHuggingFaceApiKey();
+};
+
+/**
+ * Detect granularity signals that suggest we need fresh data
+ * Returns true if the domain reference appears to be specific/granular
+ */
+const detectGranularitySignals = (topic: string, domain: string): { isGranular: boolean; signals: string[] } => {
+  const combined = `${topic} ${domain}`.toLowerCase();
+  const signals: string[] = [];
+
+  // Year patterns (specific seasons, years)
+  const yearMatch = combined.match(/\b(19|20)\d{2}\b/);
+  if (yearMatch) {
+    signals.push(`specific year: ${yearMatch[0]}`);
+  }
+
+  // Season/Episode patterns
+  if (/\b(s\d+e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+)\b/i.test(combined)) {
+    signals.push('specific episode/season reference');
+  }
+
+  // Specific game/match patterns
+  if (/\b(game\s*\d+|super\s*bowl\s*[ivxlcdm]+|week\s*\d+|round\s*\d+|finals?)\b/i.test(combined)) {
+    signals.push('specific game/match reference');
+  }
+
+  // Statistical indicators
+  if (/\b(stats?|statistics|record|score|yards|points|goals|wins|losses)\b/i.test(combined)) {
+    signals.push('statistical data requested');
+  }
+
+  // Recent time indicators
+  if (/\b(recent|latest|current|this\s+year|last\s+year|202[3-9]|today)\b/i.test(combined)) {
+    signals.push('recent/current data requested');
+  }
+
+  // Specific person + context (likely needs verification)
+  const specificPersonPatterns = [
+    /\b(tom\s+brady|patrick\s+mahomes|lebron|jordan|curry)\b.*\b(game|season|stats?|record)\b/i,
+    /\b(game|season|stats?|record)\b.*\b(tom\s+brady|patrick\s+mahomes|lebron|jordan|curry)\b/i
+  ];
+  if (specificPersonPatterns.some(p => p.test(combined))) {
+    signals.push('specific person + context combination');
+  }
+
+  return {
+    isGranular: signals.length > 0,
+    signals
+  };
+};
+
+/**
+ * Call FunctionGemma via HuggingFace to decide if we need external data
+ * Falls back to heuristic detection if API unavailable
+ */
+export const routeQuery = async (
+  topic: string,
+  domain: string
+): Promise<RoutingDecision> => {
+  const apiKey = getHuggingFaceApiKey();
+
+  // First, use heuristic detection for granularity signals
+  const { isGranular, signals } = detectGranularitySignals(topic, domain);
+
+  // If no API key, use heuristic-only routing
+  if (!apiKey) {
+    if (isGranular) {
+      // Construct a search query from the granular signals
+      const searchQuery = `${domain} ${signals.join(' ')} ${topic}`.slice(0, 100);
+      return {
+        action: 'web_search',
+        query: searchQuery,
+        reason: `Heuristic detection: ${signals.join(', ')}`,
+        confidence: 0.7
+      };
+    }
+    return {
+      action: 'none',
+      reason: 'No granularity signals detected (heuristic mode)',
+      confidence: 0.6
+    };
+  }
+
+  // With API key, use FunctionGemma for smarter routing
+  try {
+    const functionSchema = {
+      name: "route_query",
+      description: "Decide if we need to fetch external data for accurate content generation",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["none", "web_search", "get_statistics", "verify_facts"],
+            description: "Action to take: none (LLM has enough knowledge), web_search (need current/specific data), get_statistics (need exact numbers), verify_facts (need to check accuracy)"
+          },
+          query: {
+            type: "string",
+            description: "Search query if action requires fetching data"
+          },
+          reason: {
+            type: "string",
+            description: "Brief explanation of why this routing decision was made"
+          }
+        },
+        required: ["action", "reason"]
+      }
+    };
+
+    const prompt = `You are a routing assistant. Decide if generating content about "${topic}" using "${domain}" as an analogy requires fetching external data.
+
+CONTEXT:
+- Topic to explain: "${topic}"
+- Analogy domain: "${domain}"
+- Detected granularity signals: ${signals.length > 0 ? signals.join(', ') : 'none'}
+
+ROUTING RULES:
+1. action="none" if the LLM likely has accurate knowledge (general concepts, well-known facts)
+2. action="web_search" if:
+   - Specific years, seasons, episodes are mentioned
+   - Current/recent data is needed (2023+)
+   - Specific statistics, scores, or records are required
+   - Lesser-known or niche references
+3. action="get_statistics" if exact numbers, stats, or records are central to the content
+4. action="verify_facts" if specific historical claims need verification
+
+Available function:
+${JSON.stringify(functionSchema, null, 2)}
+
+Respond with a function call in this exact format:
+{"action": "...", "query": "...", "reason": "..."}`;
+
+    const response = await fetch(HUGGINGFACE_INFERENCE_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          max_new_tokens: 150,
+          return_full_text: false
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HuggingFace API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const generatedText = result[0]?.generated_text || '';
+
+    // Parse the function call response
+    const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = safeJsonParse(jsonMatch[0]);
+      if (parsed && parsed.action) {
+        return {
+          action: parsed.action,
+          query: parsed.query,
+          reason: parsed.reason || 'FunctionGemma routing',
+          confidence: 0.85
+        };
+      }
+    }
+
+    // Fallback to heuristic if parsing fails
+    if (isGranular) {
+      return {
+        action: 'web_search',
+        query: `${domain} ${topic}`,
+        reason: `FunctionGemma parse failed, using heuristic: ${signals.join(', ')}`,
+        confidence: 0.6
+      };
+    }
+
+    return {
+      action: 'none',
+      reason: 'FunctionGemma returned no actionable routing',
+      confidence: 0.5
+    };
+
+  } catch (error) {
+    console.error('FunctionGemma routing error:', error);
+
+    // Fallback to heuristic on error
+    if (isGranular) {
+      return {
+        action: 'web_search',
+        query: `${domain} ${topic}`,
+        reason: `API error, using heuristic: ${signals.join(', ')}`,
+        confidence: 0.6
+      };
+    }
+
+    return {
+      action: 'none',
+      reason: 'Routing unavailable, proceeding without enrichment',
+      confidence: 0.4
+    };
+  }
+};
+
+/**
+ * Fetch web data using a simple search approach
+ * Uses DuckDuckGo instant answers API (no key required) as fallback
+ */
+const fetchWebData = async (query: string): Promise<string | null> => {
+  try {
+    // Try DuckDuckGo Instant Answer API (free, no key)
+    const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+
+    const response = await fetch(ddgUrl);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+
+    // Extract useful information
+    const parts: string[] = [];
+
+    if (data.Abstract) {
+      parts.push(data.Abstract);
+    }
+
+    if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+      const topics = data.RelatedTopics
+        .slice(0, 5)
+        .filter((t: any) => t.Text)
+        .map((t: any) => t.Text);
+      if (topics.length > 0) {
+        parts.push('Related information: ' + topics.join('. '));
+      }
+    }
+
+    if (data.Infobox && data.Infobox.content) {
+      const infoItems = data.Infobox.content
+        .slice(0, 5)
+        .filter((item: any) => item.label && item.value)
+        .map((item: any) => `${item.label}: ${item.value}`);
+      if (infoItems.length > 0) {
+        parts.push('Key facts: ' + infoItems.join(', '));
+      }
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
+
+  } catch (error) {
+    console.error('Web fetch error:', error);
+    return null;
+  }
+};
+
+/**
+ * Main enrichment function - routes query and fetches data if needed
+ * Returns enriched context for content generation
+ */
+export const enrichWithRouting = async (
+  topic: string,
+  domain: string
+): Promise<EnrichedContext> => {
+  // Get routing decision
+  const routingDecision = await routeQuery(topic, domain);
+
+  // If no action needed, return unenriched context
+  if (routingDecision.action === 'none') {
+    return {
+      originalTopic: topic,
+      originalDomain: domain,
+      wasEnriched: false,
+      routingDecision
+    };
+  }
+
+  // Fetch data based on routing decision
+  let fetchedData: string | null = null;
+
+  if (routingDecision.query) {
+    fetchedData = await fetchWebData(routingDecision.query);
+  }
+
+  // Build enriched prompt context
+  let enrichedPromptContext: string | undefined;
+  if (fetchedData) {
+    enrichedPromptContext = `
+VERIFIED REFERENCE DATA (use these facts for accuracy):
+${fetchedData}
+
+Use the above verified data to ensure historical accuracy in your response.
+`;
+  }
+
+  return {
+    originalTopic: topic,
+    originalDomain: domain,
+    wasEnriched: !!fetchedData,
+    routingDecision,
+    fetchedData: fetchedData || undefined,
+    enrichedPromptContext
+  };
+};
+
 /**
  * Fetch available Ollama models
  */
@@ -179,11 +507,21 @@ const getComplexityPrompt = (level: number): string => {
 
 /**
  * Generate analogy content for a topic
+ * Automatically enriches with web data when granular references are detected
  */
 export const generateAnalogy = async (topic: string, domain: string, complexity: number = 50) => {
   const complexityInstructions = getComplexityPrompt(complexity);
 
+  // Check if we need to enrich with external data (granular references like specific years, episodes, stats)
+  const enrichedContext = await enrichWithRouting(topic, domain);
+
+  // Build enrichment section if we fetched data
+  const enrichmentSection = enrichedContext.wasEnriched && enrichedContext.enrichedPromptContext
+    ? `\n${enrichedContext.enrichedPromptContext}\n`
+    : '';
+
   const prompt = `Create a comprehensive learning module for "${topic}" using "${domain}" as an analogical lens.
+${enrichmentSection}
 
 ${complexityInstructions}
 
@@ -842,6 +1180,7 @@ export const detectKeywordsInText = (
  * Stage 3: Same story structure with ALL 10 technical terms
  *
  * CRITICAL: Stories must be historically accurate with real teams, players, and moments
+ * Automatically enriches with web data when granular references are detected
  */
 export const generateMasteryStory = async (
   topic: string,
@@ -850,6 +1189,16 @@ export const generateMasteryStory = async (
   keywords: MasteryKeyword[],
   previousStory?: string // For continuity in stages 2-3
 ): Promise<MasteryStory> => {
+  // For Stage 1, enrich with external data for historical accuracy
+  // Stages 2-3 build on Stage 1's story, so they don't need separate enrichment
+  let enrichmentSection = '';
+  if (stage === 1) {
+    const enrichedContext = await enrichWithRouting(topic, domain);
+    if (enrichedContext.wasEnriched && enrichedContext.enrichedPromptContext) {
+      enrichmentSection = `\nHISTORICAL REFERENCE DATA (use these verified facts for accuracy):\n${enrichedContext.fetchedData || ''}\n`;
+    }
+  }
+
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
 Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
@@ -906,7 +1255,7 @@ CRITICAL RULES:
   const prompt = `You are creating a ${domain} narrative story to teach "${topic}" through analogy.
 
 ${stageInstructions[stage]}
-
+${enrichmentSection}
 STORY REQUIREMENTS:
 1. Written in present tense, active voice
 2. Uses vivid ${domain}-specific imagery and scenarios

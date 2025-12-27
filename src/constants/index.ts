@@ -7,6 +7,10 @@ export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
 // OpenRouter API key (demo/testing)
 export const DEFAULT_OPENROUTER_API_KEY = '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';
 
+// HuggingFace Inference API (for FunctionGemma routing)
+export const HUGGINGFACE_INFERENCE_URL = 'https://api-inference.huggingface.co/models/google/functiongemma-270m-it';
+export const DEFAULT_HUGGINGFACE_API_KEY = ''; // User provides their own, or uses free tier
+
 // OpenRouter models - hardcoded selection
 export const OPENROUTER_MODELS = [
   'google/gemini-2.0-flash-exp:free',
@@ -149,7 +153,8 @@ export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Ar
 // Local storage keys
 export const STORAGE_KEYS = {
   HISTORY: 'signalHistory',
-  PROVIDER_CONFIG: 'signalProviderConfig'
+  PROVIDER_CONFIG: 'signalProviderConfig',
+  HUGGINGFACE_CONFIG: 'signalHuggingFaceConfig'
 };
 
 // Limits
