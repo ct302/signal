@@ -195,61 +195,85 @@ export const isRoutingEnabled = (): boolean => {
 /**
  * Detect granularity signals that suggest we need fresh data
  * Domain-agnostic: works for any expertise domain (sports, TV, music, cooking, etc.)
+ * Returns separate signals for the text analyzed
  */
-const detectGranularitySignals = (topic: string, domain: string): { isGranular: boolean; signals: string[] } => {
-  const combined = `${topic} ${domain}`.toLowerCase();
+const detectGranularitySignalsInText = (text: string): { isGranular: boolean; signals: string[] } => {
+  const textLower = text.toLowerCase();
   const signals: string[] = [];
 
   // Year patterns (specific seasons, years, decades)
-  const yearMatch = combined.match(/\b(19|20)\d{2}\b/);
+  const yearMatch = textLower.match(/\b(19|20)\d{2}\b/);
   if (yearMatch) {
     signals.push(`specific year: ${yearMatch[0]}`);
   }
 
   // Season/Episode patterns (TV shows, podcasts, series)
-  if (/\b(s\d+e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|chapter\s*\d+|volume\s*\d+|part\s*\d+)\b/i.test(combined)) {
+  if (/\b(s\d+e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|chapter\s*\d+|volume\s*\d+|part\s*\d+)\b/i.test(textLower)) {
     signals.push('specific episode/season/chapter reference');
   }
 
   // Numbered events (games, rounds, editions, issues)
-  if (/\b(game\s*\d+|match\s*\d+|round\s*\d+|edition\s*\d+|issue\s*#?\d+|book\s*\d+|album\s*\d+)\b/i.test(combined)) {
+  if (/\b(game\s*\d+|match\s*\d+|round\s*\d+|edition\s*\d+|issue\s*#?\d+|book\s*\d+|album\s*\d+|week\s*\d+)\b/i.test(textLower)) {
     signals.push('specific numbered event/item');
   }
 
   // Championship/finale patterns (domain-agnostic)
-  if (/\b(finals?|championship|premiere|finale|pilot|debut|opener|closer)\b/i.test(combined)) {
+  if (/\b(finals?|championship|premiere|finale|pilot|debut|opener|closer|super\s*bowl)\b/i.test(textLower)) {
     signals.push('significant event reference');
   }
 
   // Statistical/measurable indicators (works across domains)
-  if (/\b(stats?|statistics|record|score|rating|ranking|chart|sales|views|downloads|streams)\b/i.test(combined)) {
+  if (/\b(stats?|statistics|record|score|rating|ranking|chart|sales|views|downloads|streams)\b/i.test(textLower)) {
     signals.push('statistical/measurable data');
   }
 
   // Recent time indicators
-  if (/\b(recent|latest|current|this\s+year|last\s+year|202[3-9]|today|yesterday|this\s+week)\b/i.test(combined)) {
+  if (/\b(recent|latest|current|this\s+year|last\s+year|202[3-9]|today|yesterday|this\s+week)\b/i.test(textLower)) {
     signals.push('recent/current data requested');
   }
 
   // Specific proper nouns with context (names + verifiable context)
-  // Look for capitalized words followed by verifiable terms
-  if (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b.*\b(career|biography|history|timeline|discography|filmography|bibliography)\b/i.test(`${topic} ${domain}`)) {
+  if (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b.*\b(career|biography|history|timeline|discography|filmography|bibliography)\b/i.test(text)) {
     signals.push('biographical/historical reference');
   }
 
   // Award/recognition patterns
-  if (/\b(award|grammy|oscar|emmy|pulitzer|nobel|mvp|winner|nominated|nomination)\b/i.test(combined)) {
+  if (/\b(award|grammy|oscar|emmy|pulitzer|nobel|mvp|winner|nominated|nomination)\b/i.test(textLower)) {
     signals.push('award/recognition reference');
   }
 
   // Location-specific patterns
-  if (/\b(at\s+the|in\s+the|held\s+at|performed\s+at|filmed\s+at|recorded\s+at)\b/i.test(combined)) {
+  if (/\b(at\s+the|in\s+the|held\s+at|performed\s+at|filmed\s+at|recorded\s+at)\b/i.test(textLower)) {
     signals.push('location-specific reference');
   }
 
   return {
     isGranular: signals.length > 0,
     signals
+  };
+};
+
+/**
+ * Detect granularity signals separately for domain and topic
+ * Domain granularity triggers web search for historical context
+ * Topic granularity is rarely needed (most concepts are timeless)
+ */
+const detectGranularitySignals = (topic: string, domain: string): {
+  isGranular: boolean;
+  signals: string[];
+  domainGranularity: { isGranular: boolean; signals: string[] };
+  topicGranularity: { isGranular: boolean; signals: string[] };
+} => {
+  const domainGranularity = detectGranularitySignalsInText(domain);
+  const topicGranularity = detectGranularitySignalsInText(topic);
+
+  return {
+    // Combined for backward compatibility
+    isGranular: domainGranularity.isGranular || topicGranularity.isGranular,
+    signals: [...domainGranularity.signals, ...topicGranularity.signals],
+    // Separate results for smarter decisions
+    domainGranularity,
+    topicGranularity
   };
 };
 
@@ -375,8 +399,8 @@ const getComplexityPrompt = (level: number): string => {
 
 /**
  * Generate analogy content for a topic
- * Automatically enables OpenRouter web search when granular references are detected
- * Web search data is injected by OpenRouter's native plugin (no manual fetching needed)
+ * Web search is triggered by DOMAIN granularity (e.g., "2002 NFL Week 4")
+ * NOT by topic granularity (e.g., "tensor calculus" doesn't need web search)
  */
 export const generateAnalogy = async (
   topic: string,
@@ -387,9 +411,19 @@ export const generateAnalogy = async (
   const complexityInstructions = getComplexityPrompt(complexity);
   const shortDomain = getShortDomain(domain);
 
-  // Note: Web search is now handled by OpenRouter's native plugin
-  // When granularity signals are detected, the webSearch option is passed to callApi
-  // and OpenRouter automatically injects relevant web search results
+  // Check granularity separately for domain and topic
+  // Web search is triggered by DOMAIN granularity (needs historical context)
+  // NOT by topic granularity (concepts like "tensor calculus" are timeless)
+  const { domainGranularity, topicGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  if (needsWebSearch) {
+    console.log(`[generateAnalogy] DOMAIN has granularity signals: ${domainGranularity.signals.join(', ')}`);
+    console.log(`[generateAnalogy] Enabling web search for narrative-rich ${shortDomain} content`);
+  }
+  if (topicGranularity.isGranular) {
+    console.log(`[generateAnalogy] Topic "${topic}" has granularity signals but NOT triggering web search (concepts are timeless)`);
+  }
 
   const prompt = `Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
@@ -397,13 +431,13 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (2-3 paragraphs, 200+ words). Include mathematical notation in LaTeX ($...$) where appropriate.",
-  "analogy_explanation": "A NARRATIVE STORY grounded in REAL ${shortDomain} history that parallels the technical content. Use SPECIFIC names, dates, games, statistics, and moments from ${shortDomain}. Write it as an engaging story (2-3 paragraphs, 200+ words). Use ${shortDomain}-native vocabulary for concepts, NOT technical terms. Make it feel like a ${shortDomain} documentary, not a generic analogy.",
+  "technical_explanation": "Thorough technical explanation (2-3 paragraphs, 200+ words). Include mathematical notation in LaTeX ($...$) where appropriate. This section is for the TECHNICAL side only.",
+  "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (2-3 paragraphs, 200+ words)",
   "segments": [
     {
       "tech": "A single sentence or concept from the technical explanation",
-      "analogy": "The corresponding ${shortDomain} narrative moment - use specific historical details",
-      "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references that makes this concept memorable"
+      "analogy": "The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms",
+      "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon"
     }
   ],
   "concept_map": [
@@ -425,55 +459,41 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
-NARRATIVE STORYTELLING REQUIREMENT (CRITICAL):
-The analogy_explanation must read like a DOCUMENTARY or STORY, not a generic comparison:
-- Use REAL names: actual people, characters, figures, or entities from ${shortDomain}
-- Use REAL events: actual moments, episodes, performances, or milestones that happened in ${shortDomain}
-- Use REAL details: specific dates, numbers, achievements, or measurable facts from ${shortDomain}
-- NEVER use generic phrases like "imagine a person doing X" - always reference SPECIFIC ${shortDomain} moments
-- Write as if creating a documentary about ${shortDomain} that happens to explain the technical concept
+ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
+The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
+- NO parenthetical technical terms like "(covariant)" or "(tensor)"
+- NO technical vocabulary whatsoever - not even simple terms like "function" or "variable"
+- ONLY ${shortDomain} vocabulary that a ${shortDomain} enthusiast would use
+- Write as if you're a ${shortDomain} journalist writing about ${shortDomain} - you wouldn't mention math!
+- The technical concepts should be IMPLICIT through the story structure, not EXPLICIT through terminology
 
-CONCEPT_MAP RULES (CRITICAL - THIS IS AN ISOMORPHIC MAPPING):
-The concept_map creates an ANALOGICAL ISOMORPHISM - mapping technical concepts to their ${shortDomain} equivalents.
-Each mapping connects a technical term to what a ${shortDomain} expert would naturally call the equivalent concept.
+BAD EXAMPLE (contains technical jargon):
+"The Buccaneers' defensive playbook is a collection of coordinated actions. Defensive alignments (covariant) adjust to the opponent's offensive play calls (contravariant)."
 
-✅ GOOD concept_map pattern:
-  - The analogy_term is vocabulary NATIVE to ${shortDomain}
-  - A ${shortDomain} enthusiast would recognize and use the analogy_term
-  - The analogy_term captures the SAME FUNCTION as the tech_term in the ${shortDomain} context
+GOOD EXAMPLE (pure ${shortDomain} narrative):
+"On September 29, 2002, the Buccaneers faced the Bengals in Week 4. Defensive coordinator Monte Kiffin watched as Cincinnati's offense shifted formation. His defense read the play—when the Bengals spread wide, Tampa's corners pressed tight. When Cincinnati bunched their receivers, the Bucs' linebackers crept forward. Every offensive adjustment demanded a defensive counter-adjustment. This dance of action and reaction defined Tampa's historic season."
 
-❌ BAD concept_map patterns (NEVER do this):
-  - {"tech_term": "X", "analogy_term": "X"} ← WRONG: same term!
-  - {"tech_term": "X", "analogy_term": "technical X"} ← WRONG: still technical jargon!
-  - Using any term that a ${shortDomain} novice wouldn't recognize ← WRONG!
+NARRATIVE STORYTELLING REQUIREMENT:
+The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
+- Use REAL names: actual people, teams, players, characters, or figures from ${shortDomain}
+- Use REAL events: actual games, episodes, performances, or moments that actually happened
+- Use REAL details: specific dates, scores, statistics, or measurable facts
+- NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
+- Tell a STORY that happens to teach the concept through its structure
 
-The analogy_term MUST be:
-1. A term native to ${shortDomain} vocabulary (something a ${shortDomain} enthusiast would naturally use)
-2. DIFFERENT from the tech_term (never the same word or a technical synonym)
-3. Functionally equivalent in the analogy (plays the same role in the ${shortDomain} context)
+CONCEPT_MAP RULES:
+The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
+- tech_term: appears in technical_explanation
+- analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
-2. concept_map: tech_term must appear in technical_explanation, analogy_term must appear in analogy_explanation
-3. concept_map: analogy_term must NEVER equal tech_term - they must be different words
-4. importance_map should include ALL significant terms (15-25 items)
-5. LaTeX FORMATTING (CRITICAL - JSON ESCAPING REQUIRED):
-   - ALL math MUST be wrapped in dollar signs: $...$
-   - In JSON strings, backslashes MUST be doubled: use \\\\ not \\
-   - WRONG: "$mathbf{x}$" or "$\\mathbf{x}$"
-   - RIGHT: "$\\\\mathbf{x}$", "$\\\\frac{a}{b}$", "$\\\\cdot$"
-   - Simple variables don't need backslash: "$x$", "$n$", "$e_i$"
-   - Example: encryption "$E(m) = m \\\\cdot s + e$"
-6. The analogy should feel like a REAL STORY from ${shortDomain} history, not a forced comparison
-7. Return ONLY valid JSON, no markdown code blocks`;
+2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
+3. importance_map should include ALL significant terms (15-25 items)
+4. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
+5. Return ONLY valid JSON, no markdown code blocks`;
 
-  // Check for granularity signals to determine if web search should be enabled
-  const { isGranular } = detectGranularitySignals(topic, domain);
-  if (isGranular) {
-    console.log(`[generateAnalogy] Granularity signals detected - enabling web search for: "${topic}"`);
-  }
-
-  const text = await callApi(prompt, { jsonMode: true, webSearch: isGranular });
+  const text = await callApi(prompt, { jsonMode: true, webSearch: needsWebSearch });
   return safeJsonParse(text);
 };
 
@@ -1152,10 +1172,16 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
   try {
     // Enable web search for Stage 1 stories to get accurate historical data
     // Also check if topic/domain have granularity signals
-    const { isGranular } = detectGranularitySignals(topic, domain);
-    const useWebSearch = stage === 1 || isGranular;
+    // Use DOMAIN granularity to decide web search (not topic)
+    // Domain like "2002 NFL Week 4" needs real historical data
+    // Topic like "tensor calculus" is timeless and doesn't need web search
+    const { domainGranularity } = detectGranularitySignals(topic, domain);
+    const useWebSearch = stage === 1 || domainGranularity.isGranular;
     if (useWebSearch) {
-      console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - historical accuracy needed`);
+      console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
+      if (domainGranularity.isGranular) {
+        console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
+      }
     }
 
     const storyContent = await callApi(prompt, { webSearch: useWebSearch });
