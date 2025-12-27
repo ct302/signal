@@ -2157,11 +2157,13 @@ export default function App() {
       {/* Ambiance Overlay Effects */}
       {ambianceMode === 'study' && (
         <>
-          {/* Clickable backdrop - closes control panel but stays in study mode */}
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={() => setShowStudyControls(false)}
-          />
+          {/* Clickable backdrop - only visible when control panel is open */}
+          {showStudyControls && (
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={() => setShowStudyControls(false)}
+            />
+          )}
           {/* Main overlay container - covers everything including header */}
           <div className="fixed inset-0 pointer-events-none z-[9999]">
             {/* Base dark overlay - simulates dark room */}
