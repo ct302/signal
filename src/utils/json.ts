@@ -32,18 +32,47 @@ const neutralizeBackslashes = (str: string): string => {
 };
 
 /**
- * Step 2: Fix literal control characters inside strings
- * (actual newline/tab characters, not escape sequences)
+ * Step 2: Fix literal control characters ONLY inside JSON string values
+ * Structural whitespace (between keys/values) must be preserved
  */
-const fixControlCharacters = (str: string): string => {
-  // Replace literal control characters with spaces
-  // After neutralizeBackslashes, we don't have to worry about escape tracking
-  return str
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')  // Control chars except \t \n \r
-    .replace(/\r\n/g, '\\n')  // Windows line endings
-    .replace(/\r/g, '\\n')    // Old Mac line endings
-    .replace(/\n/g, '\\n')    // Unix line endings
-    .replace(/\t/g, '\\t');   // Tabs
+const fixControlCharactersInStrings = (str: string): string => {
+  let result = '';
+  let inString = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    const prevChar = i > 0 ? str[i - 1] : '';
+
+    // Toggle string state on unescaped quotes
+    // After neutralizeBackslashes, escaped quotes look like: ___QUOT___" or \"
+    // We only need to check for \" since that's what we restore
+    if (char === '"' && prevChar !== '\\') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    // Only escape control chars INSIDE strings
+    if (inString) {
+      if (char === '\n' || char === '\r') {
+        result += '\\n';
+        continue;
+      }
+      if (char === '\t') {
+        result += '\\t';
+        continue;
+      }
+      // Other control characters -> space
+      if (char.charCodeAt(0) < 32 && char !== '\n' && char !== '\r' && char !== '\t') {
+        result += ' ';
+        continue;
+      }
+    }
+
+    result += char;
+  }
+
+  return result;
 };
 
 /**
@@ -147,10 +176,10 @@ export const safeJsonParse = (text: string | null | undefined): any => {
     try {
       // ORDER MATTERS:
       // 1. Neutralize backslashes FIRST (removes all escape conflicts)
-      // 2. Fix control characters (now safe because no backslash confusion)
+      // 2. Fix control characters INSIDE STRINGS ONLY (preserve structural whitespace)
       // 3. Repair truncation (close unclosed strings/braces)
       let processed = neutralizeBackslashes(jsonString);
-      processed = fixControlCharacters(processed);
+      processed = fixControlCharactersInStrings(processed);
       processed = repairTruncatedJson(processed);
 
       const parsed = JSON.parse(processed);
