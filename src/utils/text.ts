@@ -205,3 +205,46 @@ export const wrapBareLatex = (text: string): string => {
   }
   return result;
 };
+
+/**
+ * Sanitize LaTeX content - fix common malformation issues
+ * This runs BEFORE rendering to clean up problematic patterns
+ */
+export const sanitizeLatex = (text: string): string => {
+  if (!text) return "";
+
+  let result = text;
+
+  // 1. Remove environment commands used as standalone words (not inside $ delimiters)
+  // These are LaTeX environments that can't be rendered inline
+  const envCommands = ['\\array', '\\matrix', '\\begin', '\\end', '\\pmatrix', '\\bmatrix', '\\vmatrix'];
+  for (const cmd of envCommands) {
+    // Match command NOT inside $ delimiters - replace with plain word
+    const plainWord = cmd.slice(1); // Remove backslash
+    // Only replace if it's used as a word (followed by space, punctuation, or end)
+    const regex = new RegExp(`(?<!\\$[^$]*)\\${cmd}(?=[\\s.,;:!?)\\]"]|$)(?![^$]*\\$)`, 'g');
+    result = result.replace(regex, plainWord);
+  }
+
+  // 2. Fix accents used as standalone words (e.g., "the \tilde of x" -> "the tilde of x")
+  const accentCommands = ['\\tilde', '\\hat', '\\bar', '\\vec', '\\dot', '\\ddot'];
+  for (const cmd of accentCommands) {
+    const plainWord = cmd.slice(1);
+    // Match accent command NOT followed by { (proper usage) and NOT inside $
+    const regex = new RegExp(`(?<!\\$[^$]*)\\${cmd}(?![{])(?=[\\s.,;:!?)\\]"]|$)(?![^$]*\\$)`, 'g');
+    result = result.replace(regex, plainWord);
+  }
+
+  // 3. Clean up malformed LaTeX that has commands without proper delimiters
+  // e.g., "transform via \frac{a}{b} where" should be "transform via $\frac{a}{b}$ where"
+  // This is already handled by wrapBareLatex, but we add extra cleanup here
+
+  // 4. Remove any remaining unpaired backslashes before common words
+  // (These might be leftovers from failed LaTeX parsing)
+  const commonWords = ['the', 'a', 'an', 'of', 'in', 'on', 'to', 'for', 'is', 'are', 'was', 'were'];
+  for (const word of commonWords) {
+    result = result.replace(new RegExp(`\\\\${word}\\b`, 'g'), word);
+  }
+
+  return result;
+};

@@ -58,7 +58,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, findContext } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory } from './hooks';
@@ -1218,7 +1218,9 @@ export default function App() {
   // Render helpers
   const renderRichText = (text: string, colorClass: string = "text-inherit"): React.ReactNode => {
     if (!text) return null;
-    const processed = wrapBareLatex(text);
+    // Sanitize first to fix malformed LaTeX, then wrap bare commands
+    const sanitized = sanitizeLatex(text);
+    const processed = wrapBareLatex(sanitized);
     const parts = processed.split(LATEX_REGEX);
 
     return parts.map((part, i) => {
@@ -1256,7 +1258,9 @@ export default function App() {
     onWordClick?: (word: string, rect: DOMRect) => void
   ) => {
     if (!text) return null;
-    const processed = wrapBareLatex(text);
+    // Sanitize first to fix malformed LaTeX, then wrap bare commands
+    const sanitized = sanitizeLatex(text);
+    const processed = wrapBareLatex(sanitized);
     const borderColor = textColor.includes("neutral-200") || textColor.includes("white") ? "border-neutral-700" : "border-neutral-300";
     const sliderBg = textColor.includes("neutral-200") || textColor.includes("white") ? "bg-neutral-700" : "bg-neutral-300";
     const sliderAccent = textColor.includes("neutral-200") || textColor.includes("white") ? "accent-blue-400" : "accent-blue-600";
@@ -1484,7 +1488,9 @@ export default function App() {
       const textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
       if (!textToParse) return;
 
-      const processedText = wrapBareLatex(textToParse);
+      // Sanitize first to fix malformed LaTeX, then wrap bare commands
+      const sanitizedText = sanitizeLatex(textToParse);
+      const processedText = wrapBareLatex(sanitizedText);
       const parts = processedText.split(LATEX_REGEX);
 
       parts.forEach(part => {

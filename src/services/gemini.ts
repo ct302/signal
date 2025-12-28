@@ -433,11 +433,29 @@ export const generateAnalogy = async (
 
   // Front-load domain context for web search when needed
   // This ensures the search engine finds relevant historical data about the specific domain
+  // CRITICAL: For granular domains, we construct a SPECIFIC search query and require EXCLUSIVE use of those facts
   const webSearchContext = needsWebSearch
-    ? `IMPORTANT - SEARCH FOR THIS HISTORICAL CONTEXT FIRST:
-I need accurate historical information about: "${domain}"
-Search query: "${shortDomain} highlights memorable moments key events history"
-The narrative MUST be grounded in REAL facts from this specific context. Do NOT fabricate or hallucinate events.
+    ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
+
+SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
+Search queries to use:
+1. "${domain} game results score"
+2. "${domain} key players highlights"
+3. "${domain} date opponent final score"
+
+YOU MUST USE ONLY FACTS FROM THE SEARCH RESULTS.
+- The story MUST be about THIS EXACT EVENT - "${domain}"
+- Do NOT use generic ${shortDomain} knowledge
+- Do NOT fabricate or guess any details
+- If search results mention specific people, dates, scores, or events - USE THOSE EXACT FACTS
+
+REQUIRED FACTUAL ELEMENTS (extract from search results):
+- Specific date of the event
+- Names of key individuals involved (players, coaches, characters - WITH FULL NAMES)
+- Specific outcome/result (scores, statistics, achievements)
+- Key moments that happened during this specific event
+
+If you cannot find specific facts for "${domain}", acknowledge this limitation but still reference the most relevant historical information available.
 
 ---
 
@@ -478,13 +496,29 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
-LaTeX RULES FOR technical_explanation:
-- Use $...$ for inline math: $x^2$, $\\\\frac{a}{b}$, $\\\\sum_{i=1}^n$
-- Use $$...$$ for display math (centered equations)
-- DO NOT use \\\\array, \\\\matrix, \\\\begin, \\\\end as standalone words
-- WRONG: "A tensor is a \\\\array of numbers" (\\\\array is not a word)
-- RIGHT: "A tensor is an array of numbers" OR "A tensor is a multi-dimensional $n \\\\times m$ array"
-- Only use LaTeX for actual mathematical expressions, not for regular English words
+LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
+ALLOWED LaTeX (use these ONLY):
+- Variables and subscripts: $x$, $T_{ij}$, $v^k$
+- Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$
+- Simple fractions: $\\\\frac{a}{b}$
+- Sums/integrals: $\\\\sum_{i}$, $\\\\int$
+- Simple operators: $\\\\times$, $\\\\cdot$, $\\\\rightarrow$, $=$
+- Superscripts/subscripts: $x^2$, $a_n$
+
+FORBIDDEN (DO NOT USE):
+- \\\\array, \\\\matrix, \\\\begin, \\\\end (these are environments, not inline math)
+- \\\\tilde, \\\\hat, \\\\bar as standalone words (wrong: "a \\\\tilde of x")
+- Complex nested environments
+- Any LaTeX command used as an English word
+
+EXAMPLES:
+- WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"
+- WRONG: "apply the \\\\tilde transformation"
+- RIGHT: "A tensor is an array of numbers"
+- RIGHT: "the transformation $\\\\tilde{T}_{ij}$" (command inside $ delimiters)
+- RIGHT: "the metric tensor $g_{\\\\mu\\\\nu}$"
+
+Keep LaTeX simple. When in doubt, use plain English.
 
 ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
 The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
@@ -493,6 +527,15 @@ The analogy_explanation and all "analogy" fields in segments must contain ZERO t
 - ONLY ${shortDomain} vocabulary that a ${shortDomain} enthusiast would use
 - Write as if you're a ${shortDomain} journalist writing about ${shortDomain} - you wouldn't mention math!
 - The technical concepts should be IMPLICIT through the story structure, not EXPLICIT through terminology
+
+FORBIDDEN WORDS IN ANALOGY (never use these - use ${shortDomain} equivalents only):
+tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
+covariant, contravariant, derivative, integral, function, variable, equation,
+component, index, rank, metric, manifold, space, field, operator, mapping,
+linear, nonlinear, invariant, gradient, divergence, curl, differential,
+parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal
+
+If you catch yourself writing ANY of these words in the analogy, STOP and rephrase using ONLY ${shortDomain} vocabulary.
 
 CRITICAL: STORY vs TERMINOLOGY SOUP
 
@@ -556,8 +599,20 @@ CRITICAL RULES:
 5. Return ONLY valid JSON, no markdown code blocks`;
 
   // Build search prompt to guide how web results are used
+  // CRITICAL: For granular domains, we must constrain to ONLY the specific event's facts
   const searchPromptText = needsWebSearch
-    ? `Use these web search results about "${shortDomain}" to write an accurate, historically-grounded narrative story. The story must reference REAL events, people, and facts from the search results - do not fabricate any details.`
+    ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
+
+The analogy_explanation MUST be about THIS SPECIFIC EVENT: "${domain}"
+- Extract the EXACT date, opponent/participants, score/outcome from search results
+- Extract SPECIFIC player/character names mentioned in search results
+- Extract KEY MOMENTS described in search results
+
+DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
+If the search results mention that the Jets played the Jaguars and lost 28-3, use THOSE EXACT facts.
+If the search results mention Chad Pennington threw 2 interceptions, mention THAT.
+
+The story must be verifiable against the search results provided.`
     : undefined;
 
   const text = await callApi(prompt, {
@@ -1181,12 +1236,27 @@ export const generateMasteryStory = async (
   }
 
   // Front-load domain context for web search when needed
-  // This ensures the search engine finds relevant historical data about the specific domain
+  // CRITICAL: For granular domains, construct SPECIFIC search query and require EXCLUSIVE use of those facts
   const webSearchContext = useWebSearch
-    ? `IMPORTANT - SEARCH FOR THIS HISTORICAL CONTEXT FIRST:
-I need accurate historical information about: "${domain}"
-Search query: "${domain} highlights memorable moments key events history"
-The narrative MUST be grounded in REAL facts from this specific context. Do NOT fabricate or hallucinate events.
+    ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
+
+SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
+Search queries to use:
+1. "${domain} game results score"
+2. "${domain} key players highlights"
+3. "${domain} date opponent final score"
+
+YOU MUST USE ONLY FACTS FROM THE SEARCH RESULTS.
+- The story MUST be about THIS EXACT EVENT - "${domain}"
+- Do NOT use generic knowledge about this domain
+- Do NOT fabricate or guess any details
+- If search results mention specific people, dates, scores, or events - USE THOSE EXACT FACTS
+
+REQUIRED FACTUAL ELEMENTS (extract from search results):
+- Specific date of the event
+- Names of key individuals involved (WITH FULL NAMES)
+- Specific outcome/result (scores, statistics, achievements)
+- Key moments that happened during this specific event
 
 ---
 
@@ -1203,6 +1273,15 @@ CRITICAL RULES:
 - Write as if explaining to someone who only knows ${domain}
 - Make it engaging, memorable, and roughly 150-200 words
 - The reader should understand the core concept WITHOUT any technical language
+
+FORBIDDEN WORDS (never use these in the story):
+tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
+covariant, contravariant, derivative, integral, function, variable, equation,
+component, index, rank, metric, manifold, space, field, operator, mapping,
+linear, nonlinear, invariant, gradient, divergence, curl, differential,
+parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal
+
+If you catch yourself writing ANY technical term, STOP and rephrase using ONLY ${domain} vocabulary.
 
 STORY vs TERMINOLOGY SOUP (CRITICAL):
 You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
@@ -1285,8 +1364,17 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
     // Build search prompt to guide how web results are used
+    // CRITICAL: For granular domains, constrain to ONLY the specific event's facts
     const searchPromptText = useWebSearch
-      ? `Use these web search results about "${domain}" to write an accurate, historically-grounded narrative story. The story must reference REAL events, people, and facts from the search results - do not fabricate any details.`
+      ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
+
+The story MUST be about THIS SPECIFIC EVENT: "${domain}"
+- Extract the EXACT date, opponent/participants, score/outcome from search results
+- Extract SPECIFIC player/character names mentioned in search results
+- Extract KEY MOMENTS described in search results
+
+DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
+The story must be verifiable against the search results provided.`
       : undefined;
 
     const storyContent = await callApi(prompt, {
