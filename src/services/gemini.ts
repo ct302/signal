@@ -418,23 +418,24 @@ export const generateAnalogy = async (
   const shortDomain = getShortDomain(domain);
 
   // Check granularity separately for domain and topic
-  // Web search is ALWAYS enabled to fetch real historical stories from the domain
-  // This ensures analogies use REAL moments, people, and events - not generic scenarios
+  // Web search is triggered by DOMAIN granularity - specific events need real historical data
+  // General domains (NFL, Cooking, Chess) don't need web search - LLM has good general knowledge
+  // Granular domains (1999 NFL Season, Tuck Rule Game, Episode 4) need web search for accuracy
   const { domainGranularity, topicGranularity } = detectGranularitySignals(topic, domain);
-  const needsWebSearch = true; // Always fetch real historical content for rich, authentic stories
+  const needsWebSearch = domainGranularity.isGranular; // Only search for specific/granular domains
 
   if (needsWebSearch) {
     console.log(`[generateAnalogy] DOMAIN has granularity signals: ${domainGranularity.signals.join(', ')}`);
-    console.log(`[generateAnalogy] Enabling web search for narrative-rich ${shortDomain} content`);
+    console.log(`[generateAnalogy] Enabling web search for historically-specific ${shortDomain} content`);
+  } else {
+    console.log(`[generateAnalogy] General domain "${shortDomain}" - using LLM knowledge (no web search)`);
   }
   if (topicGranularity.isGranular) {
     console.log(`[generateAnalogy] Topic "${topic}" has granularity signals but NOT triggering web search (concepts are timeless)`);
   }
 
-  // Front-load domain context for web search
-  // This ensures the search engine finds relevant historical data about the domain
-  // For granular domains (specific events), search for that exact event
-  // For general domains, search for famous historical moments to use in the story
+  // Front-load domain context for web search (only for granular domains)
+  // General domains don't need web search - LLM has good general knowledge
   const webSearchContext = domainGranularity.isGranular
     ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
 
@@ -459,26 +460,7 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 ---
 
 `
-    : `WEB SEARCH FOR HISTORICAL ${shortDomain.toUpperCase()} STORIES:
-
-Search for FAMOUS, MEMORABLE moments from ${shortDomain} history to use in your analogy.
-Search queries to use:
-1. "greatest ${shortDomain} moments history"
-2. "famous ${shortDomain} stories legendary"
-3. "iconic ${shortDomain} events memorable"
-
-USE THE SEARCH RESULTS to find a REAL, SPECIFIC story featuring:
-- NAMED INDIVIDUALS with their full names (not generic roles)
-- SPECIFIC DATES or time periods
-- ACTUAL EVENTS that ${shortDomain} fans would recognize
-- REAL STATISTICS, scores, or measurable achievements
-
-The story must be VERIFIABLE - a ${shortDomain} fan should be able to recognize the moment you're describing.
-Do NOT invent fictional scenarios - use REAL ${shortDomain} history from the search results.
-
----
-
-`;
+    : ''; // No web search for general domains - use LLM knowledge
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
@@ -1269,24 +1251,23 @@ export const generateMasteryStory = async (
   previousStory?: string // For continuity in stages 2-3
 ): Promise<MasteryStory> => {
   // Note: Web search is now handled by OpenRouter's native plugin
-  // Enabled via the webSearch option in callApi for Stage 1 and granular topics
+  // Only enabled for granular domains that need specific historical data
 
   // Check granularity for domain-specific context
-  // Web search is ALWAYS enabled to fetch real historical stories
+  // General domains use LLM knowledge, granular domains use web search
   const { domainGranularity } = detectGranularitySignals(topic, domain);
-  const useWebSearch = true; // Always fetch real historical content for authentic stories
+  const useWebSearch = domainGranularity.isGranular; // Only search for specific/granular domains
   const shortDomain = getShortDomain(domain);
 
   if (useWebSearch) {
     console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
-    if (domainGranularity.isGranular) {
-      console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
-    }
+    console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
+  } else {
+    console.log(`[generateMasteryStory] General domain "${shortDomain}" - using LLM knowledge (no web search)`);
   }
 
-  // Front-load domain context for web search
-  // For granular domains, search for the specific event
-  // For general domains, search for famous historical moments
+  // Front-load domain context for web search (only for granular domains)
+  // General domains don't need web search - LLM has good general knowledge
   const webSearchContext = domainGranularity.isGranular
     ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
 
@@ -1311,25 +1292,7 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 ---
 
 `
-    : `WEB SEARCH FOR HISTORICAL ${shortDomain.toUpperCase()} STORIES:
-
-Search for FAMOUS, MEMORABLE moments from ${shortDomain} history to use in your story.
-Search queries to use:
-1. "greatest ${shortDomain} moments history"
-2. "famous ${shortDomain} stories legendary"
-3. "iconic ${shortDomain} events memorable"
-
-USE THE SEARCH RESULTS to find a REAL, SPECIFIC story featuring:
-- NAMED INDIVIDUALS with their full names (not generic roles)
-- SPECIFIC DATES or time periods
-- ACTUAL EVENTS that ${shortDomain} fans would recognize
-- REAL STATISTICS, scores, or measurable achievements
-
-The story must be VERIFIABLE - a ${shortDomain} fan should be able to recognize the moment you're describing.
-
----
-
-`;
+    : ''; // No web search for general domains - use LLM knowledge
 
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
