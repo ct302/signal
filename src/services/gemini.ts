@@ -935,11 +935,13 @@ const getProximityResult = (domain: string, reason: string): ProximityResult => 
 // ============================================
 
 /**
- * Generate 10 mastery keywords with dual definitions from concept_map
+ * Generate 10 mastery keywords with CONTEXTUAL definitions from concept_map
  * Each keyword has:
- * - 3-word definitions (for Stage 2)
- * - 6-word definitions (for Stage 3)
+ * - 3-word definitions (for Stage 2) - tied to specific story elements
+ * - 6-word definitions (for Stage 3) - tied to specific story elements
  * - Both technical and analogy domain definitions
+ *
+ * CRITICAL: Definitions must reference SPECIFIC players, events, or moments from the story
  */
 export const generateMasteryKeywords = async (
   topic: string,
@@ -959,25 +961,40 @@ export const generateMasteryKeywords = async (
 
   // Take top 10 (or all if less than 10)
   const topConcepts = sortedConcepts.slice(0, 10);
+  const shortDomain = getShortDomain(domain);
 
   const prompt = `You are generating mastery keywords for a learning exercise about "${topic}" using "${domain}" as the analogy domain.
 
-CONTEXT (the analogy explanation):
-${analogyText.slice(0, 1500)}
+THE STORY (use these SPECIFIC details in your definitions):
+${analogyText.slice(0, 2000)}
 
 CONCEPT MAPPINGS TO USE:
 ${topConcepts.map((c, i) => `${i + 1}. "${c.tech_term}" ↔ "${c.analogy_term}"`).join('\n')}
 
+CRITICAL REQUIREMENT: CONTEXTUAL DEFINITIONS
+Your definitions must reference SPECIFIC elements from the story above:
+- Use ACTUAL NAMES of people/players/characters from the story
+- Reference SPECIFIC MOMENTS or events described in the story
+- The definition should feel like it's describing THAT story, not a generic concept
+
+EXAMPLE OF WHAT WE WANT:
+❌ GENERIC (bad): "Direction of steepest increase"
+✅ CONTEXTUAL (good): "Brady scanning rightward finding gaps"
+
+❌ GENERIC (bad): "A framework for measurement"
+✅ CONTEXTUAL (good): "Belichick's adaptive defensive scheme"
+
 For each concept mapping, generate TWO sets of definitions:
-1. A 3-word definition (first-principles, core essence) - for Stage 2
-2. A 6-word definition (first-principles, core essence) - for Stage 3
+1. A 3-word definition - tied to the story
+2. A 6-word definition - tied to the story
 
 CRITICAL RULES:
 - Each definition must be EXACTLY the word count specified (3 or 6 words)
-- Definitions must capture the CORE ESSENCE (first principles)
-- Technical definitions explain what it IS in technical terms
-- Analogy definitions explain what it IS in ${domain} terms (NO technical jargon)
-- Be concise and precise - every word must count
+- Technical definitions: Core essence in technical terms
+- Analogy definitions: MUST reference specific players/events from the story
+- Analogy definitions must feel like they're describing the story, not a textbook
+- Use NAMES, not generic roles (say "Brady" not "the quarterback")
+- Be concise - every word must count
 
 Return ONLY this JSON (no markdown):
 {
@@ -985,11 +1002,11 @@ Return ONLY this JSON (no markdown):
     {
       "id": 0,
       "term": "technical term",
-      "analogyTerm": "${domain} equivalent term",
+      "analogyTerm": "${shortDomain} equivalent term",
       "techDefinition3": "exactly three words",
-      "analogyDefinition3": "exactly three words",
-      "techDefinition6": "exactly six words here now",
-      "analogyDefinition6": "exactly six words here now",
+      "analogyDefinition3": "Name-specific three words",
+      "techDefinition6": "exactly six technical words here",
+      "analogyDefinition6": "Name-referencing six words here now",
       "importance": 0.95
     }
   ]
