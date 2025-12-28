@@ -300,7 +300,7 @@ export default function App() {
         real_world: cleanText(fixUnicode(context.real_world || context.realWorld || "")),
         narrative: cleanText(fixUnicode(context.narrative || ""))
       });
-      setShowContext(true);
+      setShowContext(false); // Collapsed by default - user clicks to expand
     }
 
     if (synthesis) {
@@ -350,7 +350,7 @@ export default function App() {
 
   const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {
     setIsLoading(true);
-    setShowContext(true);
+    setShowContext(false); // Keep collapsed until user clicks to expand
     setShowFollowUp(false);
     setTutorResponse(null);
     setContextData(null);
@@ -1087,7 +1087,7 @@ export default function App() {
     loadContent(entry.data, entry.topic);
     setShowHistory(false);
     setHasStarted(true);
-    setShowContext(true);
+    setShowContext(false); // Keep collapsed - user clicks to expand
   };
 
   // Check if morph should be locked (definition popup open OR user is selecting text)

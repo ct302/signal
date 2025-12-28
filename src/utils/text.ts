@@ -300,31 +300,39 @@ export const sanitizeLatex = (text: string): string => {
 
   let result = text;
 
-  // 1. Remove environment commands used as standalone words (not inside $ delimiters)
-  // These are LaTeX environments that can't be rendered inline
-  const envCommands = ['\\array', '\\matrix', '\\begin', '\\end', '\\pmatrix', '\\bmatrix', '\\vmatrix'];
-  for (const cmd of envCommands) {
-    // Match command NOT inside $ delimiters - replace with plain word
-    const plainWord = cmd.slice(1); // Remove backslash
-    // Only replace if it's used as a word (followed by space, punctuation, or end)
-    const regex = new RegExp(`(?<!\\$[^$]*)\\${cmd}(?=[\\s.,;:!?)\\]"]|$)(?![^$]*\\$)`, 'g');
-    result = result.replace(regex, plainWord);
-  }
+  // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
+  // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
+  // We need to handle them appearing OUTSIDE of $ delimiters
 
-  // 2. Fix accents used as standalone words (e.g., "the \tilde of x" -> "the tilde of x")
-  const accentCommands = ['\\tilde', '\\hat', '\\bar', '\\vec', '\\dot', '\\ddot'];
-  for (const cmd of accentCommands) {
-    const plainWord = cmd.slice(1);
-    // Match accent command NOT followed by { (proper usage) and NOT inside $
-    const regex = new RegExp(`(?<!\\$[^$]*)\\${cmd}(?![{])(?=[\\s.,;:!?)\\]"]|$)(?![^$]*\\$)`, 'g');
-    result = result.replace(regex, plainWord);
-  }
+  // Split by $ to process non-math regions only
+  const parts = result.split(/(\$[^$]*\$)/g);
+  result = parts.map((part, index) => {
+    // Odd indices are inside $ delimiters (math mode) - leave them alone
+    if (part.startsWith('$') && part.endsWith('$')) {
+      return part;
+    }
 
-  // 3. Clean up malformed LaTeX that has commands without proper delimiters
-  // e.g., "transform via \frac{a}{b} where" should be "transform via $\frac{a}{b}$ where"
-  // This is already handled by wrapBareLatex, but we add extra cleanup here
+    // Even indices are outside $ delimiters - clean up orphaned LaTeX commands
+    let cleaned = part;
 
-  // 4. Remove any remaining unpaired backslashes before common words
+    // Environment commands that shouldn't appear as text
+    const envCommands = ['matrix', 'array', 'begin', 'end', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix', 'cases', 'aligned', 'gathered'];
+    for (const cmd of envCommands) {
+      // Match \command followed by space, punctuation, or word boundary (not followed by {)
+      cleaned = cleaned.replace(new RegExp(`\\\\${cmd}(?![{a-zA-Z])`, 'g'), cmd);
+    }
+
+    // Accent commands used incorrectly as standalone words
+    const accentCommands = ['tilde', 'hat', 'bar', 'vec', 'dot', 'ddot', 'overline', 'underline'];
+    for (const cmd of accentCommands) {
+      // Match \command NOT followed by { (proper usage)
+      cleaned = cleaned.replace(new RegExp(`\\\\${cmd}(?![{])`, 'g'), cmd);
+    }
+
+    return cleaned;
+  }).join('');
+
+  // 2. Remove any remaining unpaired backslashes before common words
   // (These might be leftovers from failed LaTeX parsing)
   const commonWords = ['the', 'a', 'an', 'of', 'in', 'on', 'to', 'for', 'is', 'are', 'was', 'were'];
   for (const word of commonWords) {
