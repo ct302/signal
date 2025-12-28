@@ -1,6 +1,91 @@
 import { LATEX_CMD_REGEX } from '../constants';
 
 /**
+ * Strip mathematical symbols and notation from analogy text
+ * This is a safety net to ensure pure prose in analogical explanations
+ */
+export const stripMathSymbols = (text: string): string => {
+  if (!text) return "";
+
+  let result = text;
+
+  // Remove mathematical arrows and replace with natural language
+  result = result.replace(/\s*→\s*/g, ' to ');
+  result = result.replace(/\s*←\s*/g, ' from ');
+  result = result.replace(/\s*↔\s*/g, ' and ');
+  result = result.replace(/\s*⟶\s*/g, ' to ');
+  result = result.replace(/\s*⟵\s*/g, ' from ');
+  result = result.replace(/\s*⇒\s*/g, ' leads to ');
+  result = result.replace(/\s*⇔\s*/g, ' equals ');
+  result = result.replace(/\s*⇐\s*/g, ' from ');
+
+  // Remove set theory and mathematical operators
+  result = result.replace(/\s*∈\s*/g, ' in ');
+  result = result.replace(/\s*∉\s*/g, ' not in ');
+  result = result.replace(/\s*∋\s*/g, ' contains ');
+  result = result.replace(/\s*⊂\s*/g, ' within ');
+  result = result.replace(/\s*⊃\s*/g, ' contains ');
+  result = result.replace(/\s*⊆\s*/g, ' within ');
+  result = result.replace(/\s*⊇\s*/g, ' contains ');
+  result = result.replace(/\s*∪\s*/g, ' and ');
+  result = result.replace(/\s*∩\s*/g, ' and ');
+
+  // Remove summation, integral, and calculus symbols
+  result = result.replace(/∑/g, 'the total of');
+  result = result.replace(/∫/g, 'the accumulation of');
+  result = result.replace(/∂/g, '');
+  result = result.replace(/∇/g, '');
+  result = result.replace(/∆/g, 'change in');
+  result = result.replace(/Δ/g, 'change in');
+
+  // Remove comparison and equality symbols
+  result = result.replace(/\s*≈\s*/g, ' approximately ');
+  result = result.replace(/\s*≠\s*/g, ' differs from ');
+  result = result.replace(/\s*≤\s*/g, ' at most ');
+  result = result.replace(/\s*≥\s*/g, ' at least ');
+  result = result.replace(/\s*<\s*/g, ' less than ');
+  result = result.replace(/\s*>\s*/g, ' more than ');
+
+  // Remove other mathematical symbols
+  result = result.replace(/×/g, ' times ');
+  result = result.replace(/÷/g, ' divided by ');
+  result = result.replace(/±/g, ' plus or minus ');
+  result = result.replace(/∞/g, 'endlessly');
+  result = result.replace(/√/g, '');
+  result = result.replace(/∝/g, ' proportional to ');
+
+  // Remove Greek letters used mathematically (standalone)
+  result = result.replace(/\bα\b/g, '');
+  result = result.replace(/\bβ\b/g, '');
+  result = result.replace(/\bγ\b/g, '');
+  result = result.replace(/\bδ\b/g, '');
+  result = result.replace(/\bθ\b/g, '');
+  result = result.replace(/\bλ\b/g, '');
+  result = result.replace(/\bπ\b/g, '');
+  result = result.replace(/\bσ\b/g, '');
+  result = result.replace(/\bΣ\b/g, 'total');
+  result = result.replace(/\bΠ\b/g, 'product');
+
+  // Remove subscript/superscript numbers
+  result = result.replace(/[₀₁₂₃₄₅₆₇₈₉]/g, '');
+  result = result.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
+
+  // Remove inline LaTeX blocks ($...$) entirely from analogy
+  result = result.replace(/\$[^$]+\$/g, '');
+
+  // Remove any remaining LaTeX commands that slipped through
+  result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+  // Clean up multiple spaces
+  result = result.replace(/\s{2,}/g, ' ');
+
+  // Clean up spaces before punctuation
+  result = result.replace(/\s+([.,;:!?])/g, '$1');
+
+  return result.trim();
+};
+
+/**
  * Clean text by replacing common unicode issues
  */
 export const cleanText = (text: string | null | undefined): string => {

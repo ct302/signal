@@ -58,7 +58,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory } from './hooks';
@@ -1485,8 +1485,14 @@ export default function App() {
     let fallbackCounter = -1;
 
     segments.forEach((segment, segmentIndex) => {
-      const textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
+      let textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
       if (!textToParse) return;
+
+      // For analogy/narrative modes, strip any math symbols that slipped through
+      // This ensures pure prose in the analogical explanations
+      if (isNarrativeMode || isAnalogyVisualMode) {
+        textToParse = stripMathSymbols(textToParse);
+      }
 
       // Sanitize first to fix malformed LaTeX, then wrap bare commands
       const sanitizedText = sanitizeLatex(textToParse);

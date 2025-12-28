@@ -555,16 +555,30 @@ parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
 limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
 sum, summation, product, series, sequence, convergence, divergence
 
-FORBIDDEN SYMBOLS IN ANALOGY (NEVER use these - the analogy must be pure ${shortDomain} prose):
-- NO mathematical arrows: →, ←, ↔, ⟶, ⇒, ⇔
-- NO mathematical operators: ∑, ∫, ∂, ∇, ×, ÷, ±, ∞, ≈, ≠, ≤, ≥
+FORBIDDEN SYMBOLS IN ANALOGY - THIS IS A HARD REQUIREMENT:
+⚠️ ZERO SYMBOLS ALLOWED - The analogy MUST be plain English text only:
+- NO arrows of any kind: → ← ↔ ⟶ ⇒ ⇔ (write "to", "from", "leads to" instead)
+- NO mathematical operators: ∑ ∫ ∂ ∇ × ÷ ± ∞ ≈ ≠ ≤ ≥ (write words instead)
+- NO set notation: ∈ ∉ ⊂ ⊃ ∪ ∩ (write "in", "contains", "and" instead)
 - NO LaTeX or math notation: $...$ blocks, \\frac, \\sum, \\int, etc.
-- NO subscripts/superscripts notation: x₁, x², aₙ, etc.
-- NO Greek letters used mathematically: α, β, γ, δ, Δ, θ, π, σ, Σ
-- NO fraction notation: a/b when meaning mathematical division
-- The analogy must read like a ${shortDomain} magazine article - pure prose, zero math symbols
+- NO subscripts/superscripts: x₁, x², aₙ, etc.
+- NO Greek letters: α, β, γ, δ, Δ, θ, π, σ, Σ
+- NO special Unicode math characters whatsoever
 
-If you catch yourself writing ANY of these words or symbols in the analogy, STOP and rephrase using ONLY ${shortDomain} vocabulary and plain English prose.
+The analogy text must look like it came from a ${shortDomain} magazine or newspaper article.
+If a ${shortDomain} journalist wouldn't write it, don't include it.
+
+EXAMPLE OF WHAT NOT TO DO:
+❌ "The quarterback's throw → the receiver" (has arrow symbol)
+❌ "Each play ∈ the drive" (has set notation)
+❌ "The ∑ of all yards" (has summation symbol)
+
+CORRECT APPROACH:
+✅ "The quarterback's throw reached the receiver"
+✅ "Each play within the drive"
+✅ "The total of all yards"
+
+If you catch yourself writing ANY symbol in the analogy, STOP and rewrite using ONLY plain English words.
 
 CRITICAL: STORY vs TERMINOLOGY SOUP
 
@@ -1337,15 +1351,17 @@ parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
 limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
 sum, summation, product, series, sequence, convergence
 
-FORBIDDEN SYMBOLS (NEVER use these - the story must be pure ${domain} prose):
-- NO mathematical arrows: →, ←, ↔, ⟶, ⇒, ⇔
-- NO mathematical operators: ∑, ∫, ∂, ∇, ×, ÷, ±, ∞, ≈, ≠, ≤, ≥
-- NO LaTeX or math notation: $...$ blocks, fractions, etc.
+FORBIDDEN SYMBOLS - HARD REQUIREMENT:
+⚠️ ZERO SYMBOLS - The story MUST be plain English text only:
+- NO arrows: → ← ↔ ⟶ ⇒ ⇔ (write "to", "from", "leads to" instead)
+- NO math operators: ∑ ∫ ∂ ∇ × ÷ ± ∞ ≈ ≠ ≤ ≥ (write words instead)
+- NO set notation: ∈ ∉ ⊂ ⊃ ∪ ∩ (write "in", "contains", "and" instead)
+- NO LaTeX: $...$ blocks, fractions, etc.
 - NO subscripts/superscripts: x₁, x², aₙ, etc.
-- NO Greek letters used mathematically: α, β, γ, δ, Δ, θ, π, σ, Σ
-- The story must read like a ${domain} magazine article - pure prose, zero math
+- NO Greek letters: α, β, γ, δ, Δ, θ, π, σ, Σ
 
-If you catch yourself writing ANY technical term or symbol, STOP and rephrase using ONLY ${domain} vocabulary and plain prose.
+The story must read like a ${domain} magazine article - pure prose, zero math symbols.
+If you catch yourself writing ANY symbol, STOP and rewrite using plain English words.
 
 STORY vs TERMINOLOGY SOUP (CRITICAL):
 You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
