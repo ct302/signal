@@ -253,7 +253,23 @@ const StoryCard: React.FC<{
 
   // Render story with importance-based styling
   const renderStoryWithImportance = () => {
-    if (!story) return null;
+    if (!story || !story.content || story.content.trim().length === 0) {
+      // Show empty state with generate button
+      return (
+        <div className="flex flex-col items-center justify-center py-8 gap-4">
+          <p className={`text-center ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+            Story not available. Click below to generate.
+          </p>
+          <button
+            onClick={onRegenerate}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium"
+          >
+            <RotateCcw size={16} />
+            Generate Story
+          </button>
+        </div>
+      );
+    }
 
     const content = story.content;
     const relevantKeywords = stage === 1 ? [] : stage === 2 ? keywords.slice(0, 6) : keywords;
@@ -1715,9 +1731,17 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
           analogyText
         );
 
-        // Generate the Stage 1 story first
+        // Generate the Stage 1 story first (with retry on empty)
         setIsGeneratingStory(true);
-        const story = await generateMasteryStory(topic, domain, 1, keywords);
+        let story = await generateMasteryStory(topic, domain, 1, keywords);
+
+        // Retry once if story content is empty (rare API edge case)
+        if (!story?.content || story.content.trim().length === 0) {
+          console.warn('[MasteryMode] First story attempt returned empty, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause before retry
+          story = await generateMasteryStory(topic, domain, 1, keywords);
+        }
+
         setCurrentStory(story);
         setStoryHistory(prev => ({ ...prev, [1]: story }));
         setIsGeneratingStory(false);
