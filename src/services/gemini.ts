@@ -478,6 +478,14 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
+LaTeX RULES FOR technical_explanation:
+- Use $...$ for inline math: $x^2$, $\\\\frac{a}{b}$, $\\\\sum_{i=1}^n$
+- Use $$...$$ for display math (centered equations)
+- DO NOT use \\\\array, \\\\matrix, \\\\begin, \\\\end as standalone words
+- WRONG: "A tensor is a \\\\array of numbers" (\\\\array is not a word)
+- RIGHT: "A tensor is an array of numbers" OR "A tensor is a multi-dimensional $n \\\\times m$ array"
+- Only use LaTeX for actual mathematical expressions, not for regular English words
+
 ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
 The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
 - NO parenthetical technical terms like "(covariant)" or "(tensor)"
@@ -517,10 +525,20 @@ Think of a FAMOUS moment, person, or event from ${shortDomain} history. Build yo
 
 NARRATIVE STORYTELLING REQUIREMENT:
 The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
+
+CRITICAL - NAMED INDIVIDUALS REQUIRED:
+- You MUST name specific PEOPLE (with full names), not just organizations/teams/groups
+- ❌ WRONG: "The Raiders' offense shifted formation" (no individual named)
+- ✅ RIGHT: "Rich Gannon dropped back, scanning the field as Jerry Rice cut across the middle"
+- ❌ WRONG: "The chef prepared the dish" (generic role, no name)
+- ✅ RIGHT: "Julia Child lifted the copper pan, letting the butter foam and sizzle"
+- The story must feature at least 2-3 NAMED INDIVIDUALS that ${shortDomain} enthusiasts would recognize
+
+SPECIFIC DETAILS REQUIRED:
 - PICK A SPECIFIC MOMENT: Choose ONE memorable event, performance, or turning point from ${shortDomain}
-- Use REAL names: actual people, figures, or entities from ${shortDomain} that enthusiasts would recognize
+- Use REAL names: actual people WITH THEIR NAMES (not just roles like "the quarterback" or "the chef")
 - Use REAL events: actual moments that happened and can be verified
-- Use REAL details: specific dates, numbers, statistics, or measurable facts
+- Use REAL details: specific dates, scores, statistics, or measurable facts
 - NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
 - Tell a STORY that happens to teach the concept through its structure
 - The story needs a NARRATIVE ARC: setup, development, climax/resolution
@@ -1200,11 +1218,14 @@ This is good because it has real people, dates, events, and a narrative arc.
 
 HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
 - PICK A SPECIFIC MOMENT: Think of a FAMOUS moment from ${domain} history - build your story around that
-- Use REAL people, characters, figures, or entities from ${domain} that enthusiasts would recognize
+- NAMED INDIVIDUALS REQUIRED: You MUST name specific people with their actual names
+  - ❌ WRONG: "The team shifted formation" (no individual named - too generic)
+  - ✅ RIGHT: "[Famous Person's Full Name] did [specific action] while [Another Person's Name] responded"
 - Reference ACTUAL historical moments, events, episodes, or milestones from ${domain}
 - Include SPECIFIC details: dates, numbers, achievements, or measurable facts
 - The story should feel grounded in real ${domain} history, not generic/fictional
-- NEVER use generic phrases - always reference SPECIFIC ${domain} moments that actually happened`,
+- NEVER use generic phrases - always reference SPECIFIC ${domain} moments that actually happened
+- Feature at least 2-3 NAMED INDIVIDUALS that ${domain} enthusiasts would recognize`,
 
     2: `STAGE 2 - SAME STORY WITH 6 TECHNICAL TERMS:
 Take the previous story and LIGHTLY enhance it by naturally weaving in 6 technical terms.
