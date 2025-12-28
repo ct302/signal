@@ -1295,8 +1295,11 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
     : ''; // No web search for general domains - use LLM knowledge
 
   const stageInstructions: Record<MasteryStage, string> = {
-    1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
+    1: `STAGE 1 - THE BIG PICTURE (ZERO TECHNICAL JARGON):
 Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
+
+NARRATIVE SCOPE: Tell the story of a GAME/MATCH/EVENT - the overall arc, who was involved, what happened.
+Example: "The 2011 playoff series between the Grizzlies and Spurs..." - broad strokes, key players, the outcome.
 
 CRITICAL RULES:
 - NO technical terms whatsoever - not even simple ones
@@ -1304,6 +1307,7 @@ CRITICAL RULES:
 - Write as if explaining to someone who only knows ${domain}
 - Make it engaging, memorable, and roughly 150-200 words
 - The reader should understand the core concept WITHOUT any technical language
+- ESTABLISH the setting, the key players, and the overall situation
 
 FORBIDDEN WORDS (never use these in the story):
 tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
@@ -1323,65 +1327,55 @@ FORBIDDEN SYMBOLS - HARD REQUIREMENT:
 - NO subscripts/superscripts: x₁, x², aₙ, etc.
 - NO Greek letters: α, β, γ, δ, Δ, θ, π, σ, Σ
 
-The story must read like a ${domain} magazine article - pure prose, zero math symbols.
-If you catch yourself writing ANY symbol, STOP and rewrite using plain English words.
-
-STORY vs TERMINOLOGY SOUP (CRITICAL):
-You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
-Do NOT write "terminology soup" - generic vocabulary definitions strung together.
-
-❌ BAD (terminology soup - no story):
-"A [${domain} term] is a collection of [${domain} term] that [generic action]. The [${domain} term] shows how many [${domain} term] are needed."
-This is bad because it's just definitions, no characters, no plot, no specific events.
-
-✅ GOOD (actual story structure):
-"On [SPECIFIC DATE], [REAL PERSON by name] faced [SPECIFIC SITUATION]. As [EVENT UNFOLDED], [PERSON] noticed [OBSERVATION]. [ACTION TAKEN]. [CONSEQUENCE]."
-This is good because it has real people, dates, events, and a narrative arc.
-
 HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
-- PICK A SPECIFIC MOMENT: Think of a FAMOUS moment from ${domain} history - build your story around that
+- PICK A SPECIFIC GAME/EVENT: Choose a FAMOUS moment from ${domain} history
 - NAMED INDIVIDUALS REQUIRED: You MUST name specific people with their actual names
-  - ❌ WRONG: "The team shifted formation" (no individual named - too generic)
-  - ✅ RIGHT: "[Famous Person's Full Name] did [specific action] while [Another Person's Name] responded"
-- Reference ACTUAL historical moments, events, episodes, or milestones from ${domain}
-- Include SPECIFIC details: dates, numbers, achievements, or measurable facts
-- The story should feel grounded in real ${domain} history, not generic/fictional
-- NEVER use generic phrases - always reference SPECIFIC ${domain} moments that actually happened
+- Reference ACTUAL historical moments with SPECIFIC details: dates, numbers, scores
 - Feature at least 2-3 NAMED INDIVIDUALS that ${domain} enthusiasts would recognize`,
 
-    2: `STAGE 2 - SAME STORY WITH 6 TECHNICAL TERMS:
-Take the previous story and LIGHTLY enhance it by naturally weaving in 6 technical terms.
+    2: `STAGE 2 - ZOOM INTO A SPECIFIC MOMENT (6 TECHNICAL TERMS):
+Take the SAME game/event from Stage 1 but ZOOM INTO A SPECIFIC PLAY/MOMENT within it.
 
-PREVIOUS STORY (maintain this structure):
-${previousStory || '(Generate fresh story with terms)'}
+PREVIOUS STORY (this is the game/event to zoom into):
+${previousStory || '(Generate fresh story)'}
 
-TECHNICAL TERMS TO INCLUDE (use their ${domain} equivalents in the story, with technical terms in parentheses):
+NARRATIVE SCOPE: Now focus on ONE SPECIFIC PLAY or MOMENT within that game.
+Example: If Stage 1 was about "Grizzlies vs Spurs series", Stage 2 might be:
+"In the 4th quarter of Game 3, Tim Duncan posted up Zach Randolph on the left block.
+As Duncan made his move, Tony Allen rotated from the weak side..."
+
+TECHNICAL TERMS TO WEAVE IN (use their ${domain} equivalents, with technical term in parentheses):
 ${keywords.slice(0, 6).map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- Keep 95% of the original story intact
-- Naturally insert the 6 terms - don't force them
-- When using a term, you may add the technical word in parentheses: "${domain} term (technical term)"
-- The story should still read naturally and flow well
+- SAME GAME/EVENT as Stage 1 - but now we're watching ONE specific play in slow motion
+- The terms should describe what's happening in THIS specific moment
+- Use format: "${domain} term (technical term)" when introducing each term
 - Roughly 150-200 words
-- MAINTAIN all historical accuracy from Stage 1 (real names, dates, statistics)`,
+- MAINTAIN the same players/people from Stage 1 - now show them in action
+- The reader should feel like they're watching a replay of one key moment`,
 
-    3: `STAGE 3 - FULL STORY WITH ALL 10 TECHNICAL TERMS:
-Take the previous story and enhance it by naturally weaving in ALL 10 technical terms.
+    3: `STAGE 3 - DEEP DIVE INTO THE MECHANICS (ALL 10 TECHNICAL TERMS):
+Take the SAME specific moment from Stage 2 and go EVEN DEEPER into the mechanics.
 
-PREVIOUS STORY (maintain this structure):
-${previousStory || '(Generate fresh story with all terms)'}
+PREVIOUS STORY (this is the moment to analyze deeper):
+${previousStory || '(Generate fresh story)'}
 
-ALL 10 TECHNICAL TERMS TO INCLUDE:
+NARRATIVE SCOPE: Now we're breaking down the MECHANICS of that play - the decisions, reactions, timing.
+Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 might be:
+"As Duncan received the entry pass, his body angle created a sealing position. Randolph's footwork
+(basis vectors) determined his defensive options. Tony Allen's rotation speed (rate of change)..."
+
+ALL 10 TECHNICAL TERMS TO WEAVE IN:
 ${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- Keep the core structure and flow of the story
-- Naturally integrate ALL 10 terms
-- Use the ${domain} equivalent terms with technical terms in parentheses
-- The story should feel cohesive, not like a term-stuffing exercise
-- Roughly 180-250 words for the fuller version
-- MAINTAIN all historical accuracy from previous stages (real names, dates, statistics)`
+- SAME MOMENT as Stage 2 - but now examining the underlying mechanics in detail
+- Each term should illuminate WHY things happened the way they did
+- Use format: "${domain} term (technical term)" for all terms
+- Roughly 180-250 words for the fuller analysis
+- The reader should understand the MECHANICS behind the moment
+- Show how each element (term) contributed to the outcome`
   };
 
   const prompt = `${webSearchContext}You are creating a ${domain} narrative story to teach "${topic}" through analogy.

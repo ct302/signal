@@ -19,7 +19,9 @@ import {
   Eye,
   Check,
   AlignLeft,
-  Zap
+  Zap,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import {
   MasterySession,
@@ -63,47 +65,46 @@ const KeywordHoverModal: React.FC<{
   stage: MasteryStage;
   isDarkMode: boolean;
   position: { x: number; y: number };
-}> = ({ keyword, stage, isDarkMode, position }) => {
+  domainEmoji?: string;
+}> = ({ keyword, stage, isDarkMode, position, domainEmoji = '🏈' }) => {
   const techDef = stage === 3 ? keyword.techDefinition6 : keyword.techDefinition3;
   const analogyDef = stage === 3 ? keyword.analogyDefinition6 : keyword.analogyDefinition3;
 
   return (
     <div
       className={`
-        fixed z-[200] p-3 rounded-lg shadow-xl border max-w-xs
+        fixed z-[200] px-4 py-3 rounded-xl shadow-2xl border max-w-[280px]
         animate-in fade-in zoom-in-95 duration-150
         ${isDarkMode
-          ? 'bg-neutral-800 border-neutral-700 text-white'
-          : 'bg-white border-neutral-200 text-neutral-800'}
+          ? 'bg-neutral-900 border-neutral-700/50 text-white'
+          : 'bg-white border-neutral-200 text-neutral-800 shadow-lg'}
       `}
       style={{
-        left: Math.min(position.x, window.innerWidth - 280),
-        top: position.y + 10,
+        left: Math.min(position.x, window.innerWidth - 300),
+        top: position.y + 12,
       }}
     >
-      <div className="font-bold text-sm mb-2 flex items-center gap-2">
-        <span className="text-purple-500">{keyword.term}</span>
-        <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>↔</span>
-        <span className="text-blue-500">{keyword.analogyTerm}</span>
+      {/* Term name */}
+      <div className={`font-bold text-sm mb-3 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+        {keyword.term}
       </div>
 
+      {/* Definitions */}
       <div className="space-y-2">
-        <div>
-          <div className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-            Technical ({stage === 3 ? '6-word' : '3-word'})
-          </div>
-          <div className={`text-xs ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+        {/* Tech definition */}
+        <div className="flex items-start gap-2">
+          <span className="text-sm">🔬</span>
+          <span className={`text-xs leading-relaxed ${isDarkMode ? 'text-cyan-300' : 'text-cyan-700'}`}>
             {techDef}
-          </div>
+          </span>
         </div>
 
-        <div>
-          <div className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-            Analogy ({stage === 3 ? '6-word' : '3-word'})
-          </div>
-          <div className={`text-xs ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+        {/* Analogy definition */}
+        <div className="flex items-start gap-2">
+          <span className="text-sm">{domainEmoji}</span>
+          <span className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
             {analogyDef}
-          </div>
+          </span>
         </div>
       </div>
     </div>
@@ -159,6 +160,7 @@ const StoryCard: React.FC<{
   const [attentionMode, setAttentionMode] = useState<AttentionMode>('opacity');
   const [threshold, setThreshold] = useState(0.3);
   const [showAttentionControls, setShowAttentionControls] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // Calculate word importance based on keywords and position
   const calculateWordImportance = (word: string, wordIndex: number, totalWords: number): number => {
@@ -329,6 +331,59 @@ const StoryCard: React.FC<{
     );
   }
 
+  // Fullscreen overlay when maximized
+  if (isMaximized) {
+    return (
+      <div className={`fixed inset-0 z-[100] overflow-auto ${isDarkMode ? 'bg-neutral-900' : 'bg-white'}`}>
+        {/* Fullscreen Header */}
+        <div className={`fixed top-0 left-0 right-0 z-[101] px-8 py-4 border-b ${isDarkMode ? 'bg-neutral-900/95 border-neutral-800 backdrop-blur-sm' : 'bg-white/95 border-neutral-200 backdrop-blur-sm'}`}>
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BookOpen size={22} className={isDarkMode ? 'text-purple-400' : 'text-purple-600'} />
+              <span className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                {stage === 1 ? 'Your Story' : `Stage ${stage} Story`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onRegenerate}
+                className={`p-2 rounded-lg transition-all ${isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'}`}
+                title="Regenerate story"
+              >
+                <Dices size={20} />
+              </button>
+              <button
+                onClick={() => setIsMaximized(false)}
+                className={`p-2 rounded-lg transition-all ${isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'}`}
+                title="Exit fullscreen"
+              >
+                <Minimize2 size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Fullscreen Content */}
+        <div className="max-w-4xl mx-auto px-8 pt-24 pb-12">
+          <div className={`text-lg leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+            {renderStoryWithImportance()}
+          </div>
+        </div>
+
+        {/* Keyword Hover Modal */}
+        {hoveredKeyword && (
+          <KeywordHoverModal
+            keyword={hoveredKeyword}
+            stage={stage}
+            isDarkMode={isDarkMode}
+            position={hoverPosition}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Regular (non-maximized) view
   return (
     <div className={`rounded-xl p-6 mb-4 relative ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
       {/* Story Header */}
@@ -369,6 +424,20 @@ const StoryCard: React.FC<{
             title="Regenerate story"
           >
             <Dices size={18} className="group-hover:rotate-180 transition-transform duration-500" />
+          </button>
+
+          {/* Maximize Button */}
+          <button
+            onClick={() => setIsMaximized(true)}
+            className={`
+              p-2 rounded-lg transition-all duration-200
+              ${isDarkMode
+                ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+            `}
+            title="Expand story"
+          >
+            <Maximize2 size={18} />
           </button>
         </div>
       </div>
@@ -700,7 +769,7 @@ const StageIndicator: React.FC<{
 };
 
 // ============================================
-// KEYWORD PANEL COMPONENT
+// KEYWORD PANEL COMPONENT (Vocabulary Grid)
 // ============================================
 const KeywordPanel: React.FC<{
   keywords: MasteryKeyword[];
@@ -714,63 +783,102 @@ const KeywordPanel: React.FC<{
   if (stage === 1) return null;
 
   const visibleKeywords = stage === 2 ? keywords.slice(0, 6) : keywords;
+  const shortDomain = domain.split(' ').slice(0, 2).join(' '); // Shorten domain for display
 
   return (
-    <div className={`rounded-xl overflow-hidden mb-4 ${isDarkMode ? 'bg-neutral-800/50' : 'bg-neutral-100'}`}>
+    <div className={`rounded-xl overflow-hidden mb-4 ${isDarkMode ? 'bg-neutral-900/80 border border-neutral-800' : 'bg-white shadow-sm border border-neutral-200'}`}>
+      {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-full p-3 flex items-center justify-between ${isDarkMode ? 'hover:bg-neutral-700/50' : 'hover:bg-neutral-200/50'} transition-colors`}
+        className={`w-full px-4 py-3 flex items-center justify-between ${isDarkMode ? 'hover:bg-neutral-800/50' : 'hover:bg-neutral-50'} transition-colors`}
       >
-        <div className="flex items-center gap-2">
-          <BookOpen size={16} className={isDarkMode ? 'text-purple-400' : 'text-purple-600'} />
-          <span className={`text-sm font-bold ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-            {stage === 2 ? '6 Keywords' : 'All 10 Keywords'}
-            <span className="font-normal text-neutral-500 ml-2">
-              (Use {stage === 2 ? '3' : '6'} in your explanation)
-            </span>
+        <div className="flex items-center gap-3">
+          <span className="text-lg">🔑</span>
+          <span className={`font-bold ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+            Technical Vocabulary
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
+            Stage {stage}
           </span>
         </div>
         <ChevronDown
-          size={16}
+          size={18}
           className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}
         />
       </button>
 
       {isExpanded && (
-        <div className="p-3 pt-0">
-          <div className="grid grid-cols-2 gap-2">
-            {visibleKeywords.map((keyword) => {
+        <div className="px-4 pb-4">
+          {/* Grid of keyword cards */}
+          <div className="grid grid-cols-3 gap-3">
+            {visibleKeywords.map((keyword, index) => {
               const isDetected = detectedKeywords.includes(keyword.term);
-              const definition = stage === 2 ? keyword.analogyDefinition3 : keyword.analogyDefinition6;
+              const techDef = stage === 2 ? keyword.techDefinition3 : keyword.techDefinition6;
+              const analogyDef = stage === 2 ? keyword.analogyDefinition3 : keyword.analogyDefinition6;
 
               return (
                 <div
                   key={keyword.id}
                   className={`
-                    p-3 rounded-lg border-2 transition-all duration-300
+                    relative p-4 rounded-xl transition-all duration-300
                     ${isDetected
-                      ? 'border-green-500 bg-green-500/10'
+                      ? isDarkMode
+                        ? 'bg-emerald-500/10 border border-emerald-500/50 ring-1 ring-emerald-500/30'
+                        : 'bg-emerald-50 border border-emerald-300'
                       : isDarkMode
-                        ? 'border-neutral-700 bg-neutral-900/50 hover:border-neutral-600'
-                        : 'border-neutral-200 bg-white hover:border-neutral-300'
+                        ? 'bg-neutral-800/60 border border-neutral-700/50 hover:border-neutral-600'
+                        : 'bg-neutral-50 border border-neutral-200 hover:border-neutral-300'
                     }
                   `}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                        {keyword.analogyTerm}
-                      </div>
-                      <div className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                        {definition}
-                      </div>
-                      <div className={`text-[10px] mt-1 opacity-60 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                        Technical: {keyword.term}
-                      </div>
+                  {/* Detected checkmark */}
+                  {isDetected && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle2 size={16} className="text-emerald-500" />
                     </div>
-                    {isDetected && (
-                      <CheckCircle2 size={16} className="text-green-500 flex-shrink-0" />
-                    )}
+                  )}
+
+                  {/* Number badge and term */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`
+                      w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                      ${isDetected
+                        ? 'bg-emerald-500 text-white'
+                        : isDarkMode
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-emerald-100 text-emerald-700'
+                      }
+                    `}>
+                      {index + 1}
+                    </span>
+                    <span className={`font-bold text-sm ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                      {keyword.term}
+                    </span>
+                  </div>
+
+                  {/* Stage definition label */}
+                  <div className={`text-[9px] uppercase tracking-wider font-semibold mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                    Stage {stage} Definition
+                  </div>
+
+                  {/* Tech definition */}
+                  <div className="mb-2">
+                    <span className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                      TECH:
+                    </span>
+                    <span className={`text-xs ml-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                      {techDef}
+                    </span>
+                  </div>
+
+                  {/* Analogy definition */}
+                  <div>
+                    <span className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                      {shortDomain.toUpperCase()}:
+                    </span>
+                    <span className={`text-xs ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                      {analogyDef}
+                    </span>
                   </div>
                 </div>
               );
