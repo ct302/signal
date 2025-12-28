@@ -1490,10 +1490,21 @@ export default function App() {
       const textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
       if (!textToParse) return;
 
-      // Note: Math symbols are already stripped from analogy/narrative at data load time (loadContent)
-      // Sanitize first to fix malformed LaTeX, then wrap bare commands
-      const sanitizedText = sanitizeLatex(textToParse);
-      const processedText = wrapBareLatex(sanitizedText);
+      // Only apply LaTeX processing to technical text
+      // Analogy/narrative should be pure prose - no LaTeX conversion
+      // (otherwise "to" becomes "\to" → "→" and "end" becomes "\end" → red error)
+      const isTechnicalMode = !isNarrativeMode && !isAnalogyVisualMode;
+
+      let processedText: string;
+      if (isTechnicalMode) {
+        // Technical mode: fix malformed LaTeX, then wrap bare commands
+        const sanitizedText = sanitizeLatex(textToParse);
+        processedText = wrapBareLatex(sanitizedText);
+      } else {
+        // Analogy/narrative mode: pure prose, no LaTeX processing
+        processedText = textToParse;
+      }
+
       const parts = processedText.split(LATEX_REGEX);
 
       parts.forEach(part => {
