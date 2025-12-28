@@ -296,9 +296,10 @@ export default function App() {
       setContextData({
         header: cleanText(fixUnicode(context.header || topicName)),
         emoji: fixUnicode(context.emoji || "💡"),
-        why: cleanText(fixUnicode(context.why || "")),
-        real_world: cleanText(fixUnicode(context.real_world || context.realWorld || "")),
-        narrative: cleanText(fixUnicode(context.narrative || ""))
+        // Strip math symbols from context fields - they should be pure prose
+        why: stripMathSymbols(cleanText(fixUnicode(context.why || ""))),
+        real_world: stripMathSymbols(cleanText(fixUnicode(context.real_world || context.realWorld || ""))),
+        narrative: stripMathSymbols(cleanText(fixUnicode(context.narrative || "")))
       });
       setShowContext(false); // Collapsed by default - user clicks to expand
     }
