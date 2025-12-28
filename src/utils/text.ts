@@ -1,6 +1,174 @@
 import { LATEX_CMD_REGEX } from '../constants';
 
 /**
+ * NUCLEAR SANITIZATION - Applied to raw API response BEFORE JSON parsing
+ * This catches ALL math symbols at the source, preventing any from reaching the UI
+ */
+export const sanitizeRawApiResponse = (rawText: string): string => {
+  if (!rawText) return rawText;
+
+  let result = rawText;
+
+  // ============================================================
+  // PART 1: Strip math symbols from ANALOGY fields in the JSON
+  // Target: "analogy_explanation", "analogy", "narrative" fields
+  // ============================================================
+
+  // Helper to strip symbols from a JSON string value
+  const stripSymbolsFromValue = (value: string): string => {
+    let cleaned = value;
+
+    // ALL arrow variants (comprehensive list)
+    cleaned = cleaned.replace(/→/g, ' to ');
+    cleaned = cleaned.replace(/←/g, ' from ');
+    cleaned = cleaned.replace(/↔/g, ' and ');
+    cleaned = cleaned.replace(/⟶/g, ' to ');
+    cleaned = cleaned.replace(/⟵/g, ' from ');
+    cleaned = cleaned.replace(/⇒/g, ' leads to ');
+    cleaned = cleaned.replace(/⇔/g, ' equals ');
+    cleaned = cleaned.replace(/⇐/g, ' from ');
+    cleaned = cleaned.replace(/➔/g, ' to ');
+    cleaned = cleaned.replace(/➜/g, ' to ');
+    cleaned = cleaned.replace(/➝/g, ' to ');
+    cleaned = cleaned.replace(/➞/g, ' to ');
+    cleaned = cleaned.replace(/⟹/g, ' leads to ');
+    cleaned = cleaned.replace(/⟸/g, ' from ');
+
+    // Set notation
+    cleaned = cleaned.replace(/∈/g, ' in ');
+    cleaned = cleaned.replace(/∉/g, ' not in ');
+    cleaned = cleaned.replace(/∋/g, ' contains ');
+    cleaned = cleaned.replace(/⊂/g, ' within ');
+    cleaned = cleaned.replace(/⊃/g, ' contains ');
+    cleaned = cleaned.replace(/⊆/g, ' within ');
+    cleaned = cleaned.replace(/⊇/g, ' contains ');
+    cleaned = cleaned.replace(/∪/g, ' and ');
+    cleaned = cleaned.replace(/∩/g, ' and ');
+
+    // Math operators
+    cleaned = cleaned.replace(/∑/g, 'the total of ');
+    cleaned = cleaned.replace(/∫/g, 'the accumulation of ');
+    cleaned = cleaned.replace(/∂/g, '');
+    cleaned = cleaned.replace(/∇/g, '');
+    cleaned = cleaned.replace(/∆/g, 'change in ');
+    cleaned = cleaned.replace(/Δ/g, 'change in ');
+    cleaned = cleaned.replace(/×/g, ' times ');
+    cleaned = cleaned.replace(/÷/g, ' divided by ');
+    cleaned = cleaned.replace(/±/g, ' plus or minus ');
+    cleaned = cleaned.replace(/∞/g, 'endlessly');
+    cleaned = cleaned.replace(/≈/g, ' approximately ');
+    cleaned = cleaned.replace(/≠/g, ' differs from ');
+    cleaned = cleaned.replace(/≤/g, ' at most ');
+    cleaned = cleaned.replace(/≥/g, ' at least ');
+    cleaned = cleaned.replace(/⊗/g, ' combined with ');
+    cleaned = cleaned.replace(/⊕/g, ' combined with ');
+
+    // Greek letters (standalone)
+    cleaned = cleaned.replace(/α/g, '');
+    cleaned = cleaned.replace(/β/g, '');
+    cleaned = cleaned.replace(/γ/g, '');
+    cleaned = cleaned.replace(/δ/g, '');
+    cleaned = cleaned.replace(/θ/g, '');
+    cleaned = cleaned.replace(/λ/g, '');
+    cleaned = cleaned.replace(/μ/g, '');
+    cleaned = cleaned.replace(/ν/g, '');
+    cleaned = cleaned.replace(/π/g, '');
+    cleaned = cleaned.replace(/σ/g, '');
+    cleaned = cleaned.replace(/τ/g, '');
+    cleaned = cleaned.replace(/Σ/g, 'total');
+    cleaned = cleaned.replace(/Π/g, 'product');
+
+    // Subscript/superscript numbers
+    cleaned = cleaned.replace(/[₀₁₂₃₄₅₆₇₈₉]/g, '');
+    cleaned = cleaned.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '');
+
+    // Remove $...$ LaTeX blocks from analogy text
+    cleaned = cleaned.replace(/\$[^$]+\$/g, '');
+
+    // Remove orphaned LaTeX commands (backslash followed by letters)
+    cleaned = cleaned.replace(/\\[a-zA-Z]+/g, '');
+
+    // Clean up multiple spaces
+    cleaned = cleaned.replace(/\s{2,}/g, ' ');
+
+    return cleaned;
+  };
+
+  // Target specific JSON fields that should be pure prose (analogy fields)
+  // Pattern: "field_name": "value" - we replace the value part
+  const analogyFields = [
+    'analogy_explanation',
+    'analogyExplanation',
+    'analogy',
+    'narrative'
+  ];
+
+  for (const field of analogyFields) {
+    // Match "field": "value" pattern in JSON (handles escaped quotes in value)
+    const regex = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`,'g');
+    result = result.replace(regex, (match, value) => {
+      const cleanedValue = stripSymbolsFromValue(value);
+      return `"${field}": "${cleanedValue}"`;
+    });
+  }
+
+  // Also clean the "analogy" field inside segments array
+  // Pattern: "analogy": "value" within segments
+  result = result.replace(/"analogy"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/g, (match, value) => {
+    const cleanedValue = stripSymbolsFromValue(value);
+    return `"analogy": "${cleanedValue}"`;
+  });
+
+  // Clean narrative fields inside segments
+  result = result.replace(/"narrative"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/g, (match, value) => {
+    const cleanedValue = stripSymbolsFromValue(value);
+    return `"narrative": "${cleanedValue}"`;
+  });
+
+  // ============================================================
+  // PART 2: Fix malformed LaTeX in TECHNICAL fields
+  // Target: "technical_explanation", "tech" fields
+  // Fix: "\ μ" -> "\mu", "\ π" -> "\pi", etc.
+  // ============================================================
+
+  const technicalFields = ['technical_explanation', 'technicalExplanation', 'tech'];
+
+  for (const field of technicalFields) {
+    const regex = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`,'g');
+    result = result.replace(regex, (match, value) => {
+      let fixedValue = value;
+
+      // Fix spaces after backslashes before Greek letters
+      // "\ μ" -> "\mu", "\ π" -> "\pi", etc.
+      fixedValue = fixedValue.replace(/\\\s+μ/g, '\\\\mu');
+      fixedValue = fixedValue.replace(/\\\s+ν/g, '\\\\nu');
+      fixedValue = fixedValue.replace(/\\\s+π/g, '\\\\pi');
+      fixedValue = fixedValue.replace(/\\\s+α/g, '\\\\alpha');
+      fixedValue = fixedValue.replace(/\\\s+β/g, '\\\\beta');
+      fixedValue = fixedValue.replace(/\\\s+γ/g, '\\\\gamma');
+      fixedValue = fixedValue.replace(/\\\s+δ/g, '\\\\delta');
+      fixedValue = fixedValue.replace(/\\\s+θ/g, '\\\\theta');
+      fixedValue = fixedValue.replace(/\\\s+λ/g, '\\\\lambda');
+      fixedValue = fixedValue.replace(/\\\s+σ/g, '\\\\sigma');
+      fixedValue = fixedValue.replace(/\\\s+τ/g, '\\\\tau');
+      fixedValue = fixedValue.replace(/\\\s+Σ/g, '\\\\Sigma');
+      fixedValue = fixedValue.replace(/\\\s+Π/g, '\\\\Pi');
+      fixedValue = fixedValue.replace(/\\\s+∇/g, '\\\\nabla');
+      fixedValue = fixedValue.replace(/\\\s+⊗/g, '\\\\otimes');
+      fixedValue = fixedValue.replace(/\\\s+⊕/g, '\\\\oplus');
+
+      // Fix standalone Greek Unicode symbols outside of $ - convert to LaTeX
+      fixedValue = fixedValue.replace(/(?<!\$[^$]*)μ(?![^$]*\$)/g, '$\\\\mu$');
+      fixedValue = fixedValue.replace(/(?<!\$[^$]*)ν(?![^$]*\$)/g, '$\\\\nu$');
+
+      return `"${field}": "${fixedValue}"`;
+    });
+  }
+
+  return result;
+};
+
+/**
  * Strip mathematical symbols and notation from analogy text
  * This is a safety net to ensure pure prose in analogical explanations
  */

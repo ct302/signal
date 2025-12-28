@@ -1,3 +1,5 @@
+import { sanitizeRawApiResponse } from './text';
+
 // Unique placeholder that won't appear in normal text
 const BACKSLASH_PLACEHOLDER = '___BKSLSH___';
 const QUOTE_PLACEHOLDER = '___QUOT___';
@@ -175,6 +177,10 @@ export const safeJsonParse = (text: string | null | undefined): any => {
   }
 
   let jsonString = jsonMatch[0];
+
+  // Step 2.5: NUCLEAR SANITIZATION - Clean math symbols from analogy fields
+  // This runs on raw JSON text BEFORE parsing to catch everything at the source
+  jsonString = sanitizeRawApiResponse(jsonString);
 
   // Step 3: ALWAYS apply our backslash-safe pipeline
   // We don't try native JSON.parse first because it mangles LaTeX backslashes
