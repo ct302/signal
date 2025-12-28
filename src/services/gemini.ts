@@ -491,34 +491,36 @@ CRITICAL: STORY vs TERMINOLOGY SOUP
 You MUST write a NARRATIVE STORY with characters, setting, conflict, and resolution.
 You must NOT write "terminology soup" - generic vocabulary definitions strung together.
 
-❌ BAD EXAMPLE #1 (technical jargon in parentheses):
-"The Buccaneers' defensive playbook is a collection of coordinated actions. Defensive alignments (covariant) adjust to the opponent's offensive play calls (contravariant)."
+❌ BAD EXAMPLE (terminology soup - NO STORY, just vocabulary):
+"A [${shortDomain} term] is a collection of [${shortDomain} term] that [generic action]. The [${shortDomain} term] shows how many [${shortDomain} term] are needed for each [${shortDomain} term]. Each [${shortDomain} term] is defined by the [${shortDomain} term]."
 
-❌ BAD EXAMPLE #2 (terminology soup - NO STORY, just vocabulary):
-"A playbook is a collection of coordinated actions that the team executes together on the field. The depth chart shows how many layers of players are needed for each position, from a single starter to a full rotation of backups. Each player's role is defined by the formation the coach calls, which sets the positions on the field."
-
-This is BAD because:
-- No specific people, dates, or events
-- Reads like a dictionary definition, not a story
+This pattern is BAD because:
+- No specific people, names, dates, or events - just generic vocabulary
+- Reads like a dictionary/glossary, not a story
 - No narrative arc (beginning, middle, end)
-- Generic vocabulary mapping instead of storytelling
+- No characters the reader can follow
+- Sentences are definitions, not plot points
 
-✅ GOOD EXAMPLE (ACTUAL STORY with real people and events):
-"On September 29, 2002, the Buccaneers faced the Bengals in Week 4. Defensive coordinator Monte Kiffin watched as Cincinnati's offense shifted formation. His defense read the play—when the Bengals spread wide, Tampa's corners pressed tight. When Cincinnati bunched their receivers, the Bucs' linebackers crept forward. Every offensive adjustment demanded a defensive counter-adjustment. This dance of action and reaction defined Tampa's historic season."
+✅ GOOD STORY STRUCTURE (what you MUST do):
+"On [SPECIFIC DATE], [REAL PERSON by name] faced [SPECIFIC SITUATION]. As [EVENT UNFOLDED], [PERSON] noticed [OBSERVATION]. [ACTION TAKEN]. [REACTION/CONSEQUENCE]. This [OUTCOME] became [SIGNIFICANCE]."
 
-This is GOOD because:
-- Specific date (September 29, 2002)
-- Real people (Monte Kiffin)
-- Real teams (Buccaneers vs Bengals)
-- Narrative arc (situation → action → reaction → outcome)
-- Reads like a documentary or sports journalism
+This pattern is GOOD because:
+- Opens with specific date/time anchoring the story
+- Names a real person the reader can look up
+- Describes a specific situation with stakes
+- Has cause and effect (action → reaction)
+- Ends with resolution or significance
+- Reads like a documentary or journalism piece
+
+FOR ${shortDomain} SPECIFICALLY:
+Think of a FAMOUS moment, person, or event from ${shortDomain} history. Build your story around that real moment. The reader should be able to verify the facts you mention.
 
 NARRATIVE STORYTELLING REQUIREMENT:
 The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
-- PICK A SPECIFIC MOMENT: Even if the domain is generic (e.g., "NFL"), choose ONE memorable game, season, or event
-- Use REAL names: actual people, teams, players, characters, or figures from ${shortDomain}
-- Use REAL events: actual games, episodes, performances, or moments that actually happened
-- Use REAL details: specific dates, scores, statistics, or measurable facts
+- PICK A SPECIFIC MOMENT: Choose ONE memorable event, performance, or turning point from ${shortDomain}
+- Use REAL names: actual people, figures, or entities from ${shortDomain} that enthusiasts would recognize
+- Use REAL events: actual moments that happened and can be verified
+- Use REAL details: specific dates, numbers, statistics, or measurable facts
 - NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
 - Tell a STORY that happens to teach the concept through its structure
 - The story needs a NARRATIVE ARC: setup, development, climax/resolution
@@ -1189,14 +1191,16 @@ You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
 Do NOT write "terminology soup" - generic vocabulary definitions strung together.
 
 ❌ BAD (terminology soup - no story):
-"A playbook is a collection of coordinated actions that the team executes together on the field. The depth chart shows how many layers of players are needed for each position."
+"A [${domain} term] is a collection of [${domain} term] that [generic action]. The [${domain} term] shows how many [${domain} term] are needed."
+This is bad because it's just definitions, no characters, no plot, no specific events.
 
-✅ GOOD (actual story with real people/events):
-"On September 29, 2002, Monte Kiffin watched from the sideline as Cincinnati's offense shifted formation. His Tampa Bay defense read the adjustment instantly..."
+✅ GOOD (actual story structure):
+"On [SPECIFIC DATE], [REAL PERSON by name] faced [SPECIFIC SITUATION]. As [EVENT UNFOLDED], [PERSON] noticed [OBSERVATION]. [ACTION TAKEN]. [CONSEQUENCE]."
+This is good because it has real people, dates, events, and a narrative arc.
 
 HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
-- PICK A SPECIFIC MOMENT: Even if domain is generic (e.g., "NFL"), choose ONE memorable game/season/event
-- Use REAL people, characters, figures, or entities from ${domain}
+- PICK A SPECIFIC MOMENT: Think of a FAMOUS moment from ${domain} history - build your story around that
+- Use REAL people, characters, figures, or entities from ${domain} that enthusiasts would recognize
 - Reference ACTUAL historical moments, events, episodes, or milestones from ${domain}
 - Include SPECIFIC details: dates, numbers, achievements, or measurable facts
 - The story should feel grounded in real ${domain} history, not generic/fictional
