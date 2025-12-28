@@ -418,10 +418,10 @@ export const generateAnalogy = async (
   const shortDomain = getShortDomain(domain);
 
   // Check granularity separately for domain and topic
-  // Web search is triggered by DOMAIN granularity (needs historical context)
-  // NOT by topic granularity (concepts like "tensor calculus" are timeless)
+  // Web search is ALWAYS enabled to fetch real historical stories from the domain
+  // This ensures analogies use REAL moments, people, and events - not generic scenarios
   const { domainGranularity, topicGranularity } = detectGranularitySignals(topic, domain);
-  const needsWebSearch = domainGranularity.isGranular;
+  const needsWebSearch = true; // Always fetch real historical content for rich, authentic stories
 
   if (needsWebSearch) {
     console.log(`[generateAnalogy] DOMAIN has granularity signals: ${domainGranularity.signals.join(', ')}`);
@@ -431,10 +431,11 @@ export const generateAnalogy = async (
     console.log(`[generateAnalogy] Topic "${topic}" has granularity signals but NOT triggering web search (concepts are timeless)`);
   }
 
-  // Front-load domain context for web search when needed
-  // This ensures the search engine finds relevant historical data about the specific domain
-  // CRITICAL: For granular domains, we construct a SPECIFIC search query and require EXCLUSIVE use of those facts
-  const webSearchContext = needsWebSearch
+  // Front-load domain context for web search
+  // This ensures the search engine finds relevant historical data about the domain
+  // For granular domains (specific events), search for that exact event
+  // For general domains, search for famous historical moments to use in the story
+  const webSearchContext = domainGranularity.isGranular
     ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
 
 SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
@@ -455,12 +456,29 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 - Specific outcome/result (scores, statistics, achievements)
 - Key moments that happened during this specific event
 
-If you cannot find specific facts for "${domain}", acknowledge this limitation but still reference the most relevant historical information available.
-
 ---
 
 `
-    : '';
+    : `WEB SEARCH FOR HISTORICAL ${shortDomain.toUpperCase()} STORIES:
+
+Search for FAMOUS, MEMORABLE moments from ${shortDomain} history to use in your analogy.
+Search queries to use:
+1. "greatest ${shortDomain} moments history"
+2. "famous ${shortDomain} stories legendary"
+3. "iconic ${shortDomain} events memorable"
+
+USE THE SEARCH RESULTS to find a REAL, SPECIFIC story featuring:
+- NAMED INDIVIDUALS with their full names (not generic roles)
+- SPECIFIC DATES or time periods
+- ACTUAL EVENTS that ${shortDomain} fans would recognize
+- REAL STATISTICS, scores, or measurable achievements
+
+The story must be VERIFIABLE - a ${shortDomain} fan should be able to recognize the moment you're describing.
+Do NOT invent fictional scenarios - use REAL ${shortDomain} history from the search results.
+
+---
+
+`;
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
@@ -533,9 +551,20 @@ tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
 covariant, contravariant, derivative, integral, function, variable, equation,
 component, index, rank, metric, manifold, space, field, operator, mapping,
 linear, nonlinear, invariant, gradient, divergence, curl, differential,
-parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal
+parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
+limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
+sum, summation, product, series, sequence, convergence, divergence
 
-If you catch yourself writing ANY of these words in the analogy, STOP and rephrase using ONLY ${shortDomain} vocabulary.
+FORBIDDEN SYMBOLS IN ANALOGY (NEVER use these - the analogy must be pure ${shortDomain} prose):
+- NO mathematical arrows: →, ←, ↔, ⟶, ⇒, ⇔
+- NO mathematical operators: ∑, ∫, ∂, ∇, ×, ÷, ±, ∞, ≈, ≠, ≤, ≥
+- NO LaTeX or math notation: $...$ blocks, \\frac, \\sum, \\int, etc.
+- NO subscripts/superscripts notation: x₁, x², aₙ, etc.
+- NO Greek letters used mathematically: α, β, γ, δ, Δ, θ, π, σ, Σ
+- NO fraction notation: a/b when meaning mathematical division
+- The analogy must read like a ${shortDomain} magazine article - pure prose, zero math symbols
+
+If you catch yourself writing ANY of these words or symbols in the analogy, STOP and rephrase using ONLY ${shortDomain} vocabulary and plain English prose.
 
 CRITICAL: STORY vs TERMINOLOGY SOUP
 
@@ -599,8 +628,9 @@ CRITICAL RULES:
 5. Return ONLY valid JSON, no markdown code blocks`;
 
   // Build search prompt to guide how web results are used
-  // CRITICAL: For granular domains, we must constrain to ONLY the specific event's facts
-  const searchPromptText = needsWebSearch
+  // For granular domains, constrain to the specific event
+  // For general domains, use search to find famous moments to reference
+  const searchPromptText = domainGranularity.isGranular
     ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
 
 The analogy_explanation MUST be about THIS SPECIFIC EVENT: "${domain}"
@@ -609,11 +639,17 @@ The analogy_explanation MUST be about THIS SPECIFIC EVENT: "${domain}"
 - Extract KEY MOMENTS described in search results
 
 DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
-If the search results mention that the Jets played the Jaguars and lost 28-3, use THOSE EXACT facts.
-If the search results mention Chad Pennington threw 2 interceptions, mention THAT.
-
 The story must be verifiable against the search results provided.`
-    : undefined;
+    : `USE THE WEB SEARCH RESULTS to ground your ${shortDomain} story in REAL history.
+
+REQUIREMENTS:
+- Pick ONE famous moment or story from the search results
+- Use REAL names of people mentioned in the results (with full names)
+- Reference ACTUAL events, dates, scores, or statistics from the results
+- The ${shortDomain} fan reading this should recognize the story
+
+Your analogy_explanation must read like a ${shortDomain} documentary featuring REAL people and REAL events.
+Do NOT write generic scenarios - use the SPECIFIC historical content from search results.`;
 
   const text = await callApi(prompt, {
     jsonMode: true,
@@ -1221,12 +1257,11 @@ export const generateMasteryStory = async (
   // Note: Web search is now handled by OpenRouter's native plugin
   // Enabled via the webSearch option in callApi for Stage 1 and granular topics
 
-  // Check granularity EARLY so we can front-load domain context for web search
-  // Use DOMAIN granularity to decide web search (not topic)
-  // Domain like "2002 NFL Week 4" needs real historical data
-  // Topic like "tensor calculus" is timeless and doesn't need web search
+  // Check granularity for domain-specific context
+  // Web search is ALWAYS enabled to fetch real historical stories
   const { domainGranularity } = detectGranularitySignals(topic, domain);
-  const useWebSearch = stage === 1 || domainGranularity.isGranular;
+  const useWebSearch = true; // Always fetch real historical content for authentic stories
+  const shortDomain = getShortDomain(domain);
 
   if (useWebSearch) {
     console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
@@ -1235,9 +1270,10 @@ export const generateMasteryStory = async (
     }
   }
 
-  // Front-load domain context for web search when needed
-  // CRITICAL: For granular domains, construct SPECIFIC search query and require EXCLUSIVE use of those facts
-  const webSearchContext = useWebSearch
+  // Front-load domain context for web search
+  // For granular domains, search for the specific event
+  // For general domains, search for famous historical moments
+  const webSearchContext = domainGranularity.isGranular
     ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
 
 SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
@@ -1261,7 +1297,25 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 ---
 
 `
-    : '';
+    : `WEB SEARCH FOR HISTORICAL ${shortDomain.toUpperCase()} STORIES:
+
+Search for FAMOUS, MEMORABLE moments from ${shortDomain} history to use in your story.
+Search queries to use:
+1. "greatest ${shortDomain} moments history"
+2. "famous ${shortDomain} stories legendary"
+3. "iconic ${shortDomain} events memorable"
+
+USE THE SEARCH RESULTS to find a REAL, SPECIFIC story featuring:
+- NAMED INDIVIDUALS with their full names (not generic roles)
+- SPECIFIC DATES or time periods
+- ACTUAL EVENTS that ${shortDomain} fans would recognize
+- REAL STATISTICS, scores, or measurable achievements
+
+The story must be VERIFIABLE - a ${shortDomain} fan should be able to recognize the moment you're describing.
+
+---
+
+`;
 
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - PURE NARRATIVE (ZERO TECHNICAL JARGON):
@@ -1279,9 +1333,19 @@ tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
 covariant, contravariant, derivative, integral, function, variable, equation,
 component, index, rank, metric, manifold, space, field, operator, mapping,
 linear, nonlinear, invariant, gradient, divergence, curl, differential,
-parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal
+parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
+limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
+sum, summation, product, series, sequence, convergence
 
-If you catch yourself writing ANY technical term, STOP and rephrase using ONLY ${domain} vocabulary.
+FORBIDDEN SYMBOLS (NEVER use these - the story must be pure ${domain} prose):
+- NO mathematical arrows: →, ←, ↔, ⟶, ⇒, ⇔
+- NO mathematical operators: ∑, ∫, ∂, ∇, ×, ÷, ±, ∞, ≈, ≠, ≤, ≥
+- NO LaTeX or math notation: $...$ blocks, fractions, etc.
+- NO subscripts/superscripts: x₁, x², aₙ, etc.
+- NO Greek letters used mathematically: α, β, γ, δ, Δ, θ, π, σ, Σ
+- The story must read like a ${domain} magazine article - pure prose, zero math
+
+If you catch yourself writing ANY technical term or symbol, STOP and rephrase using ONLY ${domain} vocabulary and plain prose.
 
 STORY vs TERMINOLOGY SOUP (CRITICAL):
 You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
@@ -1364,8 +1428,9 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
     // Build search prompt to guide how web results are used
-    // CRITICAL: For granular domains, constrain to ONLY the specific event's facts
-    const searchPromptText = useWebSearch
+    // For granular domains, constrain to the specific event
+    // For general domains, use search to find famous moments to reference
+    const searchPromptText = domainGranularity.isGranular
       ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
 
 The story MUST be about THIS SPECIFIC EVENT: "${domain}"
@@ -1375,7 +1440,16 @@ The story MUST be about THIS SPECIFIC EVENT: "${domain}"
 
 DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
 The story must be verifiable against the search results provided.`
-      : undefined;
+      : `USE THE WEB SEARCH RESULTS to ground your ${shortDomain} story in REAL history.
+
+REQUIREMENTS:
+- Pick ONE famous moment or story from the search results
+- Use REAL names of people mentioned in the results (with full names)
+- Reference ACTUAL events, dates, scores, or statistics from the results
+- The ${shortDomain} fan reading this should recognize the story
+
+Your story must read like a ${shortDomain} documentary featuring REAL people and REAL events.
+Do NOT write generic scenarios - use the SPECIFIC historical content from search results.`;
 
     const storyContent = await callApi(prompt, {
       webSearch: useWebSearch,
