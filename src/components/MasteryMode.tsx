@@ -1386,11 +1386,26 @@ const OverviewMode: React.FC<{
             <div className="space-y-6">
               {/* Mastery Summary */}
               <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-yellow-900/20 to-orange-900/20 border border-yellow-500/30' : 'bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200'}`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Trophy className="text-yellow-500" size={24} />
-                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
-                    Your Mastery Summary
-                  </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="text-yellow-500" size={24} />
+                    <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                      Your Mastery Summary
+                    </h3>
+                  </div>
+                  <button
+                    onClick={handleObsidianExport}
+                    className={`
+                      flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
+                      ${obsidianCopied
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700'}
+                    `}
+                    title="Copy beautifully formatted markdown notes"
+                  >
+                    {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
+                    {obsidianCopied ? 'Copied!' : 'Copy Notes'}
+                  </button>
                 </div>
 
                 <div className="space-y-3">

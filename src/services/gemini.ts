@@ -172,30 +172,14 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
 };
 
 // ============================================
-// FUNCTIONGEMMA ROUTING LAYER
+// ROUTING LAYER (Web search via OpenRouter)
 // ============================================
 
 /**
- * Get HuggingFace API key from storage
- */
-const getHuggingFaceApiKey = (): string | null => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.HUGGINGFACE_CONFIG);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed.apiKey || null;
-    }
-  } catch {
-    // Fall through
-  }
-  return null;
-};
-
-/**
- * Check if routing is enabled (has HuggingFace API key)
+ * Check if routing is enabled - now always uses OpenRouter web search
  */
 export const isRoutingEnabled = (): boolean => {
-  return !!getHuggingFaceApiKey();
+  return false; // Routing now handled via OpenRouter web search
 };
 
 /**
