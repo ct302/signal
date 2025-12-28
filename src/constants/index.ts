@@ -57,14 +57,61 @@ export const CONCEPT_BG_COLORS = [
   'bg-indigo-200', 'bg-rose-200', 'bg-teal-200', 'bg-amber-200'
 ];
 
-// Quick start domains
-export const QUICK_START_DOMAINS = [
+// Quick start domains - full list (randomized subset shown to users)
+export const ALL_QUICK_START_DOMAINS = [
+  // Sports
   { emoji: '🏈', name: 'NFL' },
+  { emoji: '🏀', name: 'NBA' },
+  { emoji: '⚽', name: 'Soccer' },
+  { emoji: '⚾', name: 'Baseball' },
+  { emoji: '🏒', name: 'Hockey' },
+  { emoji: '🎾', name: 'Tennis' },
+  { emoji: '🥊', name: 'Boxing' },
+  { emoji: '🏎️', name: 'Formula 1' },
+  // Entertainment
   { emoji: '🎮', name: 'Video Games' },
-  { emoji: '🍳', name: 'Cooking' },
+  { emoji: '🎬', name: 'Movies' },
+  { emoji: '📺', name: 'TV Shows' },
   { emoji: '🎵', name: 'Music' },
-  { emoji: '🎬', name: 'Movies' }
+  { emoji: '🎭', name: 'Theater' },
+  { emoji: '🎨', name: 'Art' },
+  { emoji: '📷', name: 'Photography' },
+  // Practical
+  { emoji: '🍳', name: 'Cooking' },
+  { emoji: '🧵', name: 'Fashion' },
+  { emoji: '🏠', name: 'Home Improvement' },
+  { emoji: '🌱', name: 'Gardening' },
+  { emoji: '🚗', name: 'Cars' },
+  // Strategy
+  { emoji: '♟️', name: 'Chess' },
+  { emoji: '🎲', name: 'Board Games' },
+  { emoji: '🃏', name: 'Poker' },
+  { emoji: '💼', name: 'Business' },
+  { emoji: '💰', name: 'Investing' },
+  // Outdoors
+  { emoji: '⛰️', name: 'Hiking' },
+  { emoji: '🎣', name: 'Fishing' },
+  { emoji: '🏕️', name: 'Camping' },
+  { emoji: '🏄', name: 'Surfing' },
+  // Other
+  { emoji: '🎸', name: 'Guitar' },
+  { emoji: '🎹', name: 'Piano' },
+  { emoji: '📚', name: 'Literature' },
+  { emoji: '🍷', name: 'Wine' },
+  { emoji: '☕', name: 'Coffee' },
+  { emoji: '🐕', name: 'Dog Training' },
+  { emoji: '✈️', name: 'Aviation' },
+  { emoji: '🚀', name: 'Space' }
 ];
+
+// Helper to get randomized subset
+export const getRandomQuickStartDomains = (count: number = 5) => {
+  const shuffled = [...ALL_QUICK_START_DOMAINS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+};
+
+// Default domains (for backward compatibility)
+export const QUICK_START_DOMAINS = ALL_QUICK_START_DOMAINS.slice(0, 5);
 
 // Domain categories for proximity checking and suggestions
 export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Array<{ name: string; emoji: string }> }> = {

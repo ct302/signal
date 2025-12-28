@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Globe, ArrowRight, Loader2, HelpCircle } from 'lucide-react';
-import { QUICK_START_DOMAINS } from '../constants';
+import { getRandomQuickStartDomains } from '../constants';
 import { DisambiguationData } from '../types';
 
 interface DomainSelectionProps {
@@ -23,6 +23,9 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
   handleSetDomain
 }) => {
   const [isSelectingOption, setIsSelectingOption] = useState(false);
+
+  // Get randomized domains once on component mount
+  const randomDomains = useMemo(() => getRandomQuickStartDomains(5), []);
 
   const handleOptionSelect = async (opt: string) => {
     setIsSelectingOption(true);
@@ -126,7 +129,7 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
           <div className="pt-4 border-t border-neutral-200">
             <p className="text-xs text-neutral-400 mb-3">Quick Start</p>
             <div className="flex flex-wrap gap-2 justify-center">
-              {QUICK_START_DOMAINS.map(({ emoji, name }) => (
+              {randomDomains.map(({ emoji, name }) => (
                 <button
                   key={name}
                   onClick={() => {

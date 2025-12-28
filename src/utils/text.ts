@@ -442,8 +442,9 @@ const fixMissingBackslashes = (text: string): string => {
     'lim', 'limsup', 'liminf', 'sup', 'inf', 'max', 'min',
 
     // Accents and decorations (CRITICAL - these were missing!)
+    // NOTE: Removed 'dot' - too common in "dot product" phrase
     'tilde', 'widetilde', 'hat', 'widehat', 'bar', 'overline', 'underline',
-    'vec', 'overrightarrow', 'overleftarrow', 'dot', 'ddot', 'dddot',
+    'vec', 'overrightarrow', 'overleftarrow', 'ddot', 'dddot',
     'acute', 'grave', 'breve', 'check', 'ring',
     'overbrace', 'underbrace', 'overleftrightarrow',
 

@@ -1057,6 +1057,84 @@ Return ONLY this JSON (no markdown):
 };
 
 /**
+ * Regenerate keyword definitions based on the actual mastery story content
+ * This ensures definitions reference specific players/events from the generated story
+ * NOT from the initial analogy (which might be about different characters)
+ */
+export const regenerateContextualDefinitions = async (
+  topic: string,
+  domain: string,
+  keywords: MasteryKeyword[],
+  masteryStoryContent: string
+): Promise<MasteryKeyword[]> => {
+  const shortDomain = getShortDomain(domain);
+
+  const prompt = `You are updating keyword definitions to match a SPECIFIC story.
+
+THE MASTERY STORY (reference ONLY this story for definitions):
+${masteryStoryContent}
+
+KEYWORDS TO UPDATE:
+${keywords.map((k, i) => `${i + 1}. "${k.term}" ↔ "${k.analogyTerm}"`).join('\n')}
+
+CRITICAL: Update the analogy definitions to reference SPECIFIC elements from the story above:
+- Use ACTUAL NAMES of people/players/characters mentioned in the story
+- Reference SPECIFIC MOMENTS or events described in the story
+- Definitions should feel like they're describing THAT specific story, not generic concepts
+
+EXAMPLE:
+Story mentions "Patrick Mahomes threw to Travis Kelce in the 4th quarter"
+❌ GENERIC: "quarterback throwing to receiver"
+✅ CONTEXTUAL: "Mahomes finding Kelce's seam"
+
+For each keyword, generate:
+1. A 3-word analogy definition (referencing the story)
+2. A 6-word analogy definition (referencing the story)
+
+Technical definitions should remain general/accurate.
+
+Return ONLY this JSON (no markdown):
+{
+  "definitions": [
+    {
+      "id": 0,
+      "techDefinition3": "three word tech",
+      "analogyDefinition3": "story-specific three words",
+      "techDefinition6": "six word technical definition here",
+      "analogyDefinition6": "story-referencing six word definition here"
+    }
+  ]
+}`;
+
+  try {
+    const text = await callApi(prompt, { jsonMode: true });
+    const result = safeJsonParse(text);
+
+    if (result?.definitions && Array.isArray(result.definitions)) {
+      // Merge new definitions with existing keywords
+      return keywords.map((keyword, idx) => {
+        const newDef = result.definitions.find((d: any) => d.id === idx) || result.definitions[idx];
+        if (newDef) {
+          return {
+            ...keyword,
+            techDefinition3: newDef.techDefinition3 || keyword.techDefinition3,
+            analogyDefinition3: newDef.analogyDefinition3 || keyword.analogyDefinition3,
+            techDefinition6: newDef.techDefinition6 || keyword.techDefinition6,
+            analogyDefinition6: newDef.analogyDefinition6 || keyword.analogyDefinition6
+          };
+        }
+        return keyword;
+      });
+    }
+
+    return keywords; // Return unchanged if parsing fails
+  } catch (error) {
+    console.error('Failed to regenerate contextual definitions:', error);
+    return keywords; // Return unchanged on error
+  }
+};
+
+/**
  * Evaluate a user's mastery response
  * Stage 1: General understanding, no keywords required
  * Stage 2: Must incorporate 3 of 6 visible keywords

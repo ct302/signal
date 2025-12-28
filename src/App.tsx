@@ -327,26 +327,38 @@ export default function App() {
     if (disambiguation) setDisambiguation(null);
     if (proximityWarning) setProximityWarning(null);
 
-    const result = await checkAmbiguity(topic, 'topic');
-    if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-      setDisambiguation({ type: 'topic', options: result.options || [], original: topic });
-      return;
-    }
-    if (!result.isValid) {
-      setDomainError("Invalid topic or typo.");
-      return;
-    }
+    // Immediate loading feedback - user sees spinner instantly
+    setIsLoading(true);
 
-    const confirmedTopic = result.corrected || topic;
+    try {
+      const result = await checkAmbiguity(topic, 'topic');
+      if (result.isAmbiguous || (result.options && result.options.length > 0)) {
+        setDisambiguation({ type: 'topic', options: result.options || [], original: topic });
+        setIsLoading(false); // Stop loading on disambiguation
+        return;
+      }
+      if (!result.isValid) {
+        setDomainError("Invalid topic or typo.");
+        setIsLoading(false); // Stop loading on error
+        return;
+      }
 
-    // Check if topic is too close to the domain
-    const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
-    if (proximityResult.isTooClose) {
-      setProximityWarning({ topic: confirmedTopic, result: proximityResult });
-      return;
+      const confirmedTopic = result.corrected || topic;
+
+      // Check if topic is too close to the domain
+      const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
+      if (proximityResult.isTooClose) {
+        setProximityWarning({ topic: confirmedTopic, result: proximityResult });
+        setIsLoading(false); // Stop loading on proximity warning
+        return;
+      }
+
+      // fetchAnalogy will handle its own loading state
+      await fetchAnalogy(confirmedTopic);
+    } catch (error) {
+      console.error('Submit error:', error);
+      setIsLoading(false);
     }
-
-    await fetchAnalogy(confirmedTopic);
   };
 
   const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {

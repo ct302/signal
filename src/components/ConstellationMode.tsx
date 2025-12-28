@@ -73,7 +73,7 @@ const RELATIONSHIP_LABELS = [
   'aligns with'
 ];
 
-// Dynamic explanation templates
+// Dynamic explanation templates - now with narrative mini-stories
 const generateDynamicExplanation = (
   analogyTerm: string,
   techTerm: string,
@@ -82,14 +82,14 @@ const generateDynamicExplanation = (
   index: number
 ): string => {
   const explanationTemplates = [
-    `Think of how ${analogyTerm} operates in ${domainName} - it coordinates, directs, and influences outcomes. In the same way, ${techTerm} orchestrates the behavior and flow within ${topicName}, serving as a central organizing principle.`,
-    `In ${domainName}, ${analogyTerm} provides structure and rules that govern interactions. Similarly, ${techTerm} establishes the foundational framework in ${topicName}, defining how elements relate and transform.`,
-    `Just as ${analogyTerm} measures and quantifies relationships in ${domainName}, ${techTerm} provides the mathematical machinery to measure and compute relationships in ${topicName}.`,
-    `The role of ${analogyTerm} in ${domainName} is to track changes and transformations. ${techTerm} performs an analogous function in ${topicName}, capturing how quantities change across different perspectives.`,
-    `When you understand how ${analogyTerm} connects different parts of ${domainName}, you grasp the essence of ${techTerm} - both serve as bridges that link related concepts and enable transformation between them.`,
-    `${analogyTerm} in ${domainName} acts as a reference point for understanding position and movement. ${techTerm} serves the same purpose in ${topicName}, providing a framework for describing location and change.`,
-    `The power of ${analogyTerm} lies in how it simplifies complex ${domainName} scenarios into manageable parts. ${techTerm} achieves the same simplification in ${topicName}, breaking down complexity into structured components.`,
-    `In ${domainName}, ${analogyTerm} enables prediction and strategy. ${techTerm} similarly empowers prediction and calculation in ${topicName}, using the same underlying logical patterns.`
+    `Imagine you're watching ${domainName} unfold. The ${analogyTerm} is the moment everything clicks—players read each other, timing aligns perfectly, and what looked chaotic becomes coordinated brilliance. That "click" is exactly what ${techTerm} does in ${topicName}: it takes scattered pieces and reveals the hidden order beneath.`,
+    `Picture a crucial moment in ${domainName} where ${analogyTerm} becomes the deciding factor. A coach scribbles it on a whiteboard, players nod in understanding, and suddenly the impossible becomes achievable. In ${topicName}, ${techTerm} is that same "aha moment"—the tool that transforms confusion into clarity.`,
+    `Every ${domainName} story has a turning point where ${analogyTerm} separates the good from the great. It's the difference between reacting and anticipating. When you master ${techTerm} in ${topicName}, you gain that same edge—you stop chasing and start predicting.`,
+    `In the heat of ${domainName}, ${analogyTerm} is what lets experts see patterns invisible to beginners. They don't see chaos; they see structure. That's precisely what ${techTerm} unlocks in ${topicName}—the ability to perceive order where others see only complexity.`,
+    `Think of ${analogyTerm} as the language fluent ${domainName} practitioners speak without thinking. It's instinct built from understanding. ${techTerm} is the grammar of that same fluency in ${topicName}—once internalized, it becomes second nature.`,
+    `In ${domainName}, ${analogyTerm} is the bridge between "knowing what to do" and "doing it automatically." Beginners calculate; experts feel. ${techTerm} serves the same role in ${topicName}: first you learn the mechanics, then they become intuition.`,
+    `The beauty of ${analogyTerm} in ${domainName} is how it compresses hours of explanation into a single, elegant move. ${techTerm} achieves the same compression in ${topicName}—what takes pages to explain in words becomes a single, powerful operation.`,
+    `Every master of ${domainName} knows that ${analogyTerm} isn't just a technique—it's a way of seeing. Once you understand it, you can't unsee it. ${techTerm} offers the same transformation in ${topicName}: a new lens that reveals hidden connections everywhere.`
   ];
   return explanationTemplates[index % explanationTemplates.length];
 };

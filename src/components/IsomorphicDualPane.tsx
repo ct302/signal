@@ -53,7 +53,10 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
   const [linePositions, setLinePositions] = useState<Map<number, { left: DOMRect; right: DOMRect }>>(new Map());
+  const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
 
   // Get importance for a concept
   const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
@@ -118,6 +121,35 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   }, [onClose]);
 
   const activeConcept = selectedConcept ?? hoveredConcept;
+
+  // Auto-scroll paired concept into view when hovering/selecting
+  useEffect(() => {
+    if (activeConcept === null) {
+      setScrollHighlight(null);
+      return;
+    }
+
+    // Find the paired elements and scroll them into view
+    const techElement = containerRef.current?.querySelector(`[data-tech-id="${activeConcept}"]`);
+    const analogyElement = containerRef.current?.querySelector(`[data-analogy-id="${activeConcept}"]`);
+
+    // Scroll both elements into view with smooth animation
+    if (techElement) {
+      techElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (analogyElement) {
+      analogyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Trigger highlight animation
+    setScrollHighlight(activeConcept);
+    const timeout = setTimeout(() => setScrollHighlight(null), 1000);
+
+    // Update line positions after scroll
+    setTimeout(updateLinePositions, 350);
+
+    return () => clearTimeout(timeout);
+  }, [activeConcept, updateLinePositions]);
   const containerRect = containerRef.current?.getBoundingClientRect();
 
   return (
@@ -246,6 +278,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
                 const isActive = activeConcept === concept.id;
                 const isInactive = activeConcept !== null && activeConcept !== concept.id;
+                const isScrollingTo = scrollHighlight === concept.id;
 
                 return (
                   <div
@@ -262,6 +295,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         : 'hover:scale-102'
                       }
                       ${isInactive ? 'opacity-30' : 'opacity-100'}
+                      ${isScrollingTo ? 'scroll-highlight' : ''}
                     `}
                     style={{
                       backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
@@ -353,6 +387,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                 const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
                 const isActive = activeConcept === concept.id;
                 const isInactive = activeConcept !== null && activeConcept !== concept.id;
+                const isScrollingTo = scrollHighlight === concept.id;
 
                 return (
                   <div
@@ -369,6 +404,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         : 'hover:scale-102'
                       }
                       ${isInactive ? 'opacity-30' : 'opacity-100'}
+                      ${isScrollingTo ? 'scroll-highlight' : ''}
                     `}
                     style={{
                       backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
@@ -413,8 +449,16 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes scrollPulse {
+          0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7); }
+          50% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+        }
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out;
+        }
+        .scroll-highlight {
+          animation: scrollPulse 0.8s ease-out;
         }
         .hover\\:scale-102:hover {
           transform: scale(1.02);

@@ -41,7 +41,8 @@ import {
   detectKeywordsInText,
   generateMasteryStory,
   generateMasteryChatResponse,
-  generateMasterySummary
+  generateMasterySummary,
+  regenerateContextualDefinitions
 } from '../services';
 
 interface MasteryModeProps {
@@ -263,58 +264,95 @@ const StoryCard: React.FC<{
       keywordLookup.set(k.analogyTerm.toLowerCase(), k);
     });
 
-    // Split into words while preserving whitespace
-    const tokens = content.split(/(\s+)/);
-    const wordCount = tokens.filter(t => !/^\s*$/.test(t)).length;
-    let wordIndex = 0;
+    // Build technical term lookup (for parenthetical tech terms like "(vector)")
+    const techTermSet = new Set<string>();
+    keywords.forEach(k => {
+      techTermSet.add(k.term.toLowerCase());
+    });
 
-    return tokens.map((token, index) => {
-      // Preserve whitespace
-      if (/^\s+$/.test(token)) {
-        return <span key={index}>{token}</span>;
+    // Split content to handle parenthetical technical terms
+    // Match patterns like "(technical term)" or "(linear transformation)"
+    const parts = content.split(/(\([^)]+\))/g);
+    let overallWordIndex = 0;
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
+
+    return parts.map((part, partIndex) => {
+      // Check if this is a parenthetical expression with a technical term
+      const parentheticalMatch = part.match(/^\(([^)]+)\)$/);
+      if (parentheticalMatch && stage > 1) {
+        const innerContent = parentheticalMatch[1].toLowerCase();
+        // Check if any tech term is in this parenthetical
+        const isTechTerm = Array.from(techTermSet).some(term =>
+          innerContent.includes(term) || term.includes(innerContent)
+        );
+
+        if (isTechTerm) {
+          // Style as red technical term indicator
+          overallWordIndex++;
+          return (
+            <span
+              key={`part-${partIndex}`}
+              className={`font-semibold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}
+            >
+              {part}
+            </span>
+          );
+        }
       }
 
-      const cleanToken = token.toLowerCase().replace(/[.,!?;:'"()[\]{}]/g, '').trim();
-      const matchedKeyword = keywordLookup.get(cleanToken);
-      const importance = calculateWordImportance(token, wordIndex, wordCount);
-      const styles = getWordStyles(importance, !!matchedKeyword);
-      const heatmapClass = getHeatmapClass(importance);
+      // Split into words while preserving whitespace
+      const tokens = part.split(/(\s+)/);
 
-      wordIndex++;
+      return tokens.map((token, tokenIndex) => {
+        const key = `part-${partIndex}-token-${tokenIndex}`;
 
-      if (matchedKeyword) {
-        // Keyword with hover functionality
+        // Preserve whitespace
+        if (/^\s+$/.test(token)) {
+          return <span key={key}>{token}</span>;
+        }
+
+        const cleanToken = token.toLowerCase().replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+        const matchedKeyword = keywordLookup.get(cleanToken);
+        const importance = calculateWordImportance(token, overallWordIndex, wordCount);
+        const styles = getWordStyles(importance, !!matchedKeyword);
+        const heatmapClass = getHeatmapClass(importance);
+
+        overallWordIndex++;
+
+        if (matchedKeyword) {
+          // Keyword with hover functionality
+          return (
+            <span
+              key={key}
+              className={`
+                cursor-pointer rounded transition-all duration-200
+                ${heatmapClass || (isDarkMode
+                  ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
+              `}
+              style={styles}
+              onMouseEnter={(e) => {
+                setHoveredKeyword(matchedKeyword);
+                setHoverPosition({ x: e.clientX, y: e.clientY });
+              }}
+              onMouseLeave={() => setHoveredKeyword(null)}
+            >
+              {token}
+            </span>
+          );
+        }
+
+        // Regular word with importance-based styling
         return (
           <span
-            key={index}
-            className={`
-              cursor-pointer rounded transition-all duration-200
-              ${heatmapClass || (isDarkMode
-                ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
-            `}
+            key={key}
+            className={heatmapClass}
             style={styles}
-            onMouseEnter={(e) => {
-              setHoveredKeyword(matchedKeyword);
-              setHoverPosition({ x: e.clientX, y: e.clientY });
-            }}
-            onMouseLeave={() => setHoveredKeyword(null)}
           >
             {token}
           </span>
         );
-      }
-
-      // Regular word with importance-based styling
-      return (
-        <span
-          key={index}
-          className={heatmapClass}
-          style={styles}
-        >
-          {token}
-        </span>
-      );
+      });
     });
   };
 
@@ -344,7 +382,49 @@ const StoryCard: React.FC<{
                 {stage === 1 ? 'Your Story' : `Stage ${stage} Story`}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* Attention Mode Controls in Fullscreen */}
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Mode:</span>
+                {(['opacity', 'size', 'heatmap'] as const).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setAttentionMode(m)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                      attentionMode === m
+                        ? 'bg-purple-500 text-white'
+                        : isDarkMode
+                          ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                          : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    }`}
+                  >
+                    {m === 'opacity' && <Eye size={12} />}
+                    {m === 'size' && <AlignLeft size={12} />}
+                    {m === 'heatmap' && <Zap size={12} />}
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Focus:</span>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="0.9"
+                  step="0.05"
+                  value={threshold}
+                  onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                  className="w-20 h-1.5 rounded-full appearance-none cursor-pointer accent-purple-500"
+                  style={{
+                    background: isDarkMode
+                      ? `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) 100%)`
+                      : `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) 100%)`
+                  }}
+                />
+                <span className={`text-xs w-8 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{Math.round(threshold * 100)}%</span>
+              </div>
+              <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
               <button
                 onClick={onRegenerate}
                 className={`p-2 rounded-lg transition-all ${isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'}`}
@@ -365,9 +445,22 @@ const StoryCard: React.FC<{
 
         {/* Fullscreen Content */}
         <div className="max-w-4xl mx-auto px-8 pt-24 pb-12">
-          <div className={`text-lg leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
-            {renderStoryWithImportance()}
-          </div>
+          {story?.content ? (
+            <div className={`text-lg leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+              {renderStoryWithImportance()}
+            </div>
+          ) : (
+            <div className={`text-center py-16 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              <BookOpen size={48} className="mx-auto mb-4 opacity-50" />
+              <p>Story is loading or unavailable...</p>
+              <button
+                onClick={onRegenerate}
+                className={`mt-4 px-4 py-2 rounded-lg font-medium ${isDarkMode ? 'bg-purple-600 text-white hover:bg-purple-500' : 'bg-purple-500 text-white hover:bg-purple-600'}`}
+              >
+                Generate Story
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Keyword Hover Modal */}
@@ -783,7 +876,24 @@ const KeywordPanel: React.FC<{
   if (stage === 1) return null;
 
   const visibleKeywords = stage === 2 ? keywords.slice(0, 6) : keywords;
-  const shortDomain = domain.split(' ').slice(0, 2).join(' '); // Shorten domain for display
+
+  // Smart domain abbreviation for card display
+  // 1. Extract acronym if present (e.g., "NFL" from "NFL (National Football League...)")
+  // 2. Otherwise, use first word or short phrase
+  const getShortDomain = (fullDomain: string): string => {
+    // Check for acronym pattern: "ABC" or "ABC (full name...)"
+    const acronymMatch = fullDomain.match(/^([A-Z]{2,6})(?:\s|\(|$)/);
+    if (acronymMatch) return acronymMatch[1];
+
+    // Check for parenthetical: "Something (description)" - use before parenthesis
+    const beforeParen = fullDomain.split('(')[0].trim();
+    if (beforeParen.length <= 15) return beforeParen;
+
+    // Otherwise just take first word
+    return fullDomain.split(' ')[0];
+  };
+
+  const shortDomain = getShortDomain(domain);
 
   return (
     <div className={`rounded-xl overflow-hidden mb-4 ${isDarkMode ? 'bg-neutral-900/80 border border-neutral-800' : 'bg-white shadow-sm border border-neutral-200'}`}>
@@ -1090,6 +1200,8 @@ const OverviewMode: React.FC<{
 }> = ({ historyEntry, isDarkMode, onClose }) => {
   const [activeTab, setActiveTab] = useState<'journey' | 'glossary'>('journey');
   const [copied, setCopied] = useState(false);
+  const [obsidianCopied, setObsidianCopied] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const handleShare = async () => {
     const shareText = `🎓 I mastered ${historyEntry.topic} using ${historyEntry.domain} analogies!\n\n` +
@@ -1106,43 +1218,135 @@ const OverviewMode: React.FC<{
     }
   };
 
+  // Generate Obsidian-ready markdown export
+  const handleObsidianExport = async () => {
+    const completedDate = new Date(historyEntry.completedAt).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    let markdown = `# 🎓 Mastery: ${historyEntry.topic}\n\n`;
+    markdown += `> Learned through **${historyEntry.domain}** ${historyEntry.domainEmoji} analogies\n\n`;
+    markdown += `---\n\n`;
+
+    // Summary Section
+    markdown += `## 📊 Summary\n\n`;
+    markdown += `- **Completed:** ${completedDate}\n`;
+    markdown += `- **Scores:** Stage 1: ${historyEntry.finalScores.stage1}% | Stage 2: ${historyEntry.finalScores.stage2}% | Stage 3: ${historyEntry.finalScores.stage3}%\n\n`;
+
+    markdown += `### 🏆 Mastery Insights\n\n`;
+    markdown += `**Key Strength:** ${historyEntry.masterySummary.keyStrength}\n\n`;
+    markdown += `**Core Intuition:** ${historyEntry.masterySummary.coreIntuition}\n\n`;
+    markdown += `**Unique Approach:** ${historyEntry.masterySummary.uniqueApproach}\n\n`;
+
+    // Journey Section
+    markdown += `---\n\n## 📖 Learning Journey\n\n`;
+
+    for (const stage of [1, 2, 3] as const) {
+      const stageKey = `stage${stage}` as 'stage1' | 'stage2' | 'stage3';
+      const story = historyEntry.stories[stageKey];
+      const response = historyEntry.userResponses[stageKey];
+      const intuition = historyEntry.intuitions[stageKey];
+
+      markdown += `### Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}\n\n`;
+
+      if (story?.content) {
+        markdown += `**📚 Story:**\n${story.content}\n\n`;
+      }
+
+      if (response) {
+        markdown += `**💬 My Response:**\n> ${response}\n\n`;
+      }
+
+      if (intuition?.insight) {
+        markdown += `**💡 Key Insight:**\n${intuition.insight}\n\n`;
+      }
+    }
+
+    // Glossary Section
+    markdown += `---\n\n## 📚 Glossary\n\n`;
+    markdown += `| Technical Term | ${historyEntry.domain.split(' ')[0]} Equivalent | Definition |\n`;
+    markdown += `|----------------|---------------------------|------------|\n`;
+
+    historyEntry.glossary.forEach(keyword => {
+      markdown += `| **${keyword.term}** | ${keyword.analogyTerm} | ${keyword.techDefinition6 || keyword.techDefinition3} |\n`;
+    });
+
+    markdown += `\n---\n\n*Generated by Signal • ${completedDate}*\n`;
+
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setObsidianCopied(true);
+      setTimeout(() => setObsidianCopied(false), 2000);
+    } catch {
+      console.error('Failed to copy Obsidian markdown');
+    }
+  };
+
   return (
-    <div className={`fixed inset-0 z-[100] flex flex-col ${isDarkMode ? 'bg-neutral-950' : 'bg-neutral-50'}`}>
-      {/* Header */}
-      <div className={`flex items-center justify-between px-6 py-4 border-b ${isDarkMode ? 'border-neutral-800 bg-neutral-900' : 'border-neutral-200 bg-white'}`}>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Medal className="w-10 h-10 text-yellow-500" />
-            <span className="absolute -bottom-1 -right-1 text-lg">{historyEntry.domainEmoji}</span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      {/* Modal Container */}
+      <div
+        className={`
+          flex flex-col overflow-hidden rounded-2xl shadow-2xl
+          ${isMaximized ? 'w-full h-full' : 'w-full max-w-4xl max-h-[85vh]'}
+          ${isDarkMode ? 'bg-neutral-900' : 'bg-white'}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDarkMode ? 'border-neutral-800' : 'border-neutral-200'}`}>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Medal className="w-10 h-10 text-yellow-500" />
+              <span className="absolute -bottom-1 -right-1 text-lg">{historyEntry.domainEmoji}</span>
+            </div>
+            <div>
+              <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                {historyEntry.topic}
+              </h2>
+              <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                Mastered on {new Date(historyEntry.completedAt).toLocaleDateString()}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-              {historyEntry.topic}
-            </h2>
-            <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-              Mastered on {new Date(historyEntry.completedAt).toLocaleDateString()}
-            </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleObsidianExport}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
+                ${isDarkMode ? 'bg-purple-600/20 text-purple-300 hover:bg-purple-600/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}
+              `}
+              title="Copy as Obsidian note"
+            >
+              {obsidianCopied ? <Check size={16} /> : <BookOpen size={16} />}
+              {obsidianCopied ? 'Copied!' : 'Obsidian'}
+            </button>
+            <button
+              onClick={handleShare}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
+                ${isDarkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'}
+              `}
+            >
+              {copied ? <Check size={16} /> : <Share2 size={16} />}
+              {copied ? 'Copied!' : 'Share'}
+            </button>
+            <button
+              onClick={() => setIsMaximized(!isMaximized)}
+              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+              title={isMaximized ? "Restore" : "Maximize"}
+            >
+              {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-red-500 hover:text-white'}`}
+              title="Close"
+            >
+              <X size={20} />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleShare}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
-              ${isDarkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'}
-            `}
-          >
-            {copied ? <Check size={16} /> : <Share2 size={16} />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-red-500 hover:text-white'}`}
-          >
-            <X size={20} />
-          </button>
-        </div>
-      </div>
 
       {/* Tabs */}
       <div className={`px-6 py-2 border-b ${isDarkMode ? 'border-neutral-800' : 'border-neutral-200'}`}>
@@ -1291,6 +1495,7 @@ const OverviewMode: React.FC<{
           )}
         </div>
       </div>
+      </div>{/* Close modal container */}
     </div>
   );
 };
@@ -1481,14 +1686,33 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
       setError(null);
 
       try {
-        // Generate keywords with dual definitions
-        const keywords = await generateMasteryKeywords(
+        // Generate initial keywords (these will be updated with contextual definitions)
+        let keywords = await generateMasteryKeywords(
           topic,
           domain,
           conceptMap,
           importanceMap,
           analogyText
         );
+
+        // Generate the Stage 1 story first
+        setIsGeneratingStory(true);
+        const story = await generateMasteryStory(topic, domain, 1, keywords);
+        setCurrentStory(story);
+        setStoryHistory(prev => ({ ...prev, [1]: story }));
+        setIsGeneratingStory(false);
+
+        // NOW regenerate keyword definitions based on the actual mastery story
+        // This ensures definitions reference characters/events from THIS story
+        // not from the initial analogy (which might be about different players)
+        if (story?.content) {
+          keywords = await regenerateContextualDefinitions(
+            topic,
+            domain,
+            keywords,
+            story.content
+          );
+        }
 
         const newSession: MasterySession = {
           id: crypto.randomUUID(),
@@ -1506,12 +1730,10 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
         };
 
         setSession(newSession);
-
-        // Generate initial story
-        await generateStoryForStage(1, keywords);
       } catch (err) {
         console.error('Failed to initialize mastery session:', err);
         setError('Failed to start mastery mode. Please try again.');
+        setIsGeneratingStory(false);
       } finally {
         setIsLoading(false);
       }
