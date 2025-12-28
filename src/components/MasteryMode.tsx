@@ -21,7 +21,8 @@ import {
   AlignLeft,
   Zap,
   Maximize2,
-  Minimize2
+  Minimize2,
+  ClipboardCopy
 } from 'lucide-react';
 import {
   MasterySession,
@@ -1313,23 +1314,27 @@ const OverviewMode: React.FC<{
             <button
               onClick={handleObsidianExport}
               className={`
-                flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
-                ${isDarkMode ? 'bg-purple-600/20 text-purple-300 hover:bg-purple-600/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}
+                flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all shadow-sm
+                ${obsidianCopied
+                  ? 'bg-green-500 text-white'
+                  : isDarkMode
+                    ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500'
+                    : 'bg-gradient-to-r from-violet-500 to-purple-500 text-white hover:from-violet-600 hover:to-purple-600'}
               `}
-              title="Copy as Obsidian note"
+              title="Copy beautifully formatted markdown notes"
             >
-              {obsidianCopied ? <Check size={16} /> : <BookOpen size={16} />}
-              {obsidianCopied ? 'Copied!' : 'Obsidian'}
+              {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
+              {obsidianCopied ? 'Copied!' : 'Copy Notes'}
             </button>
             <button
               onClick={handleShare}
               className={`
-                flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
+                flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all
                 ${isDarkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'}
               `}
+              title="Share achievement"
             >
               {copied ? <Check size={16} /> : <Share2 size={16} />}
-              {copied ? 'Copied!' : 'Share'}
             </button>
             <button
               onClick={() => setIsMaximized(!isMaximized)}
