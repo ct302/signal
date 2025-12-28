@@ -479,8 +479,8 @@ const fixMissingBackslashes = (text: string): string => {
     'nearrow', 'searrow', 'swarrow', 'nwarrow',
     'hookrightarrow', 'hookleftarrow', 'rightharpoonup', 'rightharpoondown',
 
-    // Delimiters
-    'left', 'right', 'big', 'Big', 'bigg', 'Bigg',
+    // Delimiters (only include ones that can render standalone)
+    // NOTE: Removed 'left', 'right', 'big', 'Big', 'bigg', 'Bigg' - these need matching pairs
     'langle', 'rangle', 'lfloor', 'rfloor', 'lceil', 'rceil',
     'lvert', 'rvert', 'lVert', 'rVert',
 
@@ -504,11 +504,12 @@ const fixMissingBackslashes = (text: string): string => {
     'det', 'dim', 'gcd', 'hom', 'ker', 'Pr',
 
     // Calculus and analysis
-    'to', 'gets', 'leadsto',
+    // NOTE: Removed 'to' - too common as English word
+    'gets', 'leadsto',
 
-    // Matrices and environments
-    'begin', 'end', 'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
-    'cases', 'array', 'aligned', 'gathered',
+    // NOTE: Removed entire matrices/environments section - these can't render standalone:
+    // 'begin', 'end', 'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
+    // 'cases', 'array', 'aligned', 'gathered'
 
     // Misc
     'not', 'stackrel', 'overset', 'underset', 'atop', 'choose',
