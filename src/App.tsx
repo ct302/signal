@@ -259,8 +259,9 @@ export default function App() {
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
         tech: cleanText(fixUnicode(s.tech || s.technical || "")),
-        analogy: cleanText(fixUnicode(s.analogy || s.nfl || "")),
-        narrative: cleanText(fixUnicode(s.narrative || ""))
+        // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
+        analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
+        narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || "")))
       })));
     }
 
@@ -1485,15 +1486,10 @@ export default function App() {
     let fallbackCounter = -1;
 
     segments.forEach((segment, segmentIndex) => {
-      let textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
+      const textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
       if (!textToParse) return;
 
-      // For analogy/narrative modes, strip any math symbols that slipped through
-      // This ensures pure prose in the analogical explanations
-      if (isNarrativeMode || isAnalogyVisualMode) {
-        textToParse = stripMathSymbols(textToParse);
-      }
-
+      // Note: Math symbols are already stripped from analogy/narrative at data load time (loadContent)
       // Sanitize first to fix malformed LaTeX, then wrap bare commands
       const sanitizedText = sanitizeLatex(textToParse);
       const processedText = wrapBareLatex(sanitizedText);
