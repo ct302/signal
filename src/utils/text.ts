@@ -27,22 +27,107 @@ export const fixUnicode = (text: string | null | undefined): string => {
 /**
  * Fix LaTeX commands that are missing backslashes
  * e.g., "mathbf{x}" -> "\mathbf{x}", "cdot" -> "\cdot"
+ *
+ * This is a recovery mechanism for when LLM outputs lose backslashes
+ * during JSON parsing or other text processing.
  */
 const fixMissingBackslashes = (text: string): string => {
-  // List of common LaTeX commands that might appear without backslash
+  // Comprehensive list of LaTeX commands that might appear without backslash
   const commands = [
-    'mathbf', 'mathrm', 'mathcal', 'mathbb', 'mathit', 'textbf', 'textrm',
-    'frac', 'sqrt', 'sum', 'prod', 'int', 'lim',
-    'cdot', 'times', 'div', 'pm', 'approx', 'neq', 'leq', 'geq',
-    'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'theta', 'lambda', 'mu', 'pi', 'sigma', 'omega',
-    'infty', 'partial', 'nabla',
-    'sin', 'cos', 'tan', 'log', 'ln', 'exp',
-    'rightarrow', 'leftarrow', 'Rightarrow', 'Leftarrow'
+    // Text formatting
+    'mathbf', 'mathrm', 'mathcal', 'mathbb', 'mathit', 'mathsf', 'mathtt',
+    'textbf', 'textrm', 'textit', 'textsf', 'texttt', 'text', 'mbox',
+    'boldsymbol', 'bm',
+
+    // Fractions and roots
+    'frac', 'dfrac', 'tfrac', 'cfrac', 'sqrt', 'root',
+
+    // Big operators
+    'sum', 'prod', 'int', 'iint', 'iiint', 'oint', 'coprod',
+    'bigcup', 'bigcap', 'bigsqcup', 'bigvee', 'bigwedge', 'bigoplus', 'bigotimes',
+
+    // Limits and bounds
+    'lim', 'limsup', 'liminf', 'sup', 'inf', 'max', 'min',
+
+    // Accents and decorations (CRITICAL - these were missing!)
+    'tilde', 'widetilde', 'hat', 'widehat', 'bar', 'overline', 'underline',
+    'vec', 'overrightarrow', 'overleftarrow', 'dot', 'ddot', 'dddot',
+    'acute', 'grave', 'breve', 'check', 'ring',
+    'overbrace', 'underbrace', 'overleftrightarrow',
+
+    // Dots (CRITICAL - these were missing!)
+    'dots', 'ldots', 'cdots', 'vdots', 'ddots',
+
+    // Greek letters - lowercase
+    'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'varepsilon',
+    'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda',
+    'mu', 'nu', 'xi', 'omicron', 'pi', 'varpi', 'rho', 'varrho',
+    'sigma', 'varsigma', 'tau', 'upsilon', 'phi', 'varphi', 'chi', 'psi', 'omega',
+
+    // Greek letters - uppercase
+    'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Upsilon',
+    'Phi', 'Psi', 'Omega',
+
+    // Binary operators
+    'cdot', 'times', 'div', 'pm', 'mp', 'ast', 'star', 'circ', 'bullet',
+    'oplus', 'ominus', 'otimes', 'oslash', 'odot',
+    'wedge', 'vee', 'cap', 'cup', 'setminus',
+
+    // Relations
+    'approx', 'neq', 'leq', 'geq', 'll', 'gg', 'prec', 'succ',
+    'preceq', 'succeq', 'sim', 'simeq', 'cong', 'equiv', 'propto',
+    'subset', 'supset', 'subseteq', 'supseteq', 'in', 'notin', 'ni',
+    'parallel', 'perp', 'mid', 'nmid',
+
+    // Arrows
+    'rightarrow', 'leftarrow', 'Rightarrow', 'Leftarrow',
+    'leftrightarrow', 'Leftrightarrow', 'longrightarrow', 'longleftarrow',
+    'Longrightarrow', 'Longleftarrow', 'mapsto', 'longmapsto',
+    'uparrow', 'downarrow', 'Uparrow', 'Downarrow', 'updownarrow',
+    'nearrow', 'searrow', 'swarrow', 'nwarrow',
+    'hookrightarrow', 'hookleftarrow', 'rightharpoonup', 'rightharpoondown',
+
+    // Delimiters
+    'left', 'right', 'big', 'Big', 'bigg', 'Bigg',
+    'langle', 'rangle', 'lfloor', 'rfloor', 'lceil', 'rceil',
+    'lvert', 'rvert', 'lVert', 'rVert',
+
+    // Spacing
+    'quad', 'qquad', 'hspace', 'vspace', 'hfill', 'vfill',
+
+    // Special symbols
+    'infty', 'partial', 'nabla', 'prime', 'backprime',
+    'forall', 'exists', 'nexists', 'emptyset', 'varnothing',
+    'neg', 'lnot', 'land', 'lor', 'implies', 'iff',
+    'aleph', 'beth', 'hbar', 'ell', 'wp', 'Re', 'Im',
+    'angle', 'measuredangle', 'sphericalangle',
+    'triangle', 'square', 'diamond', 'Box', 'Diamond',
+    'clubsuit', 'diamondsuit', 'heartsuit', 'spadesuit',
+
+    // Functions
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+    'arcsin', 'arccos', 'arctan', 'arccot',
+    'sinh', 'cosh', 'tanh', 'coth',
+    'log', 'ln', 'lg', 'exp', 'arg', 'deg',
+    'det', 'dim', 'gcd', 'hom', 'ker', 'Pr',
+
+    // Calculus and analysis
+    'to', 'gets', 'leadsto',
+
+    // Matrices and environments
+    'begin', 'end', 'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix',
+    'cases', 'array', 'aligned', 'gathered',
+
+    // Misc
+    'not', 'stackrel', 'overset', 'underset', 'atop', 'choose',
+    'binom', 'tbinom', 'dbinom',
+    'phantom', 'vphantom', 'hphantom',
+    'operatorname', 'DeclareMathOperator'
   ];
 
   let result = text;
   for (const cmd of commands) {
-    // Match command NOT preceded by backslash, followed by { or end/space
+    // Match command NOT preceded by backslash, followed by { or end/space/punctuation
     // Be careful not to match inside words like "symbol" when looking for "sum"
     const regex = new RegExp(`(?<!\\\\)(?<![a-zA-Z])${cmd}(?=\\{|\\s|$|[^a-zA-Z])`, 'g');
     result = result.replace(regex, `\\${cmd}`);

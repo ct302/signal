@@ -486,19 +486,42 @@ The analogy_explanation and all "analogy" fields in segments must contain ZERO t
 - Write as if you're a ${shortDomain} journalist writing about ${shortDomain} - you wouldn't mention math!
 - The technical concepts should be IMPLICIT through the story structure, not EXPLICIT through terminology
 
-BAD EXAMPLE (contains technical jargon):
+CRITICAL: STORY vs TERMINOLOGY SOUP
+
+You MUST write a NARRATIVE STORY with characters, setting, conflict, and resolution.
+You must NOT write "terminology soup" - generic vocabulary definitions strung together.
+
+❌ BAD EXAMPLE #1 (technical jargon in parentheses):
 "The Buccaneers' defensive playbook is a collection of coordinated actions. Defensive alignments (covariant) adjust to the opponent's offensive play calls (contravariant)."
 
-GOOD EXAMPLE (pure ${shortDomain} narrative):
+❌ BAD EXAMPLE #2 (terminology soup - NO STORY, just vocabulary):
+"A playbook is a collection of coordinated actions that the team executes together on the field. The depth chart shows how many layers of players are needed for each position, from a single starter to a full rotation of backups. Each player's role is defined by the formation the coach calls, which sets the positions on the field."
+
+This is BAD because:
+- No specific people, dates, or events
+- Reads like a dictionary definition, not a story
+- No narrative arc (beginning, middle, end)
+- Generic vocabulary mapping instead of storytelling
+
+✅ GOOD EXAMPLE (ACTUAL STORY with real people and events):
 "On September 29, 2002, the Buccaneers faced the Bengals in Week 4. Defensive coordinator Monte Kiffin watched as Cincinnati's offense shifted formation. His defense read the play—when the Bengals spread wide, Tampa's corners pressed tight. When Cincinnati bunched their receivers, the Bucs' linebackers crept forward. Every offensive adjustment demanded a defensive counter-adjustment. This dance of action and reaction defined Tampa's historic season."
+
+This is GOOD because:
+- Specific date (September 29, 2002)
+- Real people (Monte Kiffin)
+- Real teams (Buccaneers vs Bengals)
+- Narrative arc (situation → action → reaction → outcome)
+- Reads like a documentary or sports journalism
 
 NARRATIVE STORYTELLING REQUIREMENT:
 The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
+- PICK A SPECIFIC MOMENT: Even if the domain is generic (e.g., "NFL"), choose ONE memorable game, season, or event
 - Use REAL names: actual people, teams, players, characters, or figures from ${shortDomain}
 - Use REAL events: actual games, episodes, performances, or moments that actually happened
 - Use REAL details: specific dates, scores, statistics, or measurable facts
 - NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
 - Tell a STORY that happens to teach the concept through its structure
+- The story needs a NARRATIVE ARC: setup, development, climax/resolution
 
 CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
@@ -1161,7 +1184,18 @@ CRITICAL RULES:
 - Make it engaging, memorable, and roughly 150-200 words
 - The reader should understand the core concept WITHOUT any technical language
 
+STORY vs TERMINOLOGY SOUP (CRITICAL):
+You MUST write an ACTUAL STORY with characters, setting, and narrative arc.
+Do NOT write "terminology soup" - generic vocabulary definitions strung together.
+
+❌ BAD (terminology soup - no story):
+"A playbook is a collection of coordinated actions that the team executes together on the field. The depth chart shows how many layers of players are needed for each position."
+
+✅ GOOD (actual story with real people/events):
+"On September 29, 2002, Monte Kiffin watched from the sideline as Cincinnati's offense shifted formation. His Tampa Bay defense read the adjustment instantly..."
+
 HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
+- PICK A SPECIFIC MOMENT: Even if domain is generic (e.g., "NFL"), choose ONE memorable game/season/event
 - Use REAL people, characters, figures, or entities from ${domain}
 - Reference ACTUAL historical moments, events, episodes, or milestones from ${domain}
 - Include SPECIFIC details: dates, numbers, achievements, or measurable facts

@@ -147,6 +147,14 @@ const restoreBackslashes = (obj: any): any => {
 
 /**
  * Main entry point: Safely parse JSON from LLM output
+ *
+ * IMPORTANT: We ALWAYS use the backslash placeholder approach, not just on failure.
+ * This is because native JSON.parse can succeed while silently mangling backslashes:
+ * - \t in \tilde becomes a tab character
+ * - \f in \frac becomes a form feed character
+ * - \n in \nabla becomes a newline
+ *
+ * By always using placeholders, we preserve LaTeX backslashes correctly.
  */
 export const safeJsonParse = (text: string | null | undefined): any => {
   if (!text) return null;
@@ -168,28 +176,24 @@ export const safeJsonParse = (text: string | null | undefined): any => {
 
   let jsonString = jsonMatch[0];
 
-  // Step 3: Try parsing as-is first (might already be valid)
+  // Step 3: ALWAYS apply our backslash-safe pipeline
+  // We don't try native JSON.parse first because it mangles LaTeX backslashes
   try {
-    return JSON.parse(jsonString);
-  } catch (e1) {
-    // Step 4: Apply our post-processing pipeline
-    try {
-      // ORDER MATTERS:
-      // 1. Neutralize backslashes FIRST (removes all escape conflicts)
-      // 2. Fix control characters INSIDE STRINGS ONLY (preserve structural whitespace)
-      // 3. Repair truncation (close unclosed strings/braces)
-      let processed = neutralizeBackslashes(jsonString);
-      processed = fixControlCharactersInStrings(processed);
-      processed = repairTruncatedJson(processed);
+    // ORDER MATTERS:
+    // 1. Neutralize backslashes FIRST (removes all escape conflicts)
+    // 2. Fix control characters INSIDE STRINGS ONLY (preserve structural whitespace)
+    // 3. Repair truncation (close unclosed strings/braces)
+    let processed = neutralizeBackslashes(jsonString);
+    processed = fixControlCharactersInStrings(processed);
+    processed = repairTruncatedJson(processed);
 
-      const parsed = JSON.parse(processed);
-      return restoreBackslashes(parsed);
-    } catch (e2: any) {
-      console.error('JSON parsing failed after post-processing:', e2.message);
-      console.error('Raw response (first 500 chars):', jsonString.substring(0, 500));
-      console.error('Raw response (last 200 chars):', jsonString.substring(jsonString.length - 200));
-      return null;
-    }
+    const parsed = JSON.parse(processed);
+    return restoreBackslashes(parsed);
+  } catch (e: any) {
+    console.error('JSON parsing failed:', e.message);
+    console.error('Raw response (first 500 chars):', jsonString.substring(0, 500));
+    console.error('Raw response (last 200 chars):', jsonString.substring(jsonString.length - 200));
+    return null;
   }
 };
 
