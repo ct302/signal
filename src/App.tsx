@@ -2596,8 +2596,8 @@ export default function App() {
                   {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
                       className={`absolute inset-0 z-10 p-5 md:p-6 overflow-y-auto transition-all duration-300 ease-out ${
-                        isDarkMode ? 'bg-neutral-900/98' : 'bg-white/98'
-                      } backdrop-blur-sm ${
+                        isDarkMode ? 'bg-neutral-900' : 'bg-white'
+                      } ${
                         showCondensedView && !isCondensedMorphing
                           ? 'opacity-100 blur-0 scale-100'
                           : 'opacity-0 blur-md scale-[0.98]'
