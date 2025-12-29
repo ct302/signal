@@ -20,11 +20,11 @@ const getProviderConfig = (): ProviderConfig => {
       // Fall through to default
     }
   }
-  // Default to OpenRouter with Gemini 2.0 Flash (free tier)
+  // Default to OpenRouter with Xiaomi MiMo v2 Flash (free tier)
   return {
     provider: 'openrouter',
     apiKey: DEFAULT_OPENROUTER_API_KEY,
-    model: 'google/gemini-2.0-flash-exp:free',
+    model: 'xiaomi/mimo-v2-flash:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };
@@ -149,7 +149,7 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
   }
 };
 
-// Unified API call
+// Unified API call with enhanced error handling
 const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<string> => {
   const config = getProviderConfig();
 
@@ -161,14 +161,32 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
   const headers = buildHeaders(config);
   const body = buildRequestBody(prompt, config, options);
 
-  const response = await fetchWithRetry(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body)
-  });
+  // fetchWithRetry now throws ApiError for non-2xx responses
+  // and handles retries with exponential backoff + jitter
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    },
+    {
+      // Use defaults from RATE_LIMIT_CONFIG
+      onRetry: (attempt, maxAttempts, waitMs, reason) => {
+        console.log(`[callApi] ${reason} - retrying ${attempt}/${maxAttempts} in ${Math.round(waitMs / 1000)}s`);
+      }
+    }
+  );
 
   const data = await response.json();
-  return extractResponseText(data, config);
+  const result = extractResponseText(data, config);
+
+  // Check for empty response (some models return empty on overload)
+  if (!result || result.trim() === '') {
+    throw new Error('Empty response received from API. The model may be overloaded.');
+  }
+
+  return result;
 };
 
 // ============================================

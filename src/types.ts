@@ -138,8 +138,8 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
   anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   ollama: [],
   openrouter: [
+    'xiaomi/mimo-v2-flash:free',
     'google/gemini-2.0-flash-exp:free',
-    'openai/gpt-oss-120b:free',
     'meta-llama/llama-3.3-70b-instruct:free'
   ]
 };

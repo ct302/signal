@@ -5,14 +5,32 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
 
 // OpenRouter API key (demo/testing)
-export const DEFAULT_OPENROUTER_API_KEY = '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';
+export const DEFAULT_OPENROUTER_API_KEY = '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';
 
 // OpenRouter models - hardcoded selection
 export const OPENROUTER_MODELS = [
+  'xiaomi/mimo-v2-flash:free',
   'google/gemini-2.0-flash-exp:free',
-  'openai/gpt-oss-120b:free',
   'meta-llama/llama-3.3-70b-instruct:free'
 ];
+
+// Fallback model chain for circuit breaker pattern
+// When primary model hits rate limit, try these in order
+export const OPENROUTER_FALLBACK_MODELS = [
+  'xiaomi/mimo-v2-flash:free',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.3-70b-instruct:free'
+];
+
+// Rate limit configuration
+export const RATE_LIMIT_CONFIG = {
+  maxRetries: 5,
+  initialBackoffMs: 1000,
+  maxBackoffMs: 32000,
+  jitterFactor: 0.25, // ±25% jitter
+  circuitBreakerThreshold: 3, // consecutive failures before trying fallback
+  circuitBreakerCooldownMs: 60000, // 60s cooldown for failed model
+};
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";

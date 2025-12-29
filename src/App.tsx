@@ -63,7 +63,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory } from './hooks';
@@ -714,20 +714,43 @@ export default function App() {
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("API call failed", e);
-      // Extract meaningful error message for user
-      const errorMessage = e?.message || "Unknown error occurred";
-      if (errorMessage.includes("API key")) {
-        setApiError("API key issue. Please check your API key in Settings.");
-      } else if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
-        setApiError("Rate limited. Please wait a moment and try again.");
-      } else if (errorMessage.includes("model") || errorMessage.includes("404")) {
-        setApiError("Model not found. Please check your model name in Settings.");
-      } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
-        setApiError("Network error. Please check your connection and try again.");
+
+      // Handle ApiError with detailed status codes
+      if (e instanceof ApiError) {
+        switch (e.status) {
+          case 401:
+          case 403:
+            setApiError("API key issue. Please check your API key in Settings.");
+            break;
+          case 404:
+            setApiError("Model not found. Please check your model name in Settings.");
+            break;
+          case 429:
+            setApiError("Rate limited. The API is busy - please wait a moment and try again.");
+            break;
+          case 500:
+          case 502:
+          case 503:
+          case 504:
+            setApiError("Server error. The API is temporarily unavailable - please try again.");
+            break;
+          default:
+            setApiError(`Request failed (${e.status}): ${e.message.slice(0, 80)}`);
+        }
       } else {
-        setApiError(`Request failed: ${errorMessage.slice(0, 100)}`);
+        // Handle other errors (network, parsing, etc.)
+        const errorMessage = (e as Error)?.message || "Unknown error occurred";
+        if (errorMessage.includes("API key")) {
+          setApiError("API key issue. Please check your API key in Settings.");
+        } else if (errorMessage.includes("Empty response")) {
+          setApiError("The model returned an empty response. It may be overloaded - try again.");
+        } else if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorMessage.includes("Failed to fetch")) {
+          setApiError("Network error. Please check your connection and try again.");
+        } else {
+          setApiError(`Request failed: ${errorMessage.slice(0, 100)}`);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -2819,7 +2842,7 @@ export default function App() {
           )}
 
           {/* Empty State */}
-          {!isLoading && !hasStarted && (
+          {!isLoading && !hasStarted && !apiError && (
             <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
               <Sparkles className={`mx-auto mb-4 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`} size={48} />
               <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
@@ -2828,6 +2851,31 @@ export default function App() {
               <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>
                 Type any topic above and press Enter
               </p>
+            </div>
+          )}
+
+          {/* Fallback State - hasStarted but no content (e.g., after dismissed error) */}
+          {!isLoading && hasStarted && processedWords.length === 0 && !apiError && (
+            <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
+              <RotateCcw className={`mx-auto mb-4 ${isDarkMode ? 'text-amber-400' : 'text-amber-500'}`} size={48} />
+              <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                Ready to try again?
+              </h2>
+              <p className={`mb-4 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                The previous request didn't complete. Enter a topic above or try again.
+              </p>
+              {lastSubmittedTopic && (
+                <button
+                  onClick={() => fetchAnalogy(lastSubmittedTopic)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  }`}
+                >
+                  Retry "{lastSubmittedTopic}"
+                </button>
+              )}
             </div>
           )}
         </div>
