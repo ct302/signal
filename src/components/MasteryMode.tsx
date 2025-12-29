@@ -47,6 +47,17 @@ import {
   regenerateContextualDefinitions
 } from '../services';
 
+// Cached state for persistence across modal open/close
+export interface MasterySessionCache {
+  session: MasterySession | null;
+  storyHistory: { [key: number]: MasteryStory };
+  userResponses: string[];
+  currentStory: MasteryStory | null;
+  userInput: string;
+  currentEvaluation: EvaluationResult | null;
+  detectedKeywords: string[];
+}
+
 interface MasteryModeProps {
   topic: string;
   domain: string;
@@ -56,6 +67,9 @@ interface MasteryModeProps {
   analogyText: string;
   isDarkMode: boolean;
   onClose: () => void;
+  // State persistence props
+  cachedState?: MasterySessionCache | null;
+  onStateChange?: (state: MasterySessionCache) => void;
 }
 
 const STORAGE_KEY = 'signal_mastery_history';
@@ -331,18 +345,33 @@ const StoryCard: React.FC<{
       const parentheticalMatch = part.match(/^\(([^)]+)\)$/);
       if (parentheticalMatch && stage > 1) {
         const innerContent = parentheticalMatch[1].toLowerCase();
-        // Check if any tech term is in this parenthetical
-        const isTechTerm = Array.from(techTermSet).some(term =>
+        // Check if any tech term is in this parenthetical and find the matching keyword
+        let matchingKeyword: MasteryKeyword | undefined;
+        keywordLookup.forEach((kw, termKey) => {
+          if (!matchingKeyword && (innerContent.includes(termKey) || termKey.includes(innerContent))) {
+            matchingKeyword = kw;
+          }
+        });
+        // Also check tech term set if no keyword match found
+        const isTechTerm = matchingKeyword || Array.from(techTermSet).some(term =>
           innerContent.includes(term) || term.includes(innerContent)
         );
 
         if (isTechTerm) {
-          // Style as red technical term indicator
+          // Style as red technical term indicator with hover for definitions
           overallWordIndex++;
           return (
             <span
               key={`part-${partIndex}`}
-              className={`font-semibold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}
+              className={`font-semibold cursor-help transition-colors ${isDarkMode ? 'text-red-400 hover:text-red-300 hover:bg-red-500/20' : 'text-red-600 hover:text-red-700 hover:bg-red-100'} rounded px-0.5`}
+              onMouseEnter={(e) => {
+                if (matchingKeyword) {
+                  setHoveredKeyword(matchingKeyword);
+                  setHoverPosition({ x: e.clientX, y: e.clientY });
+                }
+              }}
+              onMouseLeave={() => setHoveredKeyword(null)}
+              title={matchingKeyword ? `${matchingKeyword.term}: Click to see definition` : undefined}
             >
               {part}
             </span>
@@ -370,12 +399,12 @@ const StoryCard: React.FC<{
         overallWordIndex++;
 
         if (matchedKeyword) {
-          // Keyword with hover functionality
+          // Keyword with hover functionality - cursor-help indicates definition available
           return (
             <span
               key={key}
               className={`
-                cursor-pointer rounded transition-all duration-200
+                cursor-help rounded transition-all duration-200
                 ${heatmapClass || (isDarkMode
                   ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
@@ -386,6 +415,7 @@ const StoryCard: React.FC<{
                 setHoverPosition({ x: e.clientX, y: e.clientY });
               }}
               onMouseLeave={() => setHoveredKeyword(null)}
+              title={`Hover for definition of "${matchedKeyword.term}"`}
             >
               {token}
             </span>
@@ -1851,24 +1881,26 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
   importanceMap,
   analogyText,
   isDarkMode,
-  onClose
+  onClose,
+  cachedState,
+  onStateChange
 }) => {
-  // Session State
-  const [session, setSession] = useState<MasterySession | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Session State - restore from cache if available
+  const [session, setSession] = useState<MasterySession | null>(cachedState?.session ?? null);
+  const [isLoading, setIsLoading] = useState(!cachedState?.session); // Only loading if no cache
   const [error, setError] = useState<string | null>(null);
 
-  // Story State
-  const [currentStory, setCurrentStory] = useState<MasteryStory | null>(null);
-  const [storyHistory, setStoryHistory] = useState<{ [key: number]: MasteryStory }>({});
+  // Story State - restore from cache if available
+  const [currentStory, setCurrentStory] = useState<MasteryStory | null>(cachedState?.currentStory ?? null);
+  const [storyHistory, setStoryHistory] = useState<{ [key: number]: MasteryStory }>(cachedState?.storyHistory ?? {});
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
 
-  // Input State
-  const [userInput, setUserInput] = useState('');
+  // Input State - restore from cache if available
+  const [userInput, setUserInput] = useState(cachedState?.userInput ?? '');
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [currentEvaluation, setCurrentEvaluation] = useState<EvaluationResult | null>(null);
-  const [detectedKeywords, setDetectedKeywords] = useState<string[]>([]);
-  const [userResponses, setUserResponses] = useState<string[]>([]);
+  const [currentEvaluation, setCurrentEvaluation] = useState<EvaluationResult | null>(cachedState?.currentEvaluation ?? null);
+  const [detectedKeywords, setDetectedKeywords] = useState<string[]>(cachedState?.detectedKeywords ?? []);
+  const [userResponses, setUserResponses] = useState<string[]>(cachedState?.userResponses ?? []);
 
   // Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1884,8 +1916,29 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Check for existing mastery on mount
+  // Notify parent of state changes for persistence
   useEffect(() => {
+    if (onStateChange && session) {
+      onStateChange({
+        session,
+        storyHistory,
+        userResponses,
+        currentStory,
+        userInput,
+        currentEvaluation,
+        detectedKeywords
+      });
+    }
+  }, [session, storyHistory, userResponses, currentStory, userInput, currentEvaluation, detectedKeywords, onStateChange]);
+
+  // Check for existing mastery on mount OR restore from cached state
+  useEffect(() => {
+    // If we have cached state, skip initialization entirely
+    if (cachedState?.session) {
+      console.log('[MasteryMode] Restoring from cached state');
+      return;
+    }
+
     const checkExistingMastery = () => {
       try {
         const existing = localStorage.getItem(STORAGE_KEY);

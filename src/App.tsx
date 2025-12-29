@@ -26,7 +26,9 @@ import {
   Type,
   GraduationCap,
   Medal,
-  List
+  List,
+  Copy,
+  Check
 } from 'lucide-react';
 
 // Types
@@ -89,7 +91,8 @@ import {
   ConstellationMode,
   IsomorphicDualPane,
   ProximityWarningModal,
-  MasteryMode
+  MasteryMode,
+  MasterySessionCache
 } from './components';
 
 // Tech Morph Tooltip - Shows definitions on hover in Tech Locked mode
@@ -391,6 +394,7 @@ export default function App() {
   const [masteryHistory, setMasteryHistory] = useState<CompleteMasteryHistory[]>([]);
   const [showMasteryHistory, setShowMasteryHistory] = useState(false);
   const [selectedMasteryEntry, setSelectedMasteryEntry] = useState<CompleteMasteryHistory | null>(null);
+  const [masterySessionCache, setMasterySessionCache] = useState<MasterySessionCache | null>(null);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -599,6 +603,8 @@ export default function App() {
 
     // Clear any previous domain enrichment when changing domains
     setCachedDomainEnrichment(null);
+    // Clear mastery session cache when domain changes
+    setMasterySessionCache(null);
 
     // Look up emoji from quick start domains first
     const quickStartMatch = QUICK_START_DOMAINS.find(
@@ -1272,6 +1278,44 @@ export default function App() {
     document.body.removeChild(textarea);
   };
 
+  // Format mastery summary as Markdown for export
+  const formatMasterySummaryAsMarkdown = (entry: CompleteMasteryHistory): string => {
+    const lines: string[] = [
+      `# ${entry.topic}`,
+      `*Mastered via ${entry.domain} ${entry.domainEmoji} on ${new Date(entry.completedAt).toLocaleDateString()}*`,
+      '',
+      '## 🏆 Your Mastery Summary',
+      '',
+      '### Key Strength',
+      entry.masterySummary.keyStrength,
+      '',
+      '### Core Intuition',
+      entry.masterySummary.coreIntuition,
+      '',
+      '### What Made You Unique',
+      entry.masterySummary.uniqueApproach,
+      '',
+      '## 📊 Stage Scores',
+      '',
+      `| Stage | Score |`,
+      `|-------|-------|`,
+      `| Stage 1 (Pure Intuition) | ${entry.finalScores.stage1}% |`,
+      `| Stage 2 (Vocabulary) | ${entry.finalScores.stage2}% |`,
+      `| Stage 3 (Full Mastery) | ${entry.finalScores.stage3}% |`,
+      '',
+      '## 📖 Glossary',
+      '',
+      '| Technical Term | Analogy Equivalent | Technical Definition |',
+      '|----------------|-------------------|---------------------|',
+    ];
+
+    entry.glossary.forEach(keyword => {
+      lines.push(`| **${keyword.term}** | ${keyword.analogyTerm} | ${keyword.techDefinition6 || keyword.techDefinition3 || ''} |`);
+    });
+
+    return lines.join('\n');
+  };
+
   const loadFromHistory = (entry: HistoryItem) => {
     // Reset all state first to prevent stale data bleeding through
     resetAllState({ keepDomain: true });
@@ -1416,6 +1460,10 @@ export default function App() {
     setIsNarrativeMode(false);
     setIsConstellationMode(false);
     setIsDualPaneMode(false);
+
+    // Mastery mode state - clear cached session when content changes
+    setIsMasteryMode(false);
+    setMasterySessionCache(null);
   };
 
   // Legacy reset function for backwards compatibility
@@ -2858,6 +2906,8 @@ export default function App() {
           analogyText={segments.map(s => s.analogy).join(' ')}
           isDarkMode={isDarkMode}
           onClose={() => setIsMasteryMode(false)}
+          cachedState={masterySessionCache}
+          onStateChange={setMasterySessionCache}
         />
       )}
 
@@ -2957,12 +3007,27 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setSelectedMasteryEntry(null)}
-              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 hover:bg-red-500 text-neutral-300 hover:text-white' : 'bg-neutral-100 hover:bg-red-500 text-neutral-600 hover:text-white'}`}
-            >
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Copy Full Page button */}
+              <button
+                onClick={() => copyToClipboard(formatMasterySummaryAsMarkdown(selectedMasteryEntry), 'mastery-summary')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                  copiedId === 'mastery-summary'
+                    ? (isDarkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white')
+                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600')
+                }`}
+                title="Copy as Markdown for Obsidian/Notes"
+              >
+                {copiedId === 'mastery-summary' ? <Check size={16} /> : <Copy size={16} />}
+                <span className="text-sm font-medium">{copiedId === 'mastery-summary' ? 'Copied!' : 'Copy Full Page'}</span>
+              </button>
+              <button
+                onClick={() => setSelectedMasteryEntry(null)}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-neutral-800 hover:bg-red-500 text-neutral-300 hover:text-white' : 'bg-neutral-100 hover:bg-red-500 text-neutral-600 hover:text-white'}`}
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
           {/* Content */}
