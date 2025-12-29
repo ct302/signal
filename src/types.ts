@@ -52,6 +52,12 @@ export interface ContextData {
   narrative: string;
 }
 
+export interface CondensedData {
+  what: string;
+  why: string;
+  bullets: string[];
+}
+
 export interface TutorHistoryEntry {
   role: 'user' | 'model';
   text: string;

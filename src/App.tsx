@@ -39,6 +39,7 @@ import {
   ProcessedWord,
   Position,
   ContextData,
+  CondensedData,
   TutorHistoryEntry,
   TutorResponse,
   QuizData,
@@ -94,6 +95,97 @@ import {
   MasteryMode,
   MasterySessionCache
 } from './components';
+
+// Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
+const SYMBOL_DEFINITIONS: Record<string, { symbol: string; technical: string; domainHint: string }> = {
+  // Greek Letters
+  'alpha': { symbol: 'α', technical: 'First parameter, learning rate, or angle of rotation', domainHint: 'the starting point or primary factor' },
+  'beta': { symbol: 'β', technical: 'Second parameter, momentum, or standardized coefficient', domainHint: 'the secondary factor or adjustment' },
+  'gamma': { symbol: 'γ', technical: 'Discount factor, third parameter, or Euler-Mascheroni constant', domainHint: 'how much future matters vs present' },
+  'delta': { symbol: 'Δ/δ', technical: 'Change in value, small increment, or error term', domainHint: 'the amount of change or difference' },
+  'epsilon': { symbol: 'ε', technical: 'Very small quantity, error bound, or exploration rate', domainHint: 'a tiny wiggle room or margin' },
+  'theta': { symbol: 'θ', technical: 'Model parameters, angle, or phase', domainHint: 'the adjustable knobs or settings' },
+  'lambda': { symbol: 'λ', technical: 'Eigenvalue, regularization strength, or rate parameter', domainHint: 'a scaling factor or penalty' },
+  'mu': { symbol: 'μ', technical: 'Mean (average), coefficient of friction, or micro prefix', domainHint: 'the center or typical value' },
+  'sigma': { symbol: 'σ/Σ', technical: 'Standard deviation (σ) or summation (Σ)', domainHint: 'spread/variability (σ) or adding up all (Σ)' },
+  'pi': { symbol: 'π', technical: 'Circle ratio (3.14159...) or policy function', domainHint: 'the constant ratio or strategy' },
+  'phi': { symbol: 'φ/Φ', technical: 'Golden ratio, feature transform, or potential function', domainHint: 'transformation or hidden structure' },
+  'psi': { symbol: 'ψ/Ψ', technical: 'Wave function, digamma, or auxiliary variable', domainHint: 'hidden state or helper variable' },
+  'omega': { symbol: 'ω/Ω', technical: 'Angular frequency, sample space, or weight', domainHint: 'speed of oscillation or full range' },
+  'rho': { symbol: 'ρ', technical: 'Correlation coefficient, density, or spectral radius', domainHint: 'how tightly things move together' },
+  'tau': { symbol: 'τ', technical: 'Time constant, Kendall rank correlation, or torque', domainHint: 'characteristic time or rotation force' },
+  'eta': { symbol: 'η', technical: 'Learning rate, efficiency, or viscosity', domainHint: 'step size or how fast to learn' },
+  'kappa': { symbol: 'κ', technical: 'Curvature, condition number, or concentration', domainHint: 'how curved or sensitive' },
+  'chi': { symbol: 'χ', technical: 'Chi-squared distribution, susceptibility', domainHint: 'goodness of fit or responsiveness' },
+  // Math Operators
+  'sum': { symbol: 'Σ', technical: 'Summation - add up all values in a sequence', domainHint: 'total of everything combined' },
+  'prod': { symbol: 'Π', technical: 'Product - multiply all values in a sequence', domainHint: 'everything multiplied together' },
+  'int': { symbol: '∫', technical: 'Integral - continuous sum, area under curve', domainHint: 'accumulated total over a range' },
+  'partial': { symbol: '∂', technical: 'Partial derivative - rate of change in one direction', domainHint: 'sensitivity to one factor' },
+  'nabla': { symbol: '∇', technical: 'Gradient - vector of all partial derivatives', domainHint: 'direction of steepest increase' },
+  'infty': { symbol: '∞', technical: 'Infinity - unbounded quantity', domainHint: 'without limit or end' },
+  'in': { symbol: '∈', technical: 'Element of - membership in a set', domainHint: 'belongs to or is part of' },
+  'forall': { symbol: '∀', technical: 'For all - universal quantifier', domainHint: 'applies to every single one' },
+  'exists': { symbol: '∃', technical: 'There exists - existential quantifier', domainHint: 'at least one exists' },
+  'approx': { symbol: '≈', technical: 'Approximately equal', domainHint: 'roughly the same as' },
+  'neq': { symbol: '≠', technical: 'Not equal to', domainHint: 'different from' },
+  'leq': { symbol: '≤', technical: 'Less than or equal to', domainHint: 'at most' },
+  'geq': { symbol: '≥', technical: 'Greater than or equal to', domainHint: 'at least' },
+  'cdot': { symbol: '·', technical: 'Dot product or multiplication', domainHint: 'combining by multiplication' },
+  'times': { symbol: '×', technical: 'Cross product or multiplication', domainHint: 'combining perpendicular components' },
+  'sqrt': { symbol: '√', technical: 'Square root - number that squares to input', domainHint: 'undoing a square' },
+  'frac': { symbol: 'a/b', technical: 'Fraction - division or ratio', domainHint: 'portion or rate' },
+  'vec': { symbol: '→', technical: 'Vector - quantity with magnitude and direction', domainHint: 'arrow pointing somewhere' },
+  'hat': { symbol: '^', technical: 'Unit vector or estimator', domainHint: 'normalized or predicted' },
+  'bar': { symbol: '—', technical: 'Mean/average or complement', domainHint: 'average value or opposite' },
+  'prime': { symbol: "'", technical: 'Derivative or transformed variable', domainHint: 'rate of change or modified version' },
+  'log': { symbol: 'log', technical: 'Logarithm - inverse of exponentiation', domainHint: 'how many times to multiply' },
+  'exp': { symbol: 'e^x', technical: 'Exponential function - rapid growth/decay', domainHint: 'compound growth' },
+  'lim': { symbol: 'lim', technical: 'Limit - value approached as input changes', domainHint: 'where things tend toward' },
+  'max': { symbol: 'max', technical: 'Maximum - largest value', domainHint: 'the biggest one' },
+  'min': { symbol: 'min', technical: 'Minimum - smallest value', domainHint: 'the smallest one' },
+  'argmax': { symbol: 'argmax', technical: 'Argument of maximum - input that gives largest output', domainHint: 'what causes the best result' },
+  'argmin': { symbol: 'argmin', technical: 'Argument of minimum - input that gives smallest output', domainHint: 'what causes the least result' },
+};
+
+// Helper to detect if a term is a Greek/math symbol
+const getSymbolDefinition = (term: string): { symbol: string; technical: string; domainHint: string } | null => {
+  // Clean the term - remove LaTeX formatting
+  const clean = term.toLowerCase()
+    .replace(/[\$\\{}^_]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+
+  // Direct match
+  if (SYMBOL_DEFINITIONS[clean]) {
+    return SYMBOL_DEFINITIONS[clean];
+  }
+
+  // Check if term contains a known symbol (e.g., "\sigma_x" contains "sigma")
+  for (const [key, def] of Object.entries(SYMBOL_DEFINITIONS)) {
+    if (clean.includes(key) || term.toLowerCase().includes(`\\${key}`)) {
+      return def;
+    }
+  }
+
+  // Check for actual Greek characters
+  const greekChars: Record<string, string> = {
+    'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'δ': 'delta', 'ε': 'epsilon',
+    'θ': 'theta', 'λ': 'lambda', 'μ': 'mu', 'σ': 'sigma', 'Σ': 'sigma',
+    'π': 'pi', 'φ': 'phi', 'Φ': 'phi', 'ψ': 'psi', 'Ψ': 'psi',
+    'ω': 'omega', 'Ω': 'omega', 'ρ': 'rho', 'τ': 'tau', 'η': 'eta',
+    'κ': 'kappa', 'χ': 'chi', '∞': 'infty', '∈': 'in', '∀': 'forall',
+    '∃': 'exists', '∇': 'nabla', '∂': 'partial', '∫': 'int', '≈': 'approx'
+  };
+
+  for (const [char, key] of Object.entries(greekChars)) {
+    if (term.includes(char) && SYMBOL_DEFINITIONS[key]) {
+      return SYMBOL_DEFINITIONS[key];
+    }
+  }
+
+  return null;
+};
 
 // Tech Morph Tooltip - Shows definitions on hover in Tech Locked mode
 // Features: Draggable, LaTeX rendering, concept mapping
@@ -161,6 +253,9 @@ const TechMorphTooltip: React.FC<{
     );
   });
 
+  // Check if this is a Greek/math symbol for hybrid definition
+  const symbolDef = getSymbolDefinition(term);
+
   // Display term - use matched concept's tech_term if available, cleaned otherwise
   const displayTerm = matchedConcept?.tech_term || term.replace(/[\$\\]/g, '').trim();
 
@@ -195,7 +290,7 @@ const TechMorphTooltip: React.FC<{
         </button>
       </div>
 
-      {/* Narrative Story Mapping - The main content */}
+      {/* Content: Narrative > Symbol > Fallback */}
       {matchedConcept?.narrative_mapping ? (
         <div className="space-y-3">
           {/* Narrative Story */}
@@ -208,6 +303,16 @@ const TechMorphTooltip: React.FC<{
             </p>
           </div>
 
+          {/* Symbol Technical Meaning - Add if it's a symbol */}
+          {symbolDef && (
+            <div className={`pt-2 border-t ${borderColor}`}>
+              <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+                🔣 Symbol Meaning
+              </div>
+              <p className={`text-sm ${textColor}`}>{symbolDef.technical}</p>
+            </div>
+          )}
+
           {/* Compact Mapping */}
           <div className={`pt-2 border-t ${borderColor}`}>
             <div className="flex items-center justify-center gap-2 text-sm">
@@ -215,6 +320,30 @@ const TechMorphTooltip: React.FC<{
               <span className={mutedColor}>↔</span>
               <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
             </div>
+          </div>
+        </div>
+      ) : symbolDef ? (
+        /* Symbol-only definition - hybrid technical + domain hint */
+        <div className="space-y-3">
+          {/* Symbol Technical Meaning */}
+          <div>
+            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+              📐 Technical
+            </div>
+            <p className={`text-sm ${textColor}`}>{symbolDef.technical}</p>
+          </div>
+
+          {/* Domain Hint */}
+          <div>
+            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+              🎯 Think of it as
+            </div>
+            <p className={`text-sm text-emerald-500`}>"{symbolDef.domainHint}"</p>
+          </div>
+
+          {/* Visual Symbol */}
+          <div className={`pt-2 border-t ${borderColor} text-center`}>
+            <span className={`text-2xl ${textColor}`}>{symbolDef.symbol}</span>
           </div>
         </div>
       ) : (
@@ -308,6 +437,7 @@ export default function App() {
   const [importanceMap, setImportanceMap] = useState<ImportanceMapItem[]>([]);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
+  const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
   const [synthesisSummary, setSynthesisSummary] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
 
@@ -353,6 +483,8 @@ export default function App() {
 
   // Tech Morph Tooltip State (hover definitions in Tech Locked mode)
   const [techMorphTerm, setTechMorphTerm] = useState<{ term: string; position: { x: number; y: number }; conceptIndex?: number } | null>(null);
+  // Track which concept is being hovered for multi-word term underlining
+  const [hoveredConceptIndex, setHoveredConceptIndex] = useState<number | null>(null);
 
   // Tutor State
   const [showFollowUp, setShowFollowUp] = useState(false);
@@ -421,6 +553,7 @@ export default function App() {
   const historyPanelRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const techMorphHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
@@ -488,6 +621,20 @@ export default function App() {
       setSynthesisCitation(cleanText(fixUnicode(synthesis.citation || "")));
     }
 
+    // Parse condensed view data (WHAT/WHY + bullet points)
+    const condensed = findContext(data, ["condensed"]);
+    if (condensed) {
+      setCondensedData({
+        what: cleanText(fixUnicode(condensed.what || "")),
+        why: cleanText(fixUnicode(condensed.why || "")),
+        bullets: Array.isArray(condensed.bullets)
+          ? condensed.bullets.map((b: string) => cleanText(fixUnicode(b || "")))
+          : []
+      });
+    } else {
+      setCondensedData(null);
+    }
+
     setLastSubmittedTopic(topicName);
     setHasStarted(true);
 
@@ -549,6 +696,7 @@ export default function App() {
     setShowFollowUp(false);
     setTutorResponse(null);
     setContextData(null);
+    setCondensedData(null);
 
     try {
       const parsed = await generateAnalogy(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
@@ -1339,6 +1487,7 @@ export default function App() {
     setProcessedWords([]);
     setSegments([]);
     setContextData(null);
+    setCondensedData(null);
   };
 
   // Check if morph should be locked (definition popup open OR user is selecting text)
@@ -1378,10 +1527,10 @@ export default function App() {
   };
 
   const getViewModeLabel = () => {
-    if (isNarrativeMode) return { text: "Story Mode", icon: <BookOpenText size={14} /> };
-    if (viewMode === 'morph') return { text: "Morph On", icon: <Unlock size={14} /> };
-    if (viewMode === 'nfl') return { text: "Expt Locked", icon: <span className="text-xs">{domainEmoji}</span> };
-    return { text: "Tech Locked", icon: <Lock size={14} /> };
+    if (isNarrativeMode) return { text: "Story", icon: <BookOpenText size={14} /> };
+    if (viewMode === 'morph') return { text: "Morph", icon: <Unlock size={14} /> };
+    if (viewMode === 'nfl') return { text: "Expert", icon: <span className="text-xs">{domainEmoji}</span> };
+    return { text: "Tech", icon: <Lock size={14} /> };
   };
 
   // Comprehensive state reset - clears everything except history and domain selection
@@ -1392,6 +1541,7 @@ export default function App() {
     setImportanceMap([]);
     setProcessedWords([]);
     setContextData(null);
+    setCondensedData(null);
     setSynthesisSummary("");
     setSynthesisCitation("");
 
@@ -1721,6 +1871,21 @@ export default function App() {
       style.padding = '0 4px';
     }
 
+    // Red highlight for concept_map terms on mouse enter in Tech Lock mode
+    const hasConceptMapping = item.conceptIndex !== undefined && item.conceptIndex >= 0;
+    const cleanTextForMatch = item.text.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
+    const matchesConceptMap = conceptMap.some(c =>
+      c.tech_term.toLowerCase().includes(cleanTextForMatch) ||
+      cleanTextForMatch.includes(c.tech_term.toLowerCase()) ||
+      c.analogy_term.toLowerCase().includes(cleanTextForMatch)
+    );
+    const isTechConceptTerm = isImportant && (hasConceptMapping || matchesConceptMap);
+
+    if (viewMode === 'tech' && isMouseInside && isTechConceptTerm && !isSelected) {
+      style.color = '#dc2626'; // Tailwind red-600
+      style.fontWeight = 700;
+    }
+
     let classes = "";
     if (isImportant && isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
       if (mode === 'heatmap') {
@@ -1740,7 +1905,13 @@ export default function App() {
 
     // Tech Morph hover handler - shows tooltip with definitions in Tech Locked mode
     // Only trigger for words that are actual technical terms (have conceptIndex or match conceptMap)
+    // Uses debounce to prevent jittery behavior
     const handleTechMorphHover = (e: React.MouseEvent) => {
+      // Clear any pending hover timer
+      if (techMorphHoverTimerRef.current) {
+        clearTimeout(techMorphHoverTimerRef.current);
+      }
+
       if (viewMode === 'tech' && isImportant) {
         // Only show tooltip for actual technical terms - those with a concept mapping
         const hasConceptMapping = item.conceptIndex !== undefined && item.conceptIndex >= 0;
@@ -1753,25 +1924,48 @@ export default function App() {
           c.analogy_term.toLowerCase().includes(cleanText)
         );
 
+        // Check if this is a Greek/math symbol (also hoverable)
+        const isSymbol = item.isLatex || getSymbolDefinition(item.text) !== null;
+
         // Skip common non-technical words
         const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'we', 'us', 'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'which', 'who', 'whom', 'where', 'when', 'why', 'how', 'what', 'if', 'then', 'else', 'so', 'not', 'no', 'yes', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'same', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'where', 'about', 'into', 'over', 'after', 'before', 'between', 'under', 'again', 'further', 'once'];
         const isCommonWord = commonWords.includes(cleanText);
 
-        if ((hasConceptMapping || matchesConceptMap) && !isCommonWord) {
-          setTechMorphTerm({
-            term: item.text,
-            position: { x: e.clientX, y: e.clientY },
-            conceptIndex: item.conceptIndex
-          });
+        if ((hasConceptMapping || matchesConceptMap || isSymbol) && !isCommonWord) {
+          // Get element position for stable tooltip placement
+          const target = e.currentTarget as HTMLElement;
+          const rect = target.getBoundingClientRect();
+
+          // Set hovered concept immediately for underline styling (no debounce)
+          if (item.conceptIndex !== undefined && item.conceptIndex >= 0) {
+            setHoveredConceptIndex(item.conceptIndex);
+          }
+
+          // Debounce: wait 150ms before showing tooltip to prevent jitter
+          techMorphHoverTimerRef.current = setTimeout(() => {
+            setTechMorphTerm({
+              term: item.text,
+              // Position below the word, not at mouse cursor (more stable)
+              position: { x: rect.left, y: rect.bottom },
+              conceptIndex: item.conceptIndex
+            });
+          }, 150);
         }
       }
     };
 
     const handleTechMorphLeave = () => {
-      // Small delay to allow moving to tooltip
+      // Clear pending hover timer
+      if (techMorphHoverTimerRef.current) {
+        clearTimeout(techMorphHoverTimerRef.current);
+        techMorphHoverTimerRef.current = null;
+      }
+      // Clear hovered concept for underline styling
+      setHoveredConceptIndex(null);
+      // Delay closing to allow moving to tooltip
       setTimeout(() => {
         setTechMorphTerm(null);
-      }, 100);
+      }, 200);
     };
 
     if (item.isLatex || forceRender) {
@@ -1783,10 +1977,13 @@ export default function App() {
           : latexContent;
 
       // Add hover class for important clickable words (only in locked modes)
+      // Also apply underline when any word in the same concept group is hovered (multi-word term support)
+      const isPartOfHoveredConcept = hoveredConceptIndex !== null && item.conceptIndex === hoveredConceptIndex;
       const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
+      const activeUnderline = isPartOfHoveredConcept ? 'underline decoration-dotted' : '';
 
       if (!isKatexLoaded || !window.katex) {
-        return <span id={wordId} key={index} className={`${classes} ${hoverClass}`} title="Math loading...">{rawContent}</span>;
+        return <span id={wordId} key={index} className={`${classes} ${hoverClass} ${activeUnderline}`} title="Math loading...">{rawContent}</span>;
       }
 
       try {
@@ -1797,26 +1994,29 @@ export default function App() {
             id={wordId}
             key={index}
             style={mathStyle}
-            className={`${classes} ${hoverClass} not-italic normal-case`}
+            className={`${classes} ${hoverClass} ${activeUnderline} not-italic normal-case`}
             dangerouslySetInnerHTML={{ __html: html }}
             onMouseEnter={handleTechMorphHover}
             onMouseLeave={handleTechMorphLeave}
           />
         );
       } catch (e) {
-        return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
+        return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass} ${activeUnderline}`}>{item.text}</span>;
       }
     }
 
     // Add hover class for important clickable words (only in locked modes)
+    // Also apply underline when any word in the same concept group is hovered (multi-word term support)
+    const isPartOfHoveredConcept = hoveredConceptIndex !== null && item.conceptIndex === hoveredConceptIndex;
     const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
+    const activeUnderline = isPartOfHoveredConcept ? 'underline decoration-dotted' : '';
 
     return (
       <span
         id={wordId}
         key={index}
         style={style}
-        className={`${classes} ${hoverClass}`}
+        className={`${classes} ${hoverClass} ${activeUnderline}`}
         onMouseEnter={handleTechMorphHover}
         onMouseLeave={handleTechMorphLeave}
       >
@@ -2041,7 +2241,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={cycleViewMode}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
                         viewMode === 'morph' && !isNarrativeMode
                           ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                           : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
@@ -2223,6 +2423,72 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
+                  {/* Condensed View Overlay - Shows on hover in Tech Lock mode */}
+                  {viewMode === 'tech' && isMouseInside && condensedData && (
+                    <div
+                      className={`absolute inset-0 z-10 p-6 rounded-xl transition-all duration-300 ${
+                        isDarkMode ? 'bg-neutral-900/95' : 'bg-white/95'
+                      } backdrop-blur-sm`}
+                    >
+                      <div className="space-y-4">
+                        {/* WHAT Section */}
+                        <div>
+                          <div className={`text-xs uppercase font-bold tracking-wider mb-1 ${
+                            isDarkMode ? 'text-purple-400' : 'text-purple-600'
+                          }`}>
+                            📐 WHAT
+                          </div>
+                          <p className={`text-lg font-medium ${
+                            isDarkMode ? 'text-neutral-100' : 'text-neutral-800'
+                          }`}>
+                            {condensedData.what}
+                          </p>
+                        </div>
+
+                        {/* WHY Section */}
+                        <div>
+                          <div className={`text-xs uppercase font-bold tracking-wider mb-1 ${
+                            isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
+                          }`}>
+                            🎯 WHY
+                          </div>
+                          <p className={`text-lg font-medium ${
+                            isDarkMode ? 'text-neutral-100' : 'text-neutral-800'
+                          }`}>
+                            {condensedData.why}
+                          </p>
+                        </div>
+
+                        {/* First Principles Bullets */}
+                        {condensedData.bullets.length > 0 && (
+                          <div>
+                            <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
+                              isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                            }`}>
+                              ⚡ First Principles
+                            </div>
+                            <ul className="space-y-2">
+                              {condensedData.bullets.map((bullet, i) => (
+                                <li key={i} className="flex gap-3 items-start">
+                                  <span className={`flex-shrink-0 mt-0.5 text-sm font-bold ${
+                                    isDarkMode ? 'text-orange-400' : 'text-orange-500'
+                                  }`}>
+                                    {i + 1}.
+                                  </span>
+                                  <span className={`text-sm ${
+                                    isDarkMode ? 'text-neutral-300' : 'text-neutral-700'
+                                  }`}>
+                                    {bullet}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Bullet Point Mode - Condensed sentence bullets */}
                   {isBulletMode && viewMode === 'tech' ? (
                     <ul

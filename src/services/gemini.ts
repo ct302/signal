@@ -495,6 +495,17 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "synthesis": {
     "summary": "2-3 sentence integration of both perspectives",
     "citation": "A memorable quote or principle that ties it together"
+  },
+  "condensed": {
+    "what": "One simple sentence: WHAT this concept is in its purest form",
+    "why": "One simple sentence: WHY this matters or when you'd use it",
+    "bullets": [
+      "First-principle point 1 - irreducibly simple truth",
+      "First-principle point 2 - another atomic insight",
+      "First-principle point 3 - core mechanism",
+      "First-principle point 4 - key relationship",
+      "First-principle point 5 - essential limitation or edge case"
+    ]
   }
 }
 
@@ -618,6 +629,17 @@ The concept_map creates a vocabulary mapping between technical terms and ${short
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
 - narrative_mapping: A 2-3 sentence NARRATIVE MINI-STORY that bridges the tech concept to the analogy domain. This should be a vivid, memorable connection that helps the reader deeply understand WHY these two concepts map to each other. Write it as a story snippet, not a dry definition.
+
+CONDENSED VIEW RULES:
+The "condensed" object provides a stripped-down, first-principles view of the concept:
+- "what": Distill the concept to its PUREST form - one sentence, no jargon, maximum clarity
+- "why": Explain when/why someone would use or encounter this - practical relevance
+- "bullets": 5 irreducibly simple truths that form the foundation of understanding:
+  - Each bullet = ONE atomic insight that can't be simplified further
+  - Aim for "Kolmogorov complexity" - the shortest possible description of an essential truth
+  - No fluff, no examples - just the core principle
+  - If you removed any bullet, understanding would be incomplete
+  - Order them from most fundamental to most nuanced
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
