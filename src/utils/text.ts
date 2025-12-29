@@ -85,6 +85,18 @@ export const sanitizeRawApiResponse = (rawText: string): string => {
     // Remove $...$ LaTeX blocks from analogy text
     cleaned = cleaned.replace(/\$[^$]+\$/g, '');
 
+    // Fix \not patterns BEFORE removing LaTeX commands
+    // \not renders as "/" in LaTeX, so convert to readable text
+    cleaned = cleaned.replace(/\\not\s*\\?empty/gi, 'not empty');
+    cleaned = cleaned.replace(/\\not\s*\\?in\b/gi, 'not in');
+    cleaned = cleaned.replace(/\\not\s*=/g, 'not equal to');
+    cleaned = cleaned.replace(/\\not\s*\\?subset/gi, 'not a subset of');
+    cleaned = cleaned.replace(/\\not\s*\\?equiv/gi, 'not equivalent to');
+    cleaned = cleaned.replace(/\\neq/g, 'not equal to');
+    cleaned = cleaned.replace(/\\notin/g, 'not in');
+    // Catch any remaining \not followed by anything
+    cleaned = cleaned.replace(/\\not\s*/g, 'not ');
+
     // Remove orphaned LaTeX commands (backslash followed by letters)
     cleaned = cleaned.replace(/\\[a-zA-Z]+/g, '');
 
@@ -608,6 +620,17 @@ export const sanitizeLatex = (text: string): string => {
   if (!text) return "";
 
   let result = text;
+
+  // 0. Fix \not patterns BEFORE any other processing
+  // \not renders as "/" in KaTeX when malformed, convert to proper form
+  // Handle both inside and outside math mode
+  result = result.replace(/\\not\s*\\?empty/gi, '\\neq \\emptyset');
+  result = result.replace(/\\not\s*\\?in\b/gi, '\\notin');
+  result = result.replace(/\\not\s*=/g, '\\neq');
+  result = result.replace(/\\not\s*\\?subset/gi, '\\not\\subset');
+  result = result.replace(/\\not\s*\\?equiv/gi, '\\not\\equiv');
+  // Fix standalone \not that might render as /
+  result = result.replace(/\\not\s+(?=[a-zA-Z])/g, '\\lnot\\,');
 
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command

@@ -118,7 +118,7 @@ const KeywordHoverModal: React.FC<{
 // ============================================
 type AttentionMode = 'opacity' | 'size' | 'heatmap';
 
-// Heatmap color palette for visual hierarchy
+// Heatmap color palette for visual hierarchy (Stages 2 & 3 - includes RED for keywords)
 const HEATMAP_COLORS = [
   'bg-red-500/30 text-red-300',
   'bg-orange-500/30 text-orange-300',
@@ -143,6 +143,33 @@ const HEATMAP_COLORS_LIGHT = [
   'bg-teal-100 text-teal-700',
   'bg-cyan-100 text-cyan-700',
   'bg-blue-100 text-blue-700'
+];
+
+// Stage 1 heatmap colors - NO RED (red reserved for keyword highlighting in Stage 2/3)
+const HEATMAP_COLORS_STAGE1 = [
+  'bg-purple-500/30 text-purple-300',
+  'bg-violet-500/30 text-violet-300',
+  'bg-indigo-500/30 text-indigo-300',
+  'bg-blue-500/30 text-blue-300',
+  'bg-cyan-500/30 text-cyan-300',
+  'bg-teal-500/30 text-teal-300',
+  'bg-emerald-500/30 text-emerald-300',
+  'bg-green-500/30 text-green-300',
+  'bg-lime-500/30 text-lime-300',
+  'bg-yellow-500/30 text-yellow-300'
+];
+
+const HEATMAP_COLORS_STAGE1_LIGHT = [
+  'bg-purple-100 text-purple-700',
+  'bg-violet-100 text-violet-700',
+  'bg-indigo-100 text-indigo-700',
+  'bg-blue-100 text-blue-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-teal-100 text-teal-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-green-100 text-green-700',
+  'bg-lime-100 text-lime-700',
+  'bg-yellow-100 text-yellow-700'
 ];
 
 // ============================================
@@ -239,16 +266,21 @@ const StoryCard: React.FC<{
   };
 
   // Get heatmap color class based on importance
+  // Stage 1 uses purple/blue palette (no red), Stage 2/3 uses full spectrum (red = keywords)
   const getHeatmapClass = (importance: number): string => {
     if (attentionMode !== 'heatmap') return '';
     if (importance < threshold) return '';
 
+    // Choose color palette based on stage
+    const darkColors = stage === 1 ? HEATMAP_COLORS_STAGE1 : HEATMAP_COLORS;
+    const lightColors = stage === 1 ? HEATMAP_COLORS_STAGE1_LIGHT : HEATMAP_COLORS_LIGHT;
+
     const colorIndex = Math.min(
-      Math.floor((1 - importance) * HEATMAP_COLORS.length),
-      HEATMAP_COLORS.length - 1
+      Math.floor((1 - importance) * darkColors.length),
+      darkColors.length - 1
     );
 
-    return isDarkMode ? HEATMAP_COLORS[colorIndex] : HEATMAP_COLORS_LIGHT[colorIndex];
+    return isDarkMode ? darkColors[colorIndex] : lightColors[colorIndex];
   };
 
   // Render story with importance-based styling
@@ -496,121 +528,103 @@ const StoryCard: React.FC<{
   // Regular (non-maximized) view
   return (
     <div className={`rounded-xl p-6 mb-4 relative ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
-      {/* Story Header */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Story Header with Inline Attention Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <BookOpen size={18} className={isDarkMode ? 'text-purple-400' : 'text-purple-600'} />
           <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-            {stage === 1 ? 'Your Story' : `Your Story (${stage === 2 ? '6' : '10'} terms highlighted)`}
+            Your Story
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Attention Mode Toggle */}
-          <button
-            onClick={() => setShowAttentionControls(!showAttentionControls)}
-            className={`
-              p-2 rounded-lg transition-all duration-200
-              ${showAttentionControls
-                ? 'bg-purple-500 text-white'
-                : isDarkMode
+        {/* Inline Attention Controls */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Mode Buttons */}
+          <div className="flex items-center gap-1">
+            <span className={`text-xs font-medium mr-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              Mode:
+            </span>
+            {(['opacity', 'size', 'heatmap'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setAttentionMode(mode)}
+                className={`
+                  flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all
+                  ${attentionMode === mode
+                    ? 'bg-purple-500 text-white'
+                    : isDarkMode
+                      ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}
+                `}
+              >
+                {mode === 'opacity' && <Eye size={12} />}
+                {mode === 'size' && <AlignLeft size={12} />}
+                {mode === 'heatmap' && <Zap size={12} />}
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <span className={`text-xs ${isDarkMode ? 'text-neutral-700' : 'text-neutral-300'}`}>|</span>
+
+          {/* Focus Slider */}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              Focus:
+            </span>
+            <input
+              type="range"
+              min="0.1"
+              max="0.9"
+              step="0.05"
+              value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
+              className="w-20 h-1.5 rounded-full appearance-none cursor-pointer accent-purple-500"
+              style={{
+                background: isDarkMode
+                  ? `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) 100%)`
+                  : `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) 100%)`
+              }}
+            />
+            <span className={`text-xs w-8 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              {Math.round(threshold * 100)}%
+            </span>
+          </div>
+
+          <span className={`text-xs ${isDarkMode ? 'text-neutral-700' : 'text-neutral-300'}`}>|</span>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1">
+            {/* Regenerate Button */}
+            <button
+              onClick={onRegenerate}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200 group
+                ${isDarkMode
                   ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
                   : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
-            `}
-            title="Attention controls"
-          >
-            <Eye size={18} />
-          </button>
+              `}
+              title="Regenerate story"
+            >
+              <Dices size={16} className="group-hover:rotate-180 transition-transform duration-500" />
+            </button>
 
-          {/* Regenerate Button */}
-          <button
-            onClick={onRegenerate}
-            className={`
-              p-2 rounded-lg transition-all duration-200 group
-              ${isDarkMode
-                ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
-                : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
-            `}
-            title="Regenerate story"
-          >
-            <Dices size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-          </button>
-
-          {/* Maximize Button */}
-          <button
-            onClick={() => setIsMaximized(true)}
-            className={`
-              p-2 rounded-lg transition-all duration-200
-              ${isDarkMode
-                ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
-                : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
-            `}
-            title="Expand story"
-          >
-            <Maximize2 size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Attention Controls Panel */}
-      {showAttentionControls && (
-        <div className={`
-          mb-4 p-3 rounded-lg border animate-in slide-in-from-top-2 duration-200
-          ${isDarkMode ? 'bg-neutral-900/50 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}
-        `}>
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Mode Buttons */}
-            <div className="flex items-center gap-1">
-              <span className={`text-xs font-medium mr-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                Mode:
-              </span>
-              {(['opacity', 'size', 'heatmap'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setAttentionMode(mode)}
-                  className={`
-                    flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all
-                    ${attentionMode === mode
-                      ? 'bg-purple-500 text-white'
-                      : isDarkMode
-                        ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                        : 'bg-white text-neutral-600 hover:bg-neutral-200 border border-neutral-200'}
-                  `}
-                >
-                  {mode === 'opacity' && <Eye size={12} />}
-                  {mode === 'size' && <AlignLeft size={12} />}
-                  {mode === 'heatmap' && <Zap size={12} />}
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            {/* Threshold Slider */}
-            <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                Focus:
-              </span>
-              <input
-                type="range"
-                min="0.1"
-                max="0.9"
-                step="0.05"
-                value={threshold}
-                onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-purple-500"
-                style={{
-                  background: isDarkMode
-                    ? `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) ${(threshold - 0.1) / 0.8 * 100}%, rgb(64, 64, 64) 100%)`
-                    : `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(168, 85, 247) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) ${(threshold - 0.1) / 0.8 * 100}%, rgb(229, 231, 235) 100%)`
-                }}
-              />
-              <span className={`text-xs w-8 text-right ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                {Math.round(threshold * 100)}%
-              </span>
-            </div>
+            {/* Maximize Button */}
+            <button
+              onClick={() => setIsMaximized(true)}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200
+                ${isDarkMode
+                  ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                  : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+              `}
+              title="Expand story"
+            >
+              <Maximize2 size={16} />
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Story Content */}
       <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>

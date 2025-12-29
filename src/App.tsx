@@ -91,6 +91,95 @@ import {
   MasteryMode
 } from './components';
 
+// Tech Morph Tooltip - Shows 6-word definitions on hover in Tech Locked mode
+const TechMorphTooltip: React.FC<{
+  term: string;
+  position: { x: number; y: number };
+  conceptMap: ConceptMapItem[];
+  domain: string;
+  isDarkMode: boolean;
+  onClose: () => void;
+}> = ({ term, position, conceptMap, domain, isDarkMode, onClose }) => {
+  // Find matching concept from map
+  const cleanTerm = term.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$]/g, '').trim();
+  const matchedConcept = conceptMap.find(c =>
+    c.tech_term.toLowerCase().includes(cleanTerm) ||
+    cleanTerm.includes(c.tech_term.toLowerCase()) ||
+    c.analogy_term.toLowerCase().includes(cleanTerm)
+  );
+
+  // Generate concise definitions (6-word style)
+  const getTechDefinition = (): string => {
+    if (!matchedConcept) return `Technical term in mathematical context`;
+    // Create a concise 6-word definition based on the term
+    const techTerm = matchedConcept.tech_term;
+    return `${techTerm}: formal mathematical operation or structure`;
+  };
+
+  const getAnalogyDefinition = (): string => {
+    if (!matchedConcept) return `Maps to ${domain} concept`;
+    return `Like "${matchedConcept.analogy_term}" in ${domain}`;
+  };
+
+  const bgColor = isDarkMode ? 'bg-neutral-800' : 'bg-white';
+  const borderColor = isDarkMode ? 'border-neutral-700' : 'border-neutral-200';
+  const textColor = isDarkMode ? 'text-neutral-200' : 'text-neutral-800';
+  const mutedColor = isDarkMode ? 'text-neutral-400' : 'text-neutral-500';
+
+  return (
+    <div
+      className={`fixed z-[200] ${bgColor} ${borderColor} border rounded-xl shadow-xl p-4 max-w-xs animate-in fade-in zoom-in-95 duration-150`}
+      style={{
+        left: Math.min(position.x, window.innerWidth - 320),
+        top: position.y + 20,
+      }}
+      onMouseLeave={onClose}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-neutral-200 dark:border-neutral-700">
+        <span className="text-lg">🔬</span>
+        <span className={`font-bold ${textColor}`}>
+          {matchedConcept?.tech_term || term}
+        </span>
+      </div>
+
+      {/* Definitions */}
+      <div className="space-y-3">
+        {/* Technical Definition */}
+        <div>
+          <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+            📐 Technical
+          </div>
+          <p className={`text-sm ${textColor}`}>
+            {getTechDefinition()}
+          </p>
+        </div>
+
+        {/* Analogy Definition */}
+        {matchedConcept && (
+          <div>
+            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+              🎯 {domain} Equivalent
+            </div>
+            <p className={`text-sm ${textColor}`}>
+              {getAnalogyDefinition()}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Mapping Arrow */}
+      {matchedConcept && (
+        <div className={`mt-3 pt-2 border-t ${borderColor} flex items-center justify-center gap-2 text-sm`}>
+          <span className="text-purple-500 font-medium">{matchedConcept.tech_term}</span>
+          <span className={mutedColor}>↔</span>
+          <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // Custom Hooks
   const isMobile = useMobile();
@@ -175,6 +264,9 @@ export default function App() {
   const [isLoadingMiniDef, setIsLoadingMiniDef] = useState(false);
   const [miniDefThreshold, setMiniDefThreshold] = useState(0.3);
   const [isMiniDefColorMode, setIsMiniDefColorMode] = useState(false);
+
+  // Tech Morph Tooltip State (hover definitions in Tech Locked mode)
+  const [techMorphTerm, setTechMorphTerm] = useState<{ term: string; position: { x: number; y: number }; conceptIndex?: number } | null>(null);
 
   // Tutor State
   const [showFollowUp, setShowFollowUp] = useState(false);
@@ -1461,6 +1553,24 @@ export default function App() {
       forceRender = true;
     }
 
+    // Tech Morph hover handler - shows tooltip with definitions in Tech Locked mode
+    const handleTechMorphHover = (e: React.MouseEvent) => {
+      if (viewMode === 'tech' && isImportant) {
+        setTechMorphTerm({
+          term: item.text,
+          position: { x: e.clientX, y: e.clientY },
+          conceptIndex: item.conceptIndex
+        });
+      }
+    };
+
+    const handleTechMorphLeave = () => {
+      // Small delay to allow moving to tooltip
+      setTimeout(() => {
+        setTechMorphTerm(null);
+      }, 100);
+    };
+
     if (item.isLatex || forceRender) {
       let latexContent = contentToRender.replace(/\\\\/g, "\\");
       let rawContent = latexContent.startsWith('$$')
@@ -1470,7 +1580,7 @@ export default function App() {
           : latexContent;
 
       // Add hover class for important clickable words (only in locked modes)
-      const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+      const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
 
       if (!isKatexLoaded || !window.katex) {
         return <span id={wordId} key={index} className={`${classes} ${hoverClass}`} title="Math loading...">{rawContent}</span>;
@@ -1479,16 +1589,37 @@ export default function App() {
       try {
         const html = window.katex.renderToString(rawContent, { throwOnError: false, displayMode: false });
         const mathStyle = { ...style, display: 'inline-block', margin: '0 4px' };
-        return <span id={wordId} key={index} style={mathStyle} className={`${classes} ${hoverClass} not-italic normal-case`} dangerouslySetInnerHTML={{ __html: html }} />;
+        return (
+          <span
+            id={wordId}
+            key={index}
+            style={mathStyle}
+            className={`${classes} ${hoverClass} not-italic normal-case`}
+            dangerouslySetInnerHTML={{ __html: html }}
+            onMouseEnter={handleTechMorphHover}
+            onMouseLeave={handleTechMorphLeave}
+          />
+        );
       } catch (e) {
         return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
       }
     }
 
     // Add hover class for important clickable words (only in locked modes)
-    const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current' : '';
+    const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
 
-    return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass}`}>{item.text}</span>;
+    return (
+      <span
+        id={wordId}
+        key={index}
+        style={style}
+        className={`${classes} ${hoverClass}`}
+        onMouseEnter={handleTechMorphHover}
+        onMouseLeave={handleTechMorphLeave}
+      >
+        {item.text}
+      </span>
+    );
   };
 
   // Process words effect
@@ -2139,6 +2270,18 @@ export default function App() {
           onCopy={copyToClipboard}
           renderAttentiveText={renderAttentiveText}
           renderRichText={renderRichText}
+        />
+      )}
+
+      {/* Tech Morph Tooltip - Hover definitions in Tech Locked mode */}
+      {techMorphTerm && viewMode === 'tech' && (
+        <TechMorphTooltip
+          term={techMorphTerm.term}
+          position={techMorphTerm.position}
+          conceptMap={conceptMap}
+          domain={analogyDomain}
+          isDarkMode={isDarkMode}
+          onClose={() => setTechMorphTerm(null)}
         />
       )}
 
