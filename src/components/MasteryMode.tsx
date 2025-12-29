@@ -1310,14 +1310,23 @@ const OverviewMode: React.FC<{
       const response = historyEntry.userResponses[stageKey];
       const intuition = historyEntry.intuitions[stageKey];
 
+      // Generate the challenge question for this stage
+      const stageQuestion = stage === 1
+        ? `Explain "${historyEntry.topic}" in your own words using the ${historyEntry.domain} analogy. No keywords required - just demonstrate your intuitive understanding through storytelling.`
+        : stage === 2
+          ? `Explain "${historyEntry.topic}" again, but incorporate at least 3 of the 6 keywords shown. Keep it narrative - tell the story using these concepts.`
+          : `Final stage! Explain "${historyEntry.topic}" using at least 6 of all 10 keywords. This should be your most complete narrative explanation.`;
+
       markdown += `### Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}\n\n`;
 
+      markdown += `**🎯 The Challenge:**\n${stageQuestion}\n\n`;
+
       if (story?.content) {
-        markdown += `**📚 Story:**\n${story.content}\n\n`;
+        markdown += `**📖 Story Prompt:**\n${story.content}\n\n`;
       }
 
       if (response) {
-        markdown += `**💬 My Response:**\n> ${response}\n\n`;
+        markdown += `**💬 My Answer:**\n> ${response}\n\n`;
       }
 
       if (intuition?.insight) {
@@ -1439,14 +1448,24 @@ const OverviewMode: React.FC<{
       const response = historyEntry.userResponses[stageKey];
       const intuition = historyEntry.intuitions[stageKey];
 
+      // Generate the challenge question for this stage
+      const stageQuestion = stage === 1
+        ? `Explain "${historyEntry.topic}" in your own words using the ${historyEntry.domain} analogy. No keywords required - just demonstrate your intuitive understanding through storytelling.`
+        : stage === 2
+          ? `Explain "${historyEntry.topic}" again, but incorporate at least 3 of the 6 keywords shown. Keep it narrative - tell the story using these concepts.`
+          : `Final stage! Explain "${historyEntry.topic}" using at least 6 of all 10 keywords. This should be your most complete narrative explanation.`;
+
       html += `
     <div class="stage">
-      <h4>Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}</h4>`;
+      <h4>Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}</h4>
+      <div class="insight" style="background: linear-gradient(135deg, ${stage === 1 ? '#dbeafe, #bfdbfe' : stage === 2 ? '#f3e8ff, #e9d5ff' : '#d1fae5, #a7f3d0'}); border-color: ${stage === 1 ? '#3b82f6' : stage === 2 ? '#a855f7' : '#10b981'}; border-left: 4px solid;">
+        <span class="insight-icon">🎯</span> <strong>The Challenge:</strong> ${stageQuestion}
+      </div>`;
 
       if (story?.content) {
         html += `
       <div class="story">
-        <strong>📚 Story:</strong><br>
+        <strong>📖 Story Prompt:</strong><br>
         ${story.content.replace(/\n/g, '<br>')}
       </div>`;
       }
@@ -1454,7 +1473,7 @@ const OverviewMode: React.FC<{
       if (response) {
         html += `
       <div class="response">
-        <strong>💬 My Response:</strong><br>
+        <strong>💬 My Answer:</strong><br>
         ${response.replace(/\n/g, '<br>')}
       </div>`;
       }
@@ -1720,7 +1739,22 @@ const OverviewMode: React.FC<{
               </div>
 
               {/* Stage Details */}
-              {[1, 2, 3].map((stage) => (
+              {[1, 2, 3].map((stage) => {
+                // Generate the question/challenge for this stage
+                const getStageQuestion = () => {
+                  switch (stage) {
+                    case 1:
+                      return `Explain "${historyEntry.topic}" in your own words using the ${historyEntry.domain} analogy. No keywords required - just demonstrate your intuitive understanding through storytelling.`;
+                    case 2:
+                      return `Explain "${historyEntry.topic}" again, but incorporate at least 3 of the 6 keywords shown. Keep it narrative - tell the story using these concepts.`;
+                    case 3:
+                      return `Final stage! Explain "${historyEntry.topic}" using at least 6 of all 10 keywords. This should be your most complete narrative explanation.`;
+                    default:
+                      return '';
+                  }
+                };
+
+                return (
                 <div
                   key={stage}
                   className={`p-6 rounded-xl ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}
@@ -1737,10 +1771,32 @@ const OverviewMode: React.FC<{
                     </h4>
                   </div>
 
+                  {/* The Challenge/Question */}
+                  <div className={`p-4 rounded-lg mb-4 border-l-4 ${
+                    stage === 1
+                      ? (isDarkMode ? 'bg-blue-900/20 border-blue-500' : 'bg-blue-50 border-blue-500')
+                      : stage === 2
+                        ? (isDarkMode ? 'bg-purple-900/20 border-purple-500' : 'bg-purple-50 border-purple-500')
+                        : (isDarkMode ? 'bg-green-900/20 border-green-500' : 'bg-green-50 border-green-500')
+                  }`}>
+                    <div className={`text-xs uppercase font-bold mb-2 ${
+                      stage === 1
+                        ? (isDarkMode ? 'text-blue-400' : 'text-blue-600')
+                        : stage === 2
+                          ? (isDarkMode ? 'text-purple-400' : 'text-purple-600')
+                          : (isDarkMode ? 'text-green-400' : 'text-green-600')
+                    }`}>
+                      🎯 The Challenge
+                    </div>
+                    <p className={`text-sm font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                      {getStageQuestion()}
+                    </p>
+                  </div>
+
                   {/* Story */}
                   <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
                     <div className={`text-xs uppercase font-bold mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      The Story
+                      📖 The Story Prompt
                     </div>
                     <p className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                       {historyEntry.stories[`stage${stage}` as keyof typeof historyEntry.stories]?.content || 'Story not available'}
@@ -1750,7 +1806,7 @@ const OverviewMode: React.FC<{
                   {/* User Response */}
                   <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-purple-900/20 border border-purple-500/30' : 'bg-purple-50 border border-purple-200'}`}>
                     <div className={`text-xs uppercase font-bold mb-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                      Your Response
+                      💬 Your Answer
                     </div>
                     <p className={`text-sm italic ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                       "{historyEntry.userResponses[`stage${stage}` as keyof typeof historyEntry.userResponses] || 'Response not available'}"
@@ -1810,7 +1866,8 @@ const OverviewMode: React.FC<{
                     )}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           ) : (
             <GlossaryView keywords={historyEntry.glossary} isDarkMode={isDarkMode} />
