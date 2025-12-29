@@ -25,7 +25,8 @@ import {
   Columns,
   Type,
   GraduationCap,
-  Medal
+  Medal,
+  List
 } from 'lucide-react';
 
 // Types
@@ -191,40 +192,64 @@ const TechMorphTooltip: React.FC<{
         </button>
       </div>
 
-      {/* Definitions */}
-      <div className="space-y-3">
-        {/* Technical Definition */}
-        <div>
-          <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-            📐 Technical
-          </div>
-          <p className={`text-sm ${textColor}`}>
-            {matchedConcept
-              ? `Core concept: ${matchedConcept.tech_term}`
-              : `Technical term in this context`
-            }
-          </p>
-        </div>
-
-        {/* Analogy Definition */}
-        {matchedConcept && (
+      {/* Narrative Story Mapping - The main content */}
+      {matchedConcept?.narrative_mapping ? (
+        <div className="space-y-3">
+          {/* Narrative Story */}
           <div>
-            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-              🎯 {domain} Equivalent
+            <div className={`text-xs uppercase font-bold ${mutedColor} mb-2`}>
+              📖 The Story
             </div>
-            <p className={`text-sm ${textColor}`}>
-              Maps to "{matchedConcept.analogy_term}" in {domain}
+            <p className={`text-sm ${textColor} leading-relaxed`}>
+              {matchedConcept.narrative_mapping}
             </p>
           </div>
-        )}
-      </div>
 
-      {/* Mapping Arrow */}
-      {matchedConcept && (
-        <div className={`mt-3 pt-2 border-t ${borderColor} flex items-center justify-center gap-2 text-sm`}>
-          <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
-          <span className={mutedColor}>↔</span>
-          <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
+          {/* Compact Mapping */}
+          <div className={`pt-2 border-t ${borderColor}`}>
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
+              <span className={mutedColor}>↔</span>
+              <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Fallback for older content without narrative_mapping */
+        <div className="space-y-3">
+          {/* Technical Definition */}
+          <div>
+            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+              📐 Technical
+            </div>
+            <p className={`text-sm ${textColor}`}>
+              {matchedConcept
+                ? <span>Core concept: {renderRichText(matchedConcept.tech_term, textColor)}</span>
+                : `Technical term in this context`
+              }
+            </p>
+          </div>
+
+          {/* Analogy Definition */}
+          {matchedConcept && (
+            <div>
+              <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
+                🎯 {domain} Equivalent
+              </div>
+              <p className={`text-sm ${textColor}`}>
+                Maps to "{renderRichText(matchedConcept.analogy_term, 'text-emerald-500 font-medium')}" in {domain}
+              </p>
+            </div>
+          )}
+
+          {/* Mapping Arrow */}
+          {matchedConcept && (
+            <div className={`pt-2 border-t ${borderColor} flex items-center justify-center gap-2 text-sm`}>
+              <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
+              <span className={mutedColor}>↔</span>
+              <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -302,6 +327,7 @@ export default function App() {
   const [mode, setMode] = useState<'opacity' | 'size' | 'heatmap'>('opacity');
   const [threshold, setThreshold] = useState(0.3);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
+  const [isBulletMode, setIsBulletMode] = useState(false); // Bullet point mode for Tech Lock
   const [isNarrativeMode, setIsNarrativeMode] = useState(false);
   const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1); // Text scale multiplier
 
@@ -1023,6 +1049,11 @@ export default function App() {
           if (!hasStarted) return;
           setIsNarrativeMode(!isNarrativeMode);
           break;
+        case 'b':
+          // Bullet point mode toggle (only works in Tech Lock mode)
+          if (!hasStarted || viewMode !== 'tech') return;
+          setIsBulletMode(!isBulletMode);
+          break;
         case 'q':
           // Quiz me
           if (!hasStarted || isQuizLoading || isLoading) return;
@@ -1076,7 +1107,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale, viewMode, isBulletMode]);
 
   // Brown noise audio for Study Mode
   useEffect(() => {
@@ -1550,6 +1581,41 @@ export default function App() {
     );
   };
 
+  // Group processedWords into sentences for bullet mode
+  const groupWordsIntoSentences = (words: ProcessedWord[]): ProcessedWord[][] => {
+    const sentences: ProcessedWord[][] = [];
+    let currentSentence: ProcessedWord[] = [];
+
+    words.forEach((word, i) => {
+      currentSentence.push(word);
+      // Check if this word ends a sentence (. ! ? followed by space or end)
+      const text = word.text.trim();
+      const nextWord = words[i + 1];
+      const endsWithPunctuation = /[.!?]$/.test(text);
+      const nextIsSpace = nextWord?.isSpace;
+      const nextStartsCapital = words[i + 2]?.text.match(/^[A-Z]/);
+
+      if (endsWithPunctuation && (nextIsSpace || !nextWord)) {
+        // Include trailing space in sentence
+        if (nextIsSpace) {
+          currentSentence.push(nextWord);
+        }
+        // Only split if next word starts with capital (indicates new sentence)
+        if (!nextWord || nextStartsCapital) {
+          sentences.push([...currentSentence]);
+          currentSentence = [];
+        }
+      }
+    });
+
+    // Add remaining words as final sentence
+    if (currentSentence.length > 0) {
+      sentences.push(currentSentence);
+    }
+
+    return sentences.filter(s => s.some(w => !w.isSpace)); // Filter empty sentences
+  };
+
   const renderWord = (item: ProcessedWord, index: number) => {
     const wordId = `word-${index}`;
     if (item.isSpace) return <span key={index}>{item.text}</span>;
@@ -1955,6 +2021,21 @@ export default function App() {
                         <span className="hidden sm:inline">Story</span>
                       </button>
                     )}
+                    {/* Bullet Point Mode - Only in Tech Lock */}
+                    {hasStarted && viewMode === 'tech' && (
+                      <button
+                        onClick={() => setIsBulletMode(!isBulletMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isBulletMode
+                            ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Bullet Point Mode - Condensed single-sentence summaries"
+                      >
+                        <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Bullets</span>
+                      </button>
+                    )}
                     {/* ELI Complexity Buttons */}
                     {hasStarted && (
                       <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
@@ -2094,19 +2175,55 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
-                  <p
-                    className={`leading-relaxed transition-all duration-500 ease-in-out ${
-                      isTransitioning
-                        ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
-                        : 'opacity-100 blur-0 scale-100 translate-y-0'
-                    } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
-                    style={{
-                      fontSize: `${1.125 * textScale}rem`,
-                      lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
-                    }}
-                  >
-                    {processedWords.map((word, i) => renderWord(word, i))}
-                  </p>
+                  {/* Bullet Point Mode - Condensed sentence bullets */}
+                  {isBulletMode && viewMode === 'tech' ? (
+                    <ul
+                      className={`space-y-3 transition-all duration-500 ease-in-out ${
+                        isTransitioning
+                          ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
+                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                      } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                      style={{
+                        fontSize: `${1.125 * textScale}rem`,
+                        lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
+                      }}
+                    >
+                      {groupWordsIntoSentences(processedWords).map((sentence, sentenceIndex) => (
+                        <li
+                          key={sentenceIndex}
+                          className={`flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'}`}
+                        >
+                          <span className={`flex-shrink-0 mt-1 text-lg ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>•</span>
+                          <span className="flex-1 flex flex-wrap">
+                            {sentence.map((word, wordIndex) => {
+                              // Calculate global index for this word
+                              const globalIndex = processedWords.findIndex((w, i) =>
+                                groupWordsIntoSentences(processedWords)
+                                  .slice(0, sentenceIndex)
+                                  .flat()
+                                  .length + wordIndex === i
+                              );
+                              return renderWord(word, sentenceIndex * 1000 + wordIndex);
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p
+                      className={`leading-relaxed transition-all duration-500 ease-in-out ${
+                        isTransitioning
+                          ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
+                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                      } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                      style={{
+                        fontSize: `${1.125 * textScale}rem`,
+                        lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
+                      }}
+                    >
+                      {processedWords.map((word, i) => renderWord(word, i))}
+                    </p>
+                  )}
 
                   {/* Floating Define Button */}
                   {showDefineButton && defineButtonPosition && pendingSelection && (
@@ -2473,6 +2590,10 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>S</kbd>
                   <span>Story Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>B</kbd>
+                  <span>Bullet Mode</span>
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>G</kbd>

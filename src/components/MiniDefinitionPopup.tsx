@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut } from 'lucide-react';
+import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, GripHorizontal } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
 
 interface MiniDefinitionPopupProps {
@@ -194,6 +194,17 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
             onMouseDown={(e) => onStartResize(e, 'mini-right')}
           />
         </>
+      )}
+
+      {/* Draggable Footer Bar - allows dragging from bottom */}
+      {!isMobile && (
+        <div
+          onMouseDown={onHeaderMouseDown}
+          className="absolute bottom-0 left-0 right-0 h-6 cursor-move flex items-center justify-center bg-gradient-to-t from-neutral-800 to-transparent rounded-b-xl hover:from-neutral-700 transition-colors"
+          title="Drag to move"
+        >
+          <GripHorizontal size={14} className="text-neutral-500" />
+        </div>
       )}
     </div>
   );

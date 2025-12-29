@@ -375,15 +375,28 @@ export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[
 
 /**
  * Get complexity level description for prompt
+ * Each level has explicit word count targets to ensure substantive explanations
  */
 const getComplexityPrompt = (level: number): string => {
   switch (level) {
     case 5:
-      return `IMPORTANT: Write for a 5-year-old child. Use ONLY simple words, short sentences, and fun comparisons. NO technical jargon, NO math notation, NO complex concepts. Make it playful and easy to understand.`;
+      return `IMPORTANT: Write for a 5-year-old child.
+- Use ONLY simple words, short sentences, and fun comparisons
+- NO technical jargon, NO math notation, NO complex concepts
+- Make it playful, engaging, and memorable
+- TARGET LENGTH: 200-250 words for EACH explanation (tech and analogy)
+- Focus on WHY this matters and make it stick!`;
     case 100:
-      return `Write for an advanced academic audience. Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations.`;
+      return `Write for an advanced academic audience.
+- Include technical depth, mathematical notation where appropriate
+- Use precise terminology and nuanced explanations
+- TARGET LENGTH: 300-350 words for EACH explanation (tech and analogy)
+- Cover WHAT, WHY, and HOW with thorough depth`;
     default:
-      return `Write for a general adult audience with some familiarity with the subject. Balance clarity with technical accuracy.`;
+      return `Write for a general adult audience with some familiarity with the subject.
+- Balance clarity with technical accuracy
+- TARGET LENGTH: 250-300 words for EACH explanation (tech and analogy)
+- Include WHAT it is, WHY it matters, and a practical example`;
   }
 };
 
@@ -452,8 +465,8 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (2-3 paragraphs, 200+ words). Include mathematical notation in LaTeX ($...$) where appropriate. This section is for the TECHNICAL side only.",
-  "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (2-3 paragraphs, 200+ words)",
+  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. Include mathematical notation in LaTeX ($...$) where appropriate. This section is for the TECHNICAL side only - give real substance, not generic word salad.",
+  "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
   "segments": [
     {
       "tech": "A single sentence or concept from the technical explanation",
@@ -462,7 +475,12 @@ REQUIRED JSON STRUCTURE (strict compliance):
     }
   ],
   "concept_map": [
-    {"id": 0, "tech_term": "technical term from tech text", "analogy_term": "${shortDomain}-native equivalent from analogy text"}
+    {
+      "id": 0,
+      "tech_term": "technical term from tech text",
+      "analogy_term": "${shortDomain}-native equivalent from analogy text",
+      "narrative_mapping": "A 2-3 sentence mini-story that vividly connects this specific technical concept to its ${shortDomain} equivalent. Example: 'The diagonal matrix Σ is like Mike Holmgren as the Packers coach - he orchestrated the key plays that determined how effectively the team executed. Just as Holmgren prioritized game-winning strategies, Σ ranks the importance of each component.'"
+    }
   ],
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
@@ -599,6 +617,7 @@ CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
+- narrative_mapping: A 2-3 sentence NARRATIVE MINI-STORY that bridges the tech concept to the analogy domain. This should be a vivid, memorable connection that helps the reader deeply understand WHY these two concepts map to each other. Write it as a story snippet, not a dry definition.
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
@@ -682,15 +701,39 @@ Return ONLY valid JSON, no other text.`;
 
 /**
  * Fetch definition for a term
+ * Word count targets:
+ * - ELI5: 80-100 words (simple, engaging, memorable)
+ * - ELI50: 100-120 words (balanced, clear, practical)
+ * - ELI100: 120-150 words (thorough, technical, precise)
  */
 export const fetchDefinition = async (term: string, context: string, level: number) => {
-  let promptText = `Define "${term}" in context of: "${context}". Level: ${level === 5 ? "ELI5 (Explain like I'm 5)" : level === 100 ? "Advanced Academic" : "Concise"}.`;
+  // Word count and style guidance per level
+  const levelConfig = {
+    5: {
+      name: "ELI5 (Explain like I'm 5)",
+      words: "80-100 words",
+      style: "STRICT CONSTRAINT: DO NOT use LaTeX. DO NOT use technical jargon. DO NOT use math notation ($...$). Use ONLY simple English analogies and 5-year-old appropriate language. Use fun comparisons, relatable examples, and playful language. Make it memorable!"
+    },
+    50: {
+      name: "Standard (General Audience)",
+      words: "100-120 words",
+      style: "Balance clarity with substance. Include WHAT it is, WHY it matters, and a practical example. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac."
+    },
+    100: {
+      name: "Advanced Academic",
+      words: "120-150 words",
+      style: "Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations. Cover the concept thoroughly with WHAT/WHY/HOW. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes."
+    }
+  };
 
-  if (level === 5) {
-    promptText += " STRICT CONSTRAINT: DO NOT use LaTeX. DO NOT use technical jargon. DO NOT use math notation ($...$). Use ONLY simple English analogies and 5-year-old appropriate language. Get to the core essence immediately.";
-  } else {
-    promptText += " CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac, $\\cdot$ not cdot. Variables like x, n, e_i should be $x$, $n$, $e_i$.";
-  }
+  const config = levelConfig[level as keyof typeof levelConfig] || levelConfig[50];
+
+  let promptText = `Define "${term}" in context of: "${context}".
+
+LEVEL: ${config.name}
+TARGET LENGTH: ${config.words} (IMPORTANT: Don't be terse! Give a substantive explanation)
+
+${config.style}`;
 
   try {
     return await callApi(promptText);

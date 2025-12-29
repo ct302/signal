@@ -17,6 +17,7 @@ export interface ConceptMapItem {
   id: number;
   tech_term: string;
   analogy_term: string;
+  narrative_mapping?: string; // 2-3 sentence mini-story bridging tech to analogy
 }
 
 export interface ImportanceMapItem {
