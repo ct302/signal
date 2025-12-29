@@ -1,6 +1,95 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES } from '../constants';
-import { fetchWithRetry, safeJsonParse } from '../utils';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
+import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
+
+// ============================================
+// CIRCUIT BREAKER PATTERN
+// ============================================
+
+interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean; // true = circuit is "open" (blocking requests)
+}
+
+// Track circuit breaker state per model
+const circuitBreakers: Map<string, CircuitBreakerState> = new Map();
+
+/**
+ * Get or create circuit breaker state for a model
+ */
+const getCircuitBreaker = (model: string): CircuitBreakerState => {
+  if (!circuitBreakers.has(model)) {
+    circuitBreakers.set(model, { failures: 0, lastFailure: 0, isOpen: false });
+  }
+  return circuitBreakers.get(model)!;
+};
+
+/**
+ * Record a failure for a model
+ */
+const recordFailure = (model: string): void => {
+  const cb = getCircuitBreaker(model);
+  cb.failures++;
+  cb.lastFailure = Date.now();
+
+  if (cb.failures >= RATE_LIMIT_CONFIG.circuitBreakerThreshold) {
+    cb.isOpen = true;
+    console.log(`[CircuitBreaker] OPENED for model: ${model} (${cb.failures} consecutive failures)`);
+  }
+};
+
+/**
+ * Record a success for a model (resets circuit breaker)
+ */
+const recordSuccess = (model: string): void => {
+  const cb = getCircuitBreaker(model);
+  cb.failures = 0;
+  cb.isOpen = false;
+};
+
+/**
+ * Check if a model's circuit breaker is open (should skip this model)
+ */
+const isCircuitOpen = (model: string): boolean => {
+  const cb = getCircuitBreaker(model);
+
+  if (!cb.isOpen) return false;
+
+  // Check if cooldown period has passed
+  const timeSinceLastFailure = Date.now() - cb.lastFailure;
+  if (timeSinceLastFailure >= RATE_LIMIT_CONFIG.circuitBreakerCooldownMs) {
+    // Reset circuit breaker (half-open state - allow one request through)
+    cb.isOpen = false;
+    cb.failures = 0;
+    console.log(`[CircuitBreaker] RESET for model: ${model} (cooldown expired)`);
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Get the next available model from fallback chain
+ */
+const getAvailableModel = (preferredModel: string): string => {
+  // If preferred model's circuit is not open, use it
+  if (!isCircuitOpen(preferredModel)) {
+    return preferredModel;
+  }
+
+  // Try fallback models
+  for (const fallbackModel of OPENROUTER_FALLBACK_MODELS) {
+    if (fallbackModel !== preferredModel && !isCircuitOpen(fallbackModel)) {
+      console.log(`[CircuitBreaker] Using fallback model: ${fallbackModel} (${preferredModel} circuit is open)`);
+      return fallbackModel;
+    }
+  }
+
+  // All circuits open - try preferred model anyway (last resort)
+  console.log(`[CircuitBreaker] All fallbacks exhausted, attempting ${preferredModel} anyway`);
+  return preferredModel;
+};
 
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
@@ -149,44 +238,71 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
   }
 };
 
-// Unified API call with enhanced error handling
+// Unified API call with enhanced error handling and circuit breaker
 const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<string> => {
-  const config = getProviderConfig();
+  const baseConfig = getProviderConfig();
 
-  if (!config.apiKey && config.provider !== 'ollama') {
-    throw new Error(`No API key configured for ${config.provider}. Please add your API key in Settings.`);
+  if (!baseConfig.apiKey && baseConfig.provider !== 'ollama') {
+    throw new Error(`No API key configured for ${baseConfig.provider}. Please add your API key in Settings.`);
+  }
+
+  // For OpenRouter, use circuit breaker to select available model
+  const effectiveModel = baseConfig.provider === 'openrouter'
+    ? getAvailableModel(baseConfig.model)
+    : baseConfig.model;
+
+  // Create effective config with potentially different model
+  const config: ProviderConfig = {
+    ...baseConfig,
+    model: effectiveModel
+  };
+
+  if (effectiveModel !== baseConfig.model) {
+    console.log(`[callApi] Using fallback model: ${effectiveModel} (original: ${baseConfig.model})`);
   }
 
   const url = buildApiUrl(config);
   const headers = buildHeaders(config);
   const body = buildRequestBody(prompt, config, options);
 
-  // fetchWithRetry now throws ApiError for non-2xx responses
-  // and handles retries with exponential backoff + jitter
-  const response = await fetchWithRetry(
-    url,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body)
-    },
-    {
-      // Use defaults from RATE_LIMIT_CONFIG
-      onRetry: (attempt, maxAttempts, waitMs, reason) => {
-        console.log(`[callApi] ${reason} - retrying ${attempt}/${maxAttempts} in ${Math.round(waitMs / 1000)}s`);
+  try {
+    // fetchWithRetry now throws ApiError for non-2xx responses
+    // and handles retries with exponential backoff + jitter
+    const response = await fetchWithRetry(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      },
+      {
+        // Use defaults from RATE_LIMIT_CONFIG
+        onRetry: (attempt, maxAttempts, waitMs, reason) => {
+          console.log(`[callApi] ${reason} - retrying ${attempt}/${maxAttempts} in ${Math.round(waitMs / 1000)}s`);
+        }
       }
+    );
+
+    const data = await response.json();
+    const result = extractResponseText(data, config);
+
+    // Check for empty response (some models return empty on overload)
+    if (!result || result.trim() === '') {
+      recordFailure(effectiveModel);
+      throw new Error('Empty response received from API. The model may be overloaded.');
     }
-  );
 
-  const data = await response.json();
-  const result = extractResponseText(data, config);
+    // Success! Record it for circuit breaker
+    recordSuccess(effectiveModel);
+    return result;
 
-  // Check for empty response (some models return empty on overload)
-  if (!result || result.trim() === '') {
-    throw new Error('Empty response received from API. The model may be overloaded.');
+  } catch (error) {
+    // Record failure for circuit breaker (only for rate limit or server errors)
+    if (error instanceof ApiError && (error.status === 429 || error.status >= 500)) {
+      recordFailure(effectiveModel);
+    }
+    throw error;
   }
-
-  return result;
 };
 
 // ============================================

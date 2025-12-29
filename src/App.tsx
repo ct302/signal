@@ -445,6 +445,7 @@ export default function App() {
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null); // User-visible API error
+  const [isExtendedLoading, setIsExtendedLoading] = useState(false); // Shows after 5s of loading
   const [hasStarted, setHasStarted] = useState(false);
   const [isViewingFromHistory, setIsViewingFromHistory] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -560,6 +561,29 @@ export default function App() {
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const techMorphHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Extended loading indicator - shows after 5 seconds of loading
+  useEffect(() => {
+    if (isLoading) {
+      // Start timer for extended loading indicator
+      extendedLoadingTimerRef.current = setTimeout(() => {
+        setIsExtendedLoading(true);
+      }, 5000);
+    } else {
+      // Clear timer and reset extended loading state
+      if (extendedLoadingTimerRef.current) {
+        clearTimeout(extendedLoadingTimerRef.current);
+      }
+      setIsExtendedLoading(false);
+    }
+
+    return () => {
+      if (extendedLoadingTimerRef.current) {
+        clearTimeout(extendedLoadingTimerRef.current);
+      }
+    };
+  }, [isLoading]);
 
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
@@ -2282,7 +2306,14 @@ export default function App() {
           {isLoading && (
             <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
               <Loader2 className={`mx-auto animate-spin mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-500'}`} size={48} />
-              <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Generating your personalized analogy...</p>
+              <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>
+                Generating your personalized analogy...
+              </p>
+              {isExtendedLoading && (
+                <p className={`mt-3 text-sm ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                  ⏳ This is taking longer than usual. The API may be busy - retrying automatically...
+                </p>
+              )}
             </div>
           )}
 
