@@ -479,7 +479,7 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "id": 0,
       "tech_term": "technical term from tech text",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
-      "narrative_mapping": "A 2-3 sentence mini-story that vividly connects this specific technical concept to its ${shortDomain} equivalent. Example: 'The diagonal matrix Σ is like Mike Holmgren as the Packers coach - he orchestrated the key plays that determined how effectively the team executed. Just as Holmgren prioritized game-winning strategies, Σ ranks the importance of each component.'"
+      "narrative_mapping": "2-3 sentence mini-story connecting the tech concept to its ${shortDomain} equivalent"
     }
   ],
   "importance_map": [
