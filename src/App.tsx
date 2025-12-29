@@ -28,7 +28,8 @@ import {
   Medal,
   List,
   Copy,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 
 // Types
@@ -443,6 +444,7 @@ export default function App() {
 
   // UI State
   const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null); // User-visible API error
   const [hasStarted, setHasStarted] = useState(false);
   const [isViewingFromHistory, setIsViewingFromHistory] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -454,6 +456,8 @@ export default function App() {
   const [showContext, setShowContext] = useState(false);
   const [showSynthesis, setShowSynthesis] = useState(false);
   const [isMouseInside, setIsMouseInside] = useState(false);
+  const [showCondensedView, setShowCondensedView] = useState(false); // Actual visibility of condensed overlay
+  const [isCondensedMorphing, setIsCondensedMorphing] = useState(false); // Transition state for diffusion effect
 
   // View Mode State
   const [viewMode, setViewMode] = useState<'morph' | 'nfl' | 'tech'>('morph');
@@ -554,6 +558,7 @@ export default function App() {
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const techMorphHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
@@ -692,6 +697,7 @@ export default function App() {
 
   const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {
     setIsLoading(true);
+    setApiError(null); // Clear any previous error
     setShowContext(false); // Keep collapsed until user clicks to expand
     setShowFollowUp(false);
     setTutorResponse(null);
@@ -703,9 +709,25 @@ export default function App() {
       if (parsed) {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
+        setApiError(null); // Clear error on success
+      } else {
+        setApiError("No response received. Please check your model settings and try again.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("API call failed", e);
+      // Extract meaningful error message for user
+      const errorMessage = e?.message || "Unknown error occurred";
+      if (errorMessage.includes("API key")) {
+        setApiError("API key issue. Please check your API key in Settings.");
+      } else if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+        setApiError("Rate limited. Please wait a moment and try again.");
+      } else if (errorMessage.includes("model") || errorMessage.includes("404")) {
+        setApiError("Model not found. Please check your model name in Settings.");
+      } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+        setApiError("Network error. Please check your connection and try again.");
+      } else {
+        setApiError(`Request failed: ${errorMessage.slice(0, 100)}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1497,6 +1519,22 @@ export default function App() {
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(true);
+
+    // Tech Lock condensed view morph - smooth transition in
+    if (viewMode === 'tech' && condensedData && hasStarted) {
+      // Clear any pending leave timer
+      if (condensedMorphTimerRef.current) {
+        clearTimeout(condensedMorphTimerRef.current);
+      }
+      // Start blur transition
+      setIsCondensedMorphing(true);
+      // After blur, show condensed and clear blur
+      condensedMorphTimerRef.current = setTimeout(() => {
+        setShowCondensedView(true);
+        setTimeout(() => setIsCondensedMorphing(false), 150);
+      }, 200);
+    }
+
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
     // Lock morph when definition popup is open or user is selecting
     if (isMorphLocked) return;
@@ -1507,6 +1545,22 @@ export default function App() {
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
     setIsMouseInside(false);
+
+    // Tech Lock condensed view morph - smooth transition out
+    if (viewMode === 'tech' && showCondensedView) {
+      // Clear any pending enter timer
+      if (condensedMorphTimerRef.current) {
+        clearTimeout(condensedMorphTimerRef.current);
+      }
+      // Start blur transition
+      setIsCondensedMorphing(true);
+      // After blur, hide condensed and clear blur
+      condensedMorphTimerRef.current = setTimeout(() => {
+        setShowCondensedView(false);
+        setTimeout(() => setIsCondensedMorphing(false), 150);
+      }, 200);
+    }
+
     // Lock morph when definition popup is open or user is selecting
     if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -2210,6 +2264,49 @@ export default function App() {
             </div>
           )}
 
+          {/* API Error State */}
+          {!isLoading && apiError && (
+            <div className={`rounded-2xl p-8 text-center border-2 ${
+              isDarkMode
+                ? 'bg-red-950/30 border-red-800/50'
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${
+                isDarkMode ? 'bg-red-900/50' : 'bg-red-100'
+              }`}>
+                <AlertCircle className={isDarkMode ? 'text-red-400' : 'text-red-500'} size={32} />
+              </div>
+              <h3 className={`text-lg font-semibold mb-2 ${isDarkMode ? 'text-red-300' : 'text-red-700'}`}>
+                Something went wrong
+              </h3>
+              <p className={`text-sm mb-4 ${isDarkMode ? 'text-red-400/80' : 'text-red-600'}`}>
+                {apiError}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setApiError(null)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-200'
+                      : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-700'
+                  }`}
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={() => lastSubmittedTopic && fetchAnalogy(lastSubmittedTopic)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-red-800 hover:bg-red-700 text-red-100'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           {!isLoading && hasStarted && processedWords.length > 0 && (
             <div className="space-y-4">
@@ -2241,10 +2338,14 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={cycleViewMode}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
                         viewMode === 'morph' && !isNarrativeMode
-                          ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
-                          : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
+                          : viewMode === 'tech'
+                            ? (isDarkMode ? 'bg-amber-900/50 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20' : 'bg-amber-100 text-amber-700 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/20')
+                            : viewMode === 'nfl'
+                              ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20' : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                       }`}
                     >
                       {modeLabel.icon}
@@ -2423,12 +2524,16 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
-                  {/* Condensed View Overlay - Shows on hover in Tech Lock mode */}
-                  {viewMode === 'tech' && isMouseInside && condensedData && (
+                  {/* Condensed View Overlay - Shows on hover in Tech Lock mode with diffusion morph */}
+                  {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
-                      className={`absolute inset-0 z-10 p-6 rounded-xl transition-all duration-300 ${
+                      className={`absolute inset-0 z-10 p-6 rounded-xl transition-all duration-300 ease-out ${
                         isDarkMode ? 'bg-neutral-900/95' : 'bg-white/95'
-                      } backdrop-blur-sm`}
+                      } backdrop-blur-sm ${
+                        showCondensedView && !isCondensedMorphing
+                          ? 'opacity-100 blur-0 scale-100'
+                          : 'opacity-0 blur-md scale-[0.98]'
+                      }`}
                     >
                       <div className="space-y-4">
                         {/* WHAT Section */}
@@ -2492,9 +2597,9 @@ export default function App() {
                   {/* Bullet Point Mode - Condensed sentence bullets */}
                   {isBulletMode && viewMode === 'tech' ? (
                     <ul
-                      className={`space-y-3 transition-all duration-500 ease-in-out ${
-                        isTransitioning
-                          ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
+                      className={`space-y-3 transition-all duration-300 ease-in-out ${
+                        isTransitioning || isCondensedMorphing
+                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
                           : 'opacity-100 blur-0 scale-100 translate-y-0'
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{
@@ -2507,16 +2612,11 @@ export default function App() {
                           key={sentenceIndex}
                           className={`flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'}`}
                         >
-                          <span className={`flex-shrink-0 mt-1 text-lg ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>•</span>
-                          <span className="flex-1 flex flex-wrap">
+                          <span className={`flex-shrink-0 mt-1.5 text-lg ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>•</span>
+                          <span className="flex-1 flex flex-wrap gap-x-1.5 gap-y-0.5 items-baseline">
                             {sentence.map((word, wordIndex) => {
-                              // Calculate global index for this word
-                              const globalIndex = processedWords.findIndex((w, i) =>
-                                groupWordsIntoSentences(processedWords)
-                                  .slice(0, sentenceIndex)
-                                  .flat()
-                                  .length + wordIndex === i
-                              );
+                              // Skip rendering space tokens since we use gap for spacing
+                              if (word.isSpace) return null;
                               return renderWord(word, sentenceIndex * 1000 + wordIndex);
                             })}
                           </span>
@@ -2525,9 +2625,9 @@ export default function App() {
                     </ul>
                   ) : (
                     <p
-                      className={`leading-relaxed transition-all duration-500 ease-in-out ${
-                        isTransitioning
-                          ? 'opacity-0 blur-sm scale-[0.98] translate-y-1'
+                      className={`leading-relaxed transition-all duration-300 ease-in-out ${
+                        isTransitioning || (viewMode === 'tech' && isCondensedMorphing)
+                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
                           : 'opacity-100 blur-0 scale-100 translate-y-0'
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{

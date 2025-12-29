@@ -1323,6 +1323,14 @@ const OverviewMode: React.FC<{
       if (intuition?.insight) {
         markdown += `**💡 Key Insight:**\n${intuition.insight}\n\n`;
       }
+
+      if (intuition?.strength) {
+        markdown += `**✨ What I Did Well:**\n${intuition.strength}\n\n`;
+      }
+
+      if (intuition?.keywordsCaptured?.length > 0) {
+        markdown += `**📚 Concepts Demonstrated:** ${intuition.keywordsCaptured.join(', ')}\n\n`;
+      }
     }
 
     // Glossary Section
@@ -1455,6 +1463,20 @@ const OverviewMode: React.FC<{
         html += `
       <div class="insight">
         <span class="insight-icon">💡</span> <strong>Key Insight:</strong> ${intuition.insight}
+      </div>`;
+      }
+
+      if (intuition?.strength) {
+        html += `
+      <div class="insight" style="background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: #34d399;">
+        <span class="insight-icon">✨</span> <strong>What You Did Well:</strong> ${intuition.strength}
+      </div>`;
+      }
+
+      if (intuition?.keywordsCaptured?.length > 0) {
+        html += `
+      <div class="insight" style="background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: #60a5fa;">
+        <span class="insight-icon">📚</span> <strong>Concepts Demonstrated:</strong> ${intuition.keywordsCaptured.join(', ')}
       </div>`;
       }
 
@@ -1735,17 +1757,57 @@ const OverviewMode: React.FC<{
                     </p>
                   </div>
 
-                  {/* Intuition */}
+                  {/* Intuition - Full Details */}
                   <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-yellow-900/20 border border-yellow-500/30' : 'bg-yellow-50 border border-yellow-200'}`}>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-3">
                       <Lightbulb size={14} className="text-yellow-500" />
                       <span className={`text-xs uppercase font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                        Key Intuition
+                        AI-Extracted Insights
                       </span>
                     </div>
-                    <p className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                      {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.insight || 'Intuition not available'}
-                    </p>
+
+                    {/* Main Insight */}
+                    <div className="mb-3">
+                      <div className={`text-xs font-medium mb-1 ${isDarkMode ? 'text-yellow-500/80' : 'text-yellow-700/80'}`}>
+                        💡 Key Insight
+                      </div>
+                      <p className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                        {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.insight || 'Intuition not available'}
+                      </p>
+                    </div>
+
+                    {/* Strength */}
+                    {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.strength && (
+                      <div className="mb-3">
+                        <div className={`text-xs font-medium mb-1 ${isDarkMode ? 'text-green-500/80' : 'text-green-700/80'}`}>
+                          ✨ What You Did Well
+                        </div>
+                        <p className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                          {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.strength}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Keywords Captured */}
+                    {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.keywordsCaptured?.length > 0 && (
+                      <div>
+                        <div className={`text-xs font-medium mb-1 ${isDarkMode ? 'text-blue-500/80' : 'text-blue-700/80'}`}>
+                          📚 Concepts Demonstrated
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {historyEntry.intuitions[`stage${stage}` as keyof typeof historyEntry.intuitions]?.keywordsCaptured?.map((kw: string, i: number) => (
+                            <span
+                              key={i}
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
