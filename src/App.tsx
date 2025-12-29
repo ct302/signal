@@ -91,7 +91,8 @@ import {
   MasteryMode
 } from './components';
 
-// Tech Morph Tooltip - Shows 6-word definitions on hover in Tech Locked mode
+// Tech Morph Tooltip - Shows definitions on hover in Tech Locked mode
+// Features: Draggable, LaTeX rendering, concept mapping
 const TechMorphTooltip: React.FC<{
   term: string;
   position: { x: number; y: number };
@@ -99,27 +100,65 @@ const TechMorphTooltip: React.FC<{
   domain: string;
   isDarkMode: boolean;
   onClose: () => void;
-}> = ({ term, position, conceptMap, domain, isDarkMode, onClose }) => {
-  // Find matching concept from map
-  const cleanTerm = term.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$]/g, '').trim();
-  const matchedConcept = conceptMap.find(c =>
-    c.tech_term.toLowerCase().includes(cleanTerm) ||
-    cleanTerm.includes(c.tech_term.toLowerCase()) ||
-    c.analogy_term.toLowerCase().includes(cleanTerm)
-  );
+  renderRichText: (text: string, colorClass?: string) => React.ReactNode;
+}> = ({ term, position, conceptMap, domain, isDarkMode, onClose, renderRichText }) => {
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [tooltipPos, setTooltipPos] = useState({
+    x: Math.min(position.x, window.innerWidth - 320),
+    y: position.y + 20
+  });
 
-  // Generate concise definitions (6-word style)
-  const getTechDefinition = (): string => {
-    if (!matchedConcept) return `Technical term in mathematical context`;
-    // Create a concise 6-word definition based on the term
-    const techTerm = matchedConcept.tech_term;
-    return `${techTerm}: formal mathematical operation or structure`;
+  // Handle drag start
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragOffset({
+      x: e.clientX - tooltipPos.x,
+      y: e.clientY - tooltipPos.y
+    });
   };
 
-  const getAnalogyDefinition = (): string => {
-    if (!matchedConcept) return `Maps to ${domain} concept`;
-    return `Like "${matchedConcept.analogy_term}" in ${domain}`;
-  };
+  // Handle drag move
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setTooltipPos({
+        x: Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 320)),
+        y: Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - 200))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  // Find matching concept from map - improved matching
+  const cleanTerm = term.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
+  const matchedConcept = conceptMap.find(c => {
+    const techLower = c.tech_term.toLowerCase();
+    const analogyLower = c.analogy_term.toLowerCase();
+    return (
+      techLower === cleanTerm ||
+      techLower.includes(cleanTerm) ||
+      cleanTerm.includes(techLower) ||
+      analogyLower === cleanTerm ||
+      analogyLower.includes(cleanTerm)
+    );
+  });
+
+  // Display term - use matched concept's tech_term if available, cleaned otherwise
+  const displayTerm = matchedConcept?.tech_term || term.replace(/[\$\\]/g, '').trim();
 
   const bgColor = isDarkMode ? 'bg-neutral-800' : 'bg-white';
   const borderColor = isDarkMode ? 'border-neutral-700' : 'border-neutral-200';
@@ -128,19 +167,28 @@ const TechMorphTooltip: React.FC<{
 
   return (
     <div
-      className={`fixed z-[200] ${bgColor} ${borderColor} border rounded-xl shadow-xl p-4 max-w-xs animate-in fade-in zoom-in-95 duration-150`}
+      className={`fixed z-[200] ${bgColor} ${borderColor} border rounded-xl shadow-xl p-4 max-w-xs select-none`}
       style={{
-        left: Math.min(position.x, window.innerWidth - 320),
-        top: position.y + 20,
+        left: tooltipPos.x,
+        top: tooltipPos.y,
       }}
-      onMouseLeave={onClose}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-neutral-200 dark:border-neutral-700">
+      {/* Draggable Header */}
+      <div
+        className={`flex items-center gap-2 mb-3 pb-2 border-b ${borderColor} cursor-move`}
+        onMouseDown={handleMouseDown}
+      >
         <span className="text-lg">🔬</span>
-        <span className={`font-bold ${textColor}`}>
-          {matchedConcept?.tech_term || term}
+        <span className={`font-bold ${textColor} flex-1`}>
+          {renderRichText(displayTerm, textColor)}
         </span>
+        <button
+          onClick={onClose}
+          className={`${mutedColor} hover:text-red-400 transition-colors p-1`}
+          title="Close (or drag header to move)"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Definitions */}
@@ -151,7 +199,10 @@ const TechMorphTooltip: React.FC<{
             📐 Technical
           </div>
           <p className={`text-sm ${textColor}`}>
-            {getTechDefinition()}
+            {matchedConcept
+              ? `Core concept: ${matchedConcept.tech_term}`
+              : `Technical term in this context`
+            }
           </p>
         </div>
 
@@ -162,7 +213,7 @@ const TechMorphTooltip: React.FC<{
               🎯 {domain} Equivalent
             </div>
             <p className={`text-sm ${textColor}`}>
-              {getAnalogyDefinition()}
+              Maps to "{matchedConcept.analogy_term}" in {domain}
             </p>
           </div>
         )}
@@ -171,11 +222,16 @@ const TechMorphTooltip: React.FC<{
       {/* Mapping Arrow */}
       {matchedConcept && (
         <div className={`mt-3 pt-2 border-t ${borderColor} flex items-center justify-center gap-2 text-sm`}>
-          <span className="text-purple-500 font-medium">{matchedConcept.tech_term}</span>
+          <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
           <span className={mutedColor}>↔</span>
           <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
         </div>
       )}
+
+      {/* Drag hint */}
+      <div className={`mt-2 text-[10px] ${mutedColor} text-center`}>
+        Drag header to move
+      </div>
     </div>
   );
 };
@@ -230,6 +286,7 @@ export default function App() {
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [isViewingFromHistory, setIsViewingFromHistory] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -418,6 +475,9 @@ export default function App() {
     if (!topic.trim()) return;
     if (disambiguation) setDisambiguation(null);
     if (proximityWarning) setProximityWarning(null);
+
+    // Clear history view mode - this is a fresh search
+    setIsViewingFromHistory(false);
 
     // Immediate loading feedback - user sees spinner instantly
     setIsLoading(true);
@@ -1192,7 +1252,18 @@ export default function App() {
     loadContent(entry.data, entry.topic);
     setShowHistory(false);
     setHasStarted(true);
+    setIsViewingFromHistory(true); // Lock search bar when viewing saved content
     setShowContext(false); // Keep collapsed - user clicks to expand
+  };
+
+  // Return to home - clears history view mode and resets for new search
+  const returnToHome = () => {
+    setIsViewingFromHistory(false);
+    setHasStarted(false);
+    setTopic("");
+    setProcessedWords([]);
+    setSegments([]);
+    setContextData(null);
   };
 
   // Check if morph should be locked (definition popup open OR user is selecting text)
@@ -1554,13 +1625,31 @@ export default function App() {
     }
 
     // Tech Morph hover handler - shows tooltip with definitions in Tech Locked mode
+    // Only trigger for words that are actual technical terms (have conceptIndex or match conceptMap)
     const handleTechMorphHover = (e: React.MouseEvent) => {
       if (viewMode === 'tech' && isImportant) {
-        setTechMorphTerm({
-          term: item.text,
-          position: { x: e.clientX, y: e.clientY },
-          conceptIndex: item.conceptIndex
-        });
+        // Only show tooltip for actual technical terms - those with a concept mapping
+        const hasConceptMapping = item.conceptIndex !== undefined && item.conceptIndex >= 0;
+
+        // Also check if term matches any concept in the map (fallback for unmapped but technical words)
+        const cleanText = item.text.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
+        const matchesConceptMap = conceptMap.some(c =>
+          c.tech_term.toLowerCase().includes(cleanText) ||
+          cleanText.includes(c.tech_term.toLowerCase()) ||
+          c.analogy_term.toLowerCase().includes(cleanText)
+        );
+
+        // Skip common non-technical words
+        const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'we', 'us', 'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'which', 'who', 'whom', 'where', 'when', 'why', 'how', 'what', 'if', 'then', 'else', 'so', 'not', 'no', 'yes', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'same', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'where', 'about', 'into', 'over', 'after', 'before', 'between', 'under', 'again', 'further', 'once'];
+        const isCommonWord = commonWords.includes(cleanText);
+
+        if ((hasConceptMapping || matchesConceptMap) && !isCommonWord) {
+          setTechMorphTerm({
+            term: item.text,
+            position: { x: e.clientX, y: e.clientY },
+            conceptIndex: item.conceptIndex
+          });
+        }
       }
     };
 
@@ -1780,6 +1869,8 @@ export default function App() {
           setTempDomainInput("");
         }}
         onSubmit={handleSubmit}
+        isViewingFromHistory={isViewingFromHistory}
+        onReturnHome={returnToHome}
       />
 
       {/* History Panel */}
@@ -2282,6 +2373,7 @@ export default function App() {
           domain={analogyDomain}
           isDarkMode={isDarkMode}
           onClose={() => setTechMorphTerm(null)}
+          renderRichText={renderRichText}
         />
       )}
 

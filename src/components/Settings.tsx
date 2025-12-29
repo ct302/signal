@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle, Edit3, List } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
 import { fetchOllamaModels } from '../services';
+
+// Custom model indicator
+const CUSTOM_MODEL_VALUE = '__custom__';
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -29,6 +32,8 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [customModelInput, setCustomModelInput] = useState('');
 
   // Load config from localStorage on mount
   useEffect(() => {
@@ -46,6 +51,14 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
         setConfig(parsed);
         if (parsed.provider === 'ollama') {
           loadOllamaModels(parsed.ollamaEndpoint);
+        }
+        // Check if model is custom (not in default list)
+        if (parsed.provider !== 'ollama') {
+          const defaultModels = DEFAULT_MODELS[parsed.provider as ProviderType];
+          if (!defaultModels.includes(parsed.model)) {
+            setIsCustomModel(true);
+            setCustomModelInput(parsed.model);
+          }
         }
       } catch {
         // Use default config
@@ -66,14 +79,50 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   };
 
   const handleProviderChange = (provider: ProviderType) => {
-    const defaultModel = provider === 'ollama' 
-      ? (ollamaModels[0]?.name || '') 
+    const defaultModel = provider === 'ollama'
+      ? (ollamaModels[0]?.name || '')
       : DEFAULT_MODELS[provider][0];
-    
+
     setConfig(prev => ({ ...prev, provider, model: defaultModel }));
-    
+    setIsCustomModel(false);
+    setCustomModelInput('');
+
     if (provider === 'ollama') {
       loadOllamaModels();
+    }
+  };
+
+  // Handle model selection from dropdown
+  const handleModelSelect = (value: string) => {
+    if (value === CUSTOM_MODEL_VALUE) {
+      setIsCustomModel(true);
+      // Keep current model in input for editing
+      setCustomModelInput(config.model);
+    } else {
+      setIsCustomModel(false);
+      setConfig(prev => ({ ...prev, model: value }));
+    }
+  };
+
+  // Handle custom model input change
+  const handleCustomModelChange = (value: string) => {
+    setCustomModelInput(value);
+    setConfig(prev => ({ ...prev, model: value }));
+  };
+
+  // Provider model hints (where to find model names)
+  const getModelHint = (): string => {
+    switch (config.provider) {
+      case 'openrouter':
+        return 'Find models at openrouter.ai/models';
+      case 'google':
+        return 'e.g., gemini-2.0-flash-exp, gemini-1.5-pro';
+      case 'openai':
+        return 'e.g., gpt-4o, gpt-4-turbo-preview';
+      case 'anthropic':
+        return 'e.g., claude-3-5-sonnet-20241022';
+      default:
+        return '';
     }
   };
 
@@ -240,19 +289,75 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
             <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
               Model
             </label>
-            <select
-              value={config.model}
-              onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
-              className={`w-full px-3 py-2 rounded-lg border text-sm ${
-                isDarkMode
-                  ? 'bg-neutral-700 border-neutral-600 text-white'
-                  : 'bg-white border-neutral-200 text-neutral-800'
-              }`}
-            >
-              {getAvailableModels().map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
+
+            {/* Mode Toggle: Dropdown vs Custom */}
+            {config.provider !== 'ollama' && (
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => { setIsCustomModel(false); setConfig(prev => ({ ...prev, model: DEFAULT_MODELS[config.provider][0] })); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    !isCustomModel
+                      ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white')
+                      : (isDarkMode ? 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200')
+                  }`}
+                >
+                  <List size={14} />
+                  Popular
+                </button>
+                <button
+                  onClick={() => { setIsCustomModel(true); setCustomModelInput(config.model); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    isCustomModel
+                      ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white')
+                      : (isDarkMode ? 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200')
+                  }`}
+                >
+                  <Edit3 size={14} />
+                  Custom
+                </button>
+              </div>
+            )}
+
+            {/* Dropdown or Custom Input based on mode */}
+            {isCustomModel && config.provider !== 'ollama' ? (
+              <div>
+                <input
+                  type="text"
+                  value={customModelInput}
+                  onChange={(e) => handleCustomModelChange(e.target.value)}
+                  placeholder="Enter exact model name"
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                    isDarkMode
+                      ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500'
+                      : 'bg-white border-neutral-200 text-neutral-800 placeholder-neutral-400'
+                  }`}
+                />
+                <p className={`mt-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                  {getModelHint()}
+                </p>
+              </div>
+            ) : (
+              <select
+                value={config.model}
+                onChange={(e) => handleModelSelect(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                  isDarkMode
+                    ? 'bg-neutral-700 border-neutral-600 text-white'
+                    : 'bg-white border-neutral-200 text-neutral-800'
+                }`}
+              >
+                {getAvailableModels().map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Help text for staying up-to-date */}
+            {config.provider !== 'ollama' && !isCustomModel && (
+              <p className={`mt-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                Use <strong>Custom</strong> mode to enter newer models not listed here.
+              </p>
+            )}
           </div>
         </div>
 

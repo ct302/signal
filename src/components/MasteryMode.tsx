@@ -22,7 +22,8 @@ import {
   Zap,
   Maximize2,
   Minimize2,
-  ClipboardCopy
+  ClipboardCopy,
+  FileCode
 } from 'lucide-react';
 import {
   MasterySession,
@@ -1232,6 +1233,7 @@ const OverviewMode: React.FC<{
   const [activeTab, setActiveTab] = useState<'journey' | 'glossary'>('journey');
   const [copied, setCopied] = useState(false);
   const [obsidianCopied, setObsidianCopied] = useState(false);
+  const [htmlCopied, setHtmlCopied] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
   const handleShare = async () => {
@@ -1310,6 +1312,167 @@ const OverviewMode: React.FC<{
       setTimeout(() => setObsidianCopied(false), 2000);
     } catch {
       console.error('Failed to copy Obsidian markdown');
+    }
+  };
+
+  // Generate full HTML export of the entire page
+  const handleHtmlExport = async () => {
+    const completedDate = new Date(historyEntry.completedAt).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mastery: ${historyEntry.topic}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; background: #fafafa; color: #333; }
+    h1 { color: #7c3aed; margin-bottom: 8px; }
+    .subtitle { color: #666; margin-bottom: 24px; }
+    .summary-box { background: linear-gradient(135deg, #fef3c7, #fed7aa); border: 1px solid #fcd34d; border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .summary-box h2 { color: #b45309; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .summary-item { margin-bottom: 12px; }
+    .summary-label { text-transform: uppercase; font-size: 11px; font-weight: 700; color: #b45309; margin-bottom: 4px; }
+    .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .score-card { background: white; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .score-value { font-size: 28px; font-weight: 700; }
+    .score-value.s1 { color: #3b82f6; }
+    .score-value.s2 { color: #a855f7; }
+    .score-value.s3 { color: #22c55e; }
+    .score-label { font-size: 12px; color: #888; }
+    .section { margin-bottom: 32px; }
+    .section h3 { color: #7c3aed; border-bottom: 2px solid #e9d5ff; padding-bottom: 8px; margin-bottom: 16px; }
+    .stage { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stage h4 { color: #6b21a8; margin-bottom: 12px; }
+    .story { background: #f5f3ff; padding: 16px; border-radius: 8px; margin-bottom: 12px; font-style: italic; }
+    .response { border-left: 3px solid #7c3aed; padding-left: 16px; color: #555; }
+    .insight { background: #fef3c7; padding: 12px; border-radius: 8px; margin-top: 12px; }
+    .insight-icon { color: #f59e0b; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; color: #374151; }
+    .tech-term { color: #7c3aed; font-weight: 600; }
+    .analogy-term { color: #059669; }
+    .footer { text-align: center; color: #888; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+  </style>
+</head>
+<body>
+  <h1>🎓 ${historyEntry.topic}</h1>
+  <p class="subtitle">Mastered through <strong>${historyEntry.domain}</strong> ${historyEntry.domainEmoji} analogies • ${completedDate}</p>
+
+  <div class="summary-box">
+    <h2>🏆 Your Mastery Summary</h2>
+    <div class="summary-item">
+      <div class="summary-label">Key Strength</div>
+      <p>${historyEntry.masterySummary.keyStrength}</p>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Core Intuition</div>
+      <p>${historyEntry.masterySummary.coreIntuition}</p>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">What Made You Unique</div>
+      <p>${historyEntry.masterySummary.uniqueApproach}</p>
+    </div>
+  </div>
+
+  <div class="scores">
+    <div class="score-card">
+      <div class="score-value s1">${historyEntry.finalScores.stage1}%</div>
+      <div class="score-label">Stage 1</div>
+    </div>
+    <div class="score-card">
+      <div class="score-value s2">${historyEntry.finalScores.stage2}%</div>
+      <div class="score-label">Stage 2</div>
+    </div>
+    <div class="score-card">
+      <div class="score-value s3">${historyEntry.finalScores.stage3}%</div>
+      <div class="score-label">Stage 3</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>📖 Learning Journey</h3>`;
+
+    for (const stage of [1, 2, 3] as const) {
+      const stageKey = `stage${stage}` as 'stage1' | 'stage2' | 'stage3';
+      const story = historyEntry.stories[stageKey];
+      const response = historyEntry.userResponses[stageKey];
+      const intuition = historyEntry.intuitions[stageKey];
+
+      html += `
+    <div class="stage">
+      <h4>Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}</h4>`;
+
+      if (story?.content) {
+        html += `
+      <div class="story">
+        <strong>📚 Story:</strong><br>
+        ${story.content.replace(/\n/g, '<br>')}
+      </div>`;
+      }
+
+      if (response) {
+        html += `
+      <div class="response">
+        <strong>💬 My Response:</strong><br>
+        ${response.replace(/\n/g, '<br>')}
+      </div>`;
+      }
+
+      if (intuition?.insight) {
+        html += `
+      <div class="insight">
+        <span class="insight-icon">💡</span> <strong>Key Insight:</strong> ${intuition.insight}
+      </div>`;
+      }
+
+      html += `
+    </div>`;
+    }
+
+    html += `
+  </div>
+
+  <div class="section">
+    <h3>📚 Glossary</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Technical Term</th>
+          <th>${historyEntry.domain.split(' ')[0]} Equivalent</th>
+          <th>Definition</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    historyEntry.glossary.forEach(keyword => {
+      html += `
+        <tr>
+          <td class="tech-term">${keyword.term}</td>
+          <td class="analogy-term">${keyword.analogyTerm}</td>
+          <td>${keyword.techDefinition6 || keyword.techDefinition3}</td>
+        </tr>`;
+    });
+
+    html += `
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Generated by Signal • ${completedDate}
+  </div>
+</body>
+</html>`;
+
+    try {
+      await navigator.clipboard.writeText(html);
+      setHtmlCopied(true);
+      setTimeout(() => setHtmlCopied(false), 2000);
+    } catch {
+      console.error('Failed to copy HTML');
     }
   };
 
@@ -1416,26 +1579,43 @@ const OverviewMode: React.FC<{
             <div className="space-y-6">
               {/* Mastery Summary */}
               <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-yellow-900/20 to-orange-900/20 border border-yellow-500/30' : 'bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200'}`}>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Trophy className="text-yellow-500" size={24} />
                     <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
                       Your Mastery Summary
                     </h3>
                   </div>
-                  <button
-                    onClick={handleObsidianExport}
-                    className={`
-                      flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
-                      ${obsidianCopied
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700'}
-                    `}
-                    title="Copy beautifully formatted markdown notes"
-                  >
-                    {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
-                    {obsidianCopied ? 'Copied!' : 'Copy Notes'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Copy Markdown Notes Button */}
+                    <button
+                      onClick={handleObsidianExport}
+                      className={`
+                        flex items-center gap-2 px-3 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
+                        ${obsidianCopied
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700'}
+                      `}
+                      title="Copy as Markdown for Obsidian/Notion"
+                    >
+                      {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
+                      {obsidianCopied ? 'Copied!' : 'Markdown'}
+                    </button>
+                    {/* Copy Full HTML Page Button */}
+                    <button
+                      onClick={handleHtmlExport}
+                      className={`
+                        flex items-center gap-2 px-3 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
+                        ${htmlCopied
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700'}
+                      `}
+                      title="Copy full page as HTML - paste into any document"
+                    >
+                      {htmlCopied ? <Check size={16} /> : <FileCode size={16} />}
+                      {htmlCopied ? 'Copied!' : 'Full Page'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
