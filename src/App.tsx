@@ -458,6 +458,7 @@ export default function App() {
   const [isMouseInside, setIsMouseInside] = useState(false);
   const [showCondensedView, setShowCondensedView] = useState(false); // Actual visibility of condensed overlay
   const [isCondensedMorphing, setIsCondensedMorphing] = useState(false); // Transition state for diffusion effect
+  const [isFirstPrinciplesMode, setIsFirstPrinciplesMode] = useState(false); // Button-toggled first principles view
 
   // View Mode State
   const [viewMode, setViewMode] = useState<'morph' | 'nfl' | 'tech'>('morph');
@@ -1520,21 +1521,6 @@ export default function App() {
     if (isMobile) return;
     setIsMouseInside(true);
 
-    // Tech Lock condensed view morph - smooth transition in
-    if (viewMode === 'tech' && condensedData && hasStarted) {
-      // Clear any pending leave timer
-      if (condensedMorphTimerRef.current) {
-        clearTimeout(condensedMorphTimerRef.current);
-      }
-      // Start blur transition
-      setIsCondensedMorphing(true);
-      // After blur, show condensed and clear blur
-      condensedMorphTimerRef.current = setTimeout(() => {
-        setShowCondensedView(true);
-        setTimeout(() => setIsCondensedMorphing(false), 150);
-      }, 200);
-    }
-
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
     // Lock morph when definition popup is open or user is selecting
     if (isMorphLocked) return;
@@ -1546,25 +1532,38 @@ export default function App() {
     if (isMobile) return;
     setIsMouseInside(false);
 
-    // Tech Lock condensed view morph - smooth transition out
-    if (viewMode === 'tech' && showCondensedView) {
-      // Clear any pending enter timer
-      if (condensedMorphTimerRef.current) {
-        clearTimeout(condensedMorphTimerRef.current);
-      }
-      // Start blur transition
-      setIsCondensedMorphing(true);
-      // After blur, hide condensed and clear blur
-      condensedMorphTimerRef.current = setTimeout(() => {
-        setShowCondensedView(false);
-        setTimeout(() => setIsCondensedMorphing(false), 150);
-      }, 200);
-    }
-
     // Lock morph when definition popup is open or user is selecting
     if (isMorphLocked) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     if (viewMode === 'morph') setIsHovering(false);
+  };
+
+  // Toggle First Principles view in Tech mode with smooth morph transition
+  const toggleFirstPrinciplesMode = () => {
+    if (!condensedData) return;
+
+    // Clear any pending timers
+    if (condensedMorphTimerRef.current) {
+      clearTimeout(condensedMorphTimerRef.current);
+    }
+
+    if (isFirstPrinciplesMode) {
+      // Transition OUT of first principles
+      setIsCondensedMorphing(true);
+      condensedMorphTimerRef.current = setTimeout(() => {
+        setShowCondensedView(false);
+        setIsFirstPrinciplesMode(false);
+        setTimeout(() => setIsCondensedMorphing(false), 150);
+      }, 200);
+    } else {
+      // Transition INTO first principles
+      setIsCondensedMorphing(true);
+      condensedMorphTimerRef.current = setTimeout(() => {
+        setShowCondensedView(true);
+        setIsFirstPrinciplesMode(true);
+        setTimeout(() => setIsCondensedMorphing(false), 150);
+      }, 200);
+    }
   };
 
   const handleTouchToggle = () => {
@@ -2335,7 +2334,7 @@ export default function App() {
               >
                 {/* Content Header */}
                 <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5">
                     <button
                       onClick={cycleViewMode}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
@@ -2383,6 +2382,21 @@ export default function App() {
                       >
                         <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Bullets</span>
+                      </button>
+                    )}
+                    {/* First Principles Mode - Only in Tech Lock when condensed data available */}
+                    {hasStarted && viewMode === 'tech' && condensedData && (
+                      <button
+                        onClick={toggleFirstPrinciplesMode}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isFirstPrinciplesMode
+                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="First Principles Mode - WHAT/WHY essence with atomic insights"
+                      >
+                        <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Essence</span>
                       </button>
                     )}
                     {/* ELI Complexity Buttons */}
@@ -2524,10 +2538,10 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
-                  {/* Condensed View Overlay - Shows on hover in Tech Lock mode with diffusion morph */}
+                  {/* First Principles View - Button-toggled via "Essence" button in Tech mode */}
                   {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
-                      className={`absolute inset-0 z-10 p-6 rounded-xl transition-all duration-300 ease-out ${
+                      className={`absolute inset-0 z-10 p-6 md:p-8 rounded-xl transition-all duration-300 ease-out ${
                         isDarkMode ? 'bg-neutral-900/95' : 'bg-white/95'
                       } backdrop-blur-sm ${
                         showCondensedView && !isCondensedMorphing
@@ -2535,58 +2549,100 @@ export default function App() {
                           : 'opacity-0 blur-md scale-[0.98]'
                       }`}
                     >
-                      <div className="space-y-4">
+                      <div className="space-y-5">
                         {/* WHAT Section */}
                         <div>
-                          <div className={`text-xs uppercase font-bold tracking-wider mb-1 ${
+                          <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
                             isDarkMode ? 'text-purple-400' : 'text-purple-600'
                           }`}>
                             📐 WHAT
                           </div>
-                          <p className={`text-lg font-medium ${
-                            isDarkMode ? 'text-neutral-100' : 'text-neutral-800'
-                          }`}>
+                          <p
+                            className={`font-medium leading-relaxed ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                            style={{ fontSize: `${1.25 * textScale}rem` }}
+                          >
                             {condensedData.what}
                           </p>
                         </div>
 
                         {/* WHY Section */}
                         <div>
-                          <div className={`text-xs uppercase font-bold tracking-wider mb-1 ${
+                          <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
                             isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
                           }`}>
                             🎯 WHY
                           </div>
-                          <p className={`text-lg font-medium ${
-                            isDarkMode ? 'text-neutral-100' : 'text-neutral-800'
-                          }`}>
+                          <p
+                            className={`font-medium leading-relaxed ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                            style={{ fontSize: `${1.25 * textScale}rem` }}
+                          >
                             {condensedData.why}
                           </p>
                         </div>
 
-                        {/* First Principles Bullets */}
+                        {/* First Principles Bullets - with heatmap importance colors */}
                         {condensedData.bullets.length > 0 && (
                           <div>
-                            <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
+                            <div className={`text-xs uppercase font-bold tracking-wider mb-3 ${
                               isDarkMode ? 'text-orange-400' : 'text-orange-600'
                             }`}>
                               ⚡ First Principles
                             </div>
-                            <ul className="space-y-2">
-                              {condensedData.bullets.map((bullet, i) => (
-                                <li key={i} className="flex gap-3 items-start">
-                                  <span className={`flex-shrink-0 mt-0.5 text-sm font-bold ${
-                                    isDarkMode ? 'text-orange-400' : 'text-orange-500'
-                                  }`}>
-                                    {i + 1}.
-                                  </span>
-                                  <span className={`text-sm ${
-                                    isDarkMode ? 'text-neutral-300' : 'text-neutral-700'
-                                  }`}>
-                                    {bullet}
-                                  </span>
-                                </li>
-                              ))}
+                            <ul className="space-y-3">
+                              {condensedData.bullets.map((bullet, i) => {
+                                // Heatmap colors: first = most important (hot), last = less important (cool)
+                                const importance = 1 - (i / Math.max(condensedData.bullets.length - 1, 1));
+                                const heatmapColors = isDarkMode
+                                  ? [
+                                      { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)', text: 'rgb(252, 165, 165)', num: 'rgb(248, 113, 113)' },    // red - most important
+                                      { bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.4)', text: 'rgb(253, 186, 116)', num: 'rgb(251, 146, 60)' },   // orange
+                                      { bg: 'rgba(234, 179, 8, 0.15)', border: 'rgba(234, 179, 8, 0.4)', text: 'rgb(253, 224, 71)', num: 'rgb(250, 204, 21)' },      // yellow
+                                      { bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.35)', text: 'rgb(134, 239, 172)', num: 'rgb(74, 222, 128)' },    // green
+                                      { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.35)', text: 'rgb(147, 197, 253)', num: 'rgb(96, 165, 250)' },  // blue
+                                      { bg: 'rgba(139, 92, 246, 0.12)', border: 'rgba(139, 92, 246, 0.35)', text: 'rgb(196, 181, 253)', num: 'rgb(167, 139, 250)' }  // purple - least important
+                                    ]
+                                  : [
+                                      { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: 'rgb(127, 29, 29)', num: 'rgb(220, 38, 38)' },
+                                      { bg: 'rgba(249, 115, 22, 0.1)', border: 'rgba(249, 115, 22, 0.3)', text: 'rgb(124, 45, 18)', num: 'rgb(234, 88, 12)' },
+                                      { bg: 'rgba(234, 179, 8, 0.1)', border: 'rgba(234, 179, 8, 0.3)', text: 'rgb(113, 63, 18)', num: 'rgb(202, 138, 4)' },
+                                      { bg: 'rgba(34, 197, 94, 0.08)', border: 'rgba(34, 197, 94, 0.25)', text: 'rgb(20, 83, 45)', num: 'rgb(22, 163, 74)' },
+                                      { bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.25)', text: 'rgb(30, 58, 138)', num: 'rgb(37, 99, 235)' },
+                                      { bg: 'rgba(139, 92, 246, 0.08)', border: 'rgba(139, 92, 246, 0.25)', text: 'rgb(76, 29, 149)', num: 'rgb(124, 58, 237)' }
+                                    ];
+                                const colorIndex = Math.min(Math.floor((1 - importance) * heatmapColors.length), heatmapColors.length - 1);
+                                const colors = heatmapColors[colorIndex];
+
+                                return (
+                                  <li
+                                    key={i}
+                                    className="flex gap-3 items-start px-3 py-2 rounded-lg border-l-4 transition-all"
+                                    style={{
+                                      backgroundColor: colors.bg,
+                                      borderLeftColor: colors.border
+                                    }}
+                                  >
+                                    <span
+                                      className="flex-shrink-0 font-bold"
+                                      style={{
+                                        fontSize: `${1 * textScale}rem`,
+                                        marginTop: '0.125rem',
+                                        color: colors.num
+                                      }}
+                                    >
+                                      {i + 1}.
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: `${1.125 * textScale}rem`,
+                                        lineHeight: '1.6',
+                                        color: colors.text
+                                      }}
+                                    >
+                                      {bullet}
+                                    </span>
+                                  </li>
+                                );
+                              })}
                             </ul>
                           </div>
                         )}

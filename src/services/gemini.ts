@@ -461,6 +461,22 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
+TOPIC SCOPING - CRITICAL INSTRUCTION:
+When the topic is a BROAD FIELD (like "calculus", "physics", "linear algebra", "machine learning", "chemistry"):
+- Provide an OVERVIEW of the entire topic - what it IS as a field, its main branches, and its core purpose
+- Do NOT arbitrarily pick one subtopic (like only covering "differentiation" when asked about "calculus")
+- The header should reflect the ACTUAL topic requested ("Calculus" not "Differentiation")
+- Cover the topic at the level of specificity the user requested
+
+When the topic is SPECIFIC (like "derivatives", "Taylor series", "gradient descent"):
+- Dive deep into that specific topic as requested
+
+Examples:
+- Topic "calculus" → Overview of calculus as a field (limits, derivatives, integrals, their relationship)
+- Topic "differentiation" → Deep dive on differentiation specifically
+- Topic "neural networks" → Overview of neural network architectures and principles
+- Topic "backpropagation" → Deep dive on backpropagation specifically
+
 ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
