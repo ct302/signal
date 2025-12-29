@@ -2595,40 +2595,42 @@ export default function App() {
                   {/* First Principles View - Button-toggled via "Essence" button in Tech mode */}
                   {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
-                      className={`absolute inset-0 z-10 p-6 md:p-8 rounded-xl transition-all duration-300 ease-out ${
-                        isDarkMode ? 'bg-neutral-900/95' : 'bg-white/95'
+                      className={`absolute inset-0 z-10 p-5 md:p-6 overflow-y-auto transition-all duration-300 ease-out ${
+                        isDarkMode ? 'bg-neutral-900/98' : 'bg-white/98'
                       } backdrop-blur-sm ${
                         showCondensedView && !isCondensedMorphing
                           ? 'opacity-100 blur-0 scale-100'
                           : 'opacity-0 blur-md scale-[0.98]'
                       }`}
                     >
-                      <div className="space-y-5">
+                      <div className="space-y-4">
                         {/* WHAT Section */}
-                        <div>
-                          <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
-                            isDarkMode ? 'text-purple-400' : 'text-purple-600'
+                        <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
+                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                            isDarkMode ? 'text-purple-400/80' : 'text-purple-500'
                           }`}>
-                            📐 WHAT
+                            <span>📐</span>
+                            <span>What</span>
                           </div>
                           <p
-                            className={`font-medium leading-relaxed ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
-                            style={{ fontSize: `${1.25 * textScale}rem` }}
+                            className={`font-medium leading-snug ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                            style={{ fontSize: `${1.125 * textScale}rem` }}
                           >
                             {condensedData.what}
                           </p>
                         </div>
 
                         {/* WHY Section */}
-                        <div>
-                          <div className={`text-xs uppercase font-bold tracking-wider mb-2 ${
-                            isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
+                        <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
+                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                            isDarkMode ? 'text-emerald-400/80' : 'text-emerald-500'
                           }`}>
-                            🎯 WHY
+                            <span>🎯</span>
+                            <span>Why</span>
                           </div>
                           <p
-                            className={`font-medium leading-relaxed ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
-                            style={{ fontSize: `${1.25 * textScale}rem` }}
+                            className={`font-medium leading-snug ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                            style={{ fontSize: `${1.125 * textScale}rem` }}
                           >
                             {condensedData.why}
                           </p>
@@ -2637,12 +2639,13 @@ export default function App() {
                         {/* First Principles Bullets - with heatmap importance colors */}
                         {condensedData.bullets.length > 0 && (
                           <div>
-                            <div className={`text-xs uppercase font-bold tracking-wider mb-3 ${
-                              isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                            <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-2 ${
+                              isDarkMode ? 'text-orange-400/80' : 'text-orange-500'
                             }`}>
-                              ⚡ First Principles
+                              <span>⚡</span>
+                              <span>First Principles</span>
                             </div>
-                            <ul className="space-y-3">
+                            <ul className="space-y-1.5">
                               {condensedData.bullets.map((bullet, i) => {
                                 // Heatmap colors: first = most important (hot), last = less important (cool)
                                 const importance = 1 - (i / Math.max(condensedData.bullets.length - 1, 1));
@@ -2669,17 +2672,17 @@ export default function App() {
                                 return (
                                   <li
                                     key={i}
-                                    className="flex gap-3 items-start px-3 py-2 rounded-lg border-l-4 transition-all"
+                                    className="flex gap-2 items-start px-2.5 py-1.5 rounded-md border-l-3 transition-all"
                                     style={{
                                       backgroundColor: colors.bg,
+                                      borderLeftWidth: '3px',
                                       borderLeftColor: colors.border
                                     }}
                                   >
                                     <span
-                                      className="flex-shrink-0 font-bold"
+                                      className="flex-shrink-0 font-semibold text-sm"
                                       style={{
-                                        fontSize: `${1 * textScale}rem`,
-                                        marginTop: '0.125rem',
+                                        fontSize: `${0.875 * textScale}rem`,
                                         color: colors.num
                                       }}
                                     >
@@ -2687,8 +2690,8 @@ export default function App() {
                                     </span>
                                     <span
                                       style={{
-                                        fontSize: `${1.125 * textScale}rem`,
-                                        lineHeight: '1.6',
+                                        fontSize: `${0.9375 * textScale}rem`,
+                                        lineHeight: '1.5',
                                         color: colors.text
                                       }}
                                     >
@@ -2775,7 +2778,8 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Content Footer */}
+                {/* Content Footer - Hide when in Essence mode */}
+                {!(showCondensedView && isFirstPrinciplesMode) && (
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   {/* Selection hint - only show when not in morph mode */}
                   {viewMode !== 'morph' && (
@@ -2800,6 +2804,7 @@ export default function App() {
                     </span>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Follow-up Section */}
