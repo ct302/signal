@@ -29,7 +29,8 @@ import {
   List,
   Copy,
   Check,
-  AlertCircle
+  AlertCircle,
+  Dices
 } from 'lucide-react';
 
 // Types
@@ -1759,21 +1760,6 @@ export default function App() {
       style.padding = '0 4px';
     }
 
-    // Red highlight for concept_map terms on mouse enter in Tech Lock mode
-    const hasConceptMapping = item.conceptIndex !== undefined && item.conceptIndex >= 0;
-    const cleanTextForMatch = item.text.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
-    const matchesConceptMap = conceptMap.some(c =>
-      c.tech_term.toLowerCase().includes(cleanTextForMatch) ||
-      cleanTextForMatch.includes(c.tech_term.toLowerCase()) ||
-      c.analogy_term.toLowerCase().includes(cleanTextForMatch)
-    );
-    const isTechConceptTerm = isImportant && (hasConceptMapping || matchesConceptMap);
-
-    if (viewMode === 'tech' && isMouseInside && isTechConceptTerm && !isSelected) {
-      style.color = '#dc2626'; // Tailwind red-600
-      style.fontWeight = 700;
-    }
-
     let classes = "";
     if (isImportant && isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
       if (mode === 'heatmap') {
@@ -2193,6 +2179,27 @@ export default function App() {
                       >
                         <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Graph</span>
+                      </button>
+                    )}
+                    {/* Regenerate Button - Dice to regenerate description and reset mastery */}
+                    {hasStarted && lastSubmittedTopic && (
+                      <button
+                        onClick={() => {
+                          // Reset mastery session cache (clears quiz progress)
+                          setMasterySessionCache(null);
+                          // Close mastery mode if open
+                          setIsMasteryMode(false);
+                          // Regenerate content for current topic
+                          fetchAnalogy(lastSubmittedTopic);
+                        }}
+                        disabled={isRegenerating || isLoading}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
+                        } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="Regenerate description and reset mastery progress"
+                      >
+                        <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                        <span className="hidden sm:inline">Reroll</span>
                       </button>
                     )}
                     {/* Dual Pane Mode Button */}
