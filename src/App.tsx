@@ -294,6 +294,8 @@ export default function App() {
   const [showTutorHistory, setShowTutorHistory] = useState(false);
   const [tutorThreshold, setTutorThreshold] = useState(0.5);
   const [isTutorColorMode, setIsTutorColorMode] = useState(false);
+  const [selectedHistoryBranch, setSelectedHistoryBranch] = useState<number | null>(null); // Index of selected Q&A pair for branching
+  const MAX_BRANCH_CONTEXT = 5; // Max Q&A pairs per branch context
 
   // Quiz State
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -1270,7 +1272,19 @@ export default function App() {
     if (!query) return;
     setIsTutorLoading(true);
 
-    const conversationContext = tutorHistory.map(entry =>
+    // Build context based on whether we're branching or continuing
+    let contextHistory: TutorHistoryEntry[];
+    if (selectedHistoryBranch !== null) {
+      // Branching: use history up to and including the selected branch point
+      // Each pair is 2 entries, so branch index N means entries 0 to (N+1)*2-1
+      const branchEndIndex = (selectedHistoryBranch + 1) * 2;
+      contextHistory = tutorHistory.slice(0, branchEndIndex);
+    } else {
+      // Not branching: use last MAX_BRANCH_CONTEXT pairs (10 entries)
+      contextHistory = tutorHistory.slice(-(MAX_BRANCH_CONTEXT * 2));
+    }
+
+    const conversationContext = contextHistory.map(entry =>
       `${entry.role === 'user' ? 'User' : 'Tutor'}: ${entry.text}`
     ).join('\n');
 
@@ -1279,11 +1293,26 @@ export default function App() {
       if (result) {
         setTutorResponse({ question: query, answer: result, mode: "Tutor" });
         setFollowUpQuery("");
-        setTutorHistory(prev => [
-          ...prev,
-          { role: 'user' as const, text: query },
-          { role: 'model' as const, text: result }
-        ].slice(-MAX_TUTOR_HISTORY));
+
+        // Update history - if branching, truncate to branch point first
+        setTutorHistory(prev => {
+          let baseHistory: TutorHistoryEntry[];
+          if (selectedHistoryBranch !== null) {
+            // Truncate to branch point and add new Q&A
+            const branchEndIndex = (selectedHistoryBranch + 1) * 2;
+            baseHistory = prev.slice(0, branchEndIndex);
+          } else {
+            baseHistory = prev;
+          }
+          return [
+            ...baseHistory,
+            { role: 'user' as const, text: query },
+            { role: 'model' as const, text: result }
+          ].slice(-MAX_TUTOR_HISTORY);
+        });
+
+        // Clear branch selection after asking (we're now at the new end)
+        setSelectedHistoryBranch(null);
       }
     } catch (e) {
       console.error("Tutor failed", e);
@@ -1495,6 +1524,7 @@ export default function App() {
     setShowTutorHistory(false);
     setTutorThreshold(0.5);
     setIsTutorColorMode(false);
+    setSelectedHistoryBranch(null);
 
     // Quiz State
     setShowQuizModal(false);
@@ -2657,33 +2687,72 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* History Panel - shows last 5 Q&A pairs */}
+                  {/* History Panel - clickable Q&A pairs for branching */}
                   {showTutorHistory && tutorHistory.length > 0 && (
-                    <div className={`mb-3 p-3 rounded-lg max-h-48 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                    <div className={`mb-3 p-3 rounded-lg max-h-64 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
                       <div className="space-y-2">
                         {(() => {
-                          // Group history into Q&A pairs (last 5 pairs = 10 entries)
-                          const pairs: { question: string; answer: string }[] = [];
+                          // Group history into Q&A pairs
+                          const pairs: { question: string; answer: string; originalIndex: number }[] = [];
                           for (let i = 0; i < tutorHistory.length; i += 2) {
                             if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
                               pairs.push({
                                 question: tutorHistory[i].text,
-                                answer: tutorHistory[i + 1].text
+                                answer: tutorHistory[i + 1].text,
+                                originalIndex: Math.floor(i / 2)
                               });
                             }
                           }
-                          return pairs.slice(-5).map((pair, idx) => (
-                            <div key={idx} className={`text-xs p-2 rounded ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`}>
-                              <p className={`font-medium mb-1 ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
-                                Q: {pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question}
-                              </p>
-                              <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}>
-                                A: {pair.answer.length > 120 ? pair.answer.slice(0, 120) + '...' : pair.answer}
-                              </p>
-                            </div>
-                          ));
+                          // Show last 5 pairs
+                          const displayPairs = pairs.slice(-5);
+                          return displayPairs.map((pair) => {
+                            const isSelected = selectedHistoryBranch === pair.originalIndex;
+                            return (
+                              <div
+                                key={pair.originalIndex}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    // Deselect - go back to latest
+                                    setSelectedHistoryBranch(null);
+                                    // Show the latest response
+                                    const lastPair = pairs[pairs.length - 1];
+                                    if (lastPair) {
+                                      setTutorResponse({ question: lastPair.question, answer: lastPair.answer, mode: "Tutor" });
+                                    }
+                                  } else {
+                                    // Select this branch point
+                                    setSelectedHistoryBranch(pair.originalIndex);
+                                    // Show full Q&A as current response
+                                    setTutorResponse({ question: pair.question, answer: pair.answer, mode: "Tutor" });
+                                  }
+                                }}
+                                className={`text-xs p-2 rounded cursor-pointer transition-all ${
+                                  isSelected
+                                    ? (isDarkMode ? 'bg-blue-900/50 border border-blue-500/50 ring-1 ring-blue-500/30' : 'bg-blue-100 border border-blue-300')
+                                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-white hover:bg-neutral-50')
+                                }`}
+                              >
+                                <p className={`font-medium mb-1 ${isSelected ? (isDarkMode ? 'text-blue-200' : 'text-blue-700') : (isDarkMode ? 'text-blue-300' : 'text-blue-600')}`}>
+                                  Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
+                                </p>
+                                <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
+                                  A: {isSelected ? pair.answer : (pair.answer.length > 120 ? pair.answer.slice(0, 120) + '...' : pair.answer)}
+                                </p>
+                                {isSelected && (
+                                  <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                    ↳ Branch from here - your next question will continue from this point
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          });
                         })()}
                       </div>
+                      {selectedHistoryBranch !== null && (
+                        <div className={`mt-2 pt-2 border-t text-xs ${isDarkMode ? 'border-neutral-700 text-amber-400' : 'border-neutral-200 text-amber-600'}`}>
+                          ⚡ Branching mode: Next question will fork from selected point
+                        </div>
+                      )}
                     </div>
                   )}
 

@@ -1,5 +1,6 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
 import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
+import { stripMathSymbols } from '../utils/text';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
 
 // ============================================
@@ -1013,10 +1014,12 @@ export const askTutor = async (
   query: string,
   conversationContext: string
 ) => {
-  const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short.`;
+  const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short. IMPORTANT: Use plain text only - no mathematical symbols, Greek letters, or LaTeX. Write "cup" not ∪, "in" not ∈, "and" not ∧, "sum" not Σ.`;
 
   try {
-    return await callApi(prompt);
+    const response = await callApi(prompt);
+    // Sanitize math symbols from response (∪ → and, ∈ → in, etc.)
+    return stripMathSymbols(response);
   } catch {
     return "Sorry, I couldn't process that question.";
   }
