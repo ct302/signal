@@ -319,10 +319,24 @@ export default function App() {
   // Ambiance Mode State
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
-  const [brownNoiseEnabled, setBrownNoiseEnabled] = useState(false);
+
+  // Noise Generator State
+  const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
+  const [noiseVolume, setNoiseVolume] = useState(0.3);
+  const noiseRef = useRef<{ ctx: AudioContext; gain: GainNode; processor: ScriptProcessorNode } | null>(null);
+
+  // Desk Lamp State
   const [deskLampEnabled, setDeskLampEnabled] = useState(true);
+  const [lampIntensity, setLampIntensity] = useState(0.5);
+  const [lampColor, setLampColor] = useState<'warm' | 'white' | 'cool' | 'custom'>('warm');
+  const [lampCustomColor, setLampCustomColor] = useState('#fffbeb');
+
+  // Night Mode State
   const [vignetteEnabled, setVignetteEnabled] = useState(true);
-  const brownNoiseRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
+  const [nightIntensity, setNightIntensity] = useState<'subtle' | 'medium' | 'deep'>('medium');
+  const [nightColor, setNightColor] = useState<'amber' | 'red' | 'lavender' | 'custom'>('amber');
+  const [nightCustomColor, setNightCustomColor] = useState('#f59e0b');
+
   const [showShortcutsLegend, setShowShortcutsLegend] = useState(false);
   const [isConstellationMode, setIsConstellationMode] = useState(false);
   const [isDualPaneMode, setIsDualPaneMode] = useState(false);
@@ -1150,54 +1164,83 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale, viewMode, isBulletMode]);
 
-  // Brown noise audio for Study Mode
+  // Noise generator for Study Mode (white, pink, brown noise)
   useEffect(() => {
-    if (ambianceMode === 'study' && brownNoiseEnabled) {
-      // Create deep brown noise using Web Audio API
+    if (ambianceMode === 'study' && noiseType !== 'none') {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const bufferSize = 4096;
-      const brownNoise = audioContext.createScriptProcessor(bufferSize, 1, 1);
-      let lastOut = 0.0;
+      const noiseProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
 
-      // Generate deeper brown noise with lower coefficient
-      brownNoise.onaudioprocess = (e) => {
+      // State for noise generation
+      let lastOut = 0.0;
+      // Pink noise state (Voss-McCartney algorithm)
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+      noiseProcessor.onaudioprocess = (e) => {
         const output = e.outputBuffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
           const white = Math.random() * 2 - 1;
-          // Lower coefficient (0.008) = deeper/bassier brown noise
-          output[i] = (lastOut + (0.008 * white)) / 1.008;
-          lastOut = output[i];
-          output[i] *= 5.0; // Boost volume to compensate for lower coefficient
+
+          if (noiseType === 'white') {
+            // White noise - pure random
+            output[i] = white * 0.5;
+          } else if (noiseType === 'pink') {
+            // Pink noise - Voss-McCartney algorithm
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+            b6 = white * 0.115926;
+          } else if (noiseType === 'brown') {
+            // Brown noise - integrated white noise
+            output[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = output[i];
+            output[i] *= 3.5;
+          }
         }
       };
 
-      // Add low-pass filter for extra depth
-      const lowPassFilter = audioContext.createBiquadFilter();
-      lowPassFilter.type = 'lowpass';
-      lowPassFilter.frequency.value = 250; // Cut high frequencies for rumbling bass
-      lowPassFilter.Q.value = 0.7;
-
+      // Create filter chain based on noise type
       const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0.25; // Slightly higher volume for deep bass
+      gainNode.gain.value = noiseVolume;
 
-      brownNoise.connect(lowPassFilter);
-      lowPassFilter.connect(gainNode);
+      if (noiseType === 'brown') {
+        // Low-pass filter for brown noise
+        const lowPassFilter = audioContext.createBiquadFilter();
+        lowPassFilter.type = 'lowpass';
+        lowPassFilter.frequency.value = 300;
+        lowPassFilter.Q.value = 0.7;
+        noiseProcessor.connect(lowPassFilter);
+        lowPassFilter.connect(gainNode);
+      } else {
+        noiseProcessor.connect(gainNode);
+      }
+
       gainNode.connect(audioContext.destination);
-
-      brownNoiseRef.current = { ctx: audioContext, gain: gainNode };
+      noiseRef.current = { ctx: audioContext, gain: gainNode, processor: noiseProcessor };
 
       return () => {
-        brownNoise.disconnect();
-        lowPassFilter.disconnect();
+        noiseProcessor.disconnect();
         gainNode.disconnect();
         audioContext.close();
-        brownNoiseRef.current = null;
+        noiseRef.current = null;
       };
-    } else if (brownNoiseRef.current) {
-      brownNoiseRef.current.ctx.close();
-      brownNoiseRef.current = null;
+    } else if (noiseRef.current) {
+      noiseRef.current.ctx.close();
+      noiseRef.current = null;
     }
-  }, [ambianceMode, brownNoiseEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambianceMode, noiseType]); // noiseVolume handled separately to avoid audio restart
+
+  // Update noise volume in real-time
+  useEffect(() => {
+    if (noiseRef.current) {
+      noiseRef.current.gain.gain.value = noiseVolume;
+    }
+  }, [noiseVolume]);
 
   // Get difficulty based on question number
   const getQuizDifficulty = (questionNum: number): QuizDifficulty => {
@@ -3179,83 +3222,262 @@ export default function App() {
               style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}
             />
 
-            {/* Strong Blue Vignette - late night studying feel */}
-            {vignetteEnabled && (
-              <div
-                className="absolute inset-0 animate-study-pulse"
-                style={{
-                  background: 'radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(30, 58, 138, 0.35) 60%, rgba(23, 37, 84, 0.55) 85%, rgba(15, 23, 42, 0.7) 100%)'
-                }}
-              />
-            )}
+            {/* Night Mode Vignette - customizable color and intensity */}
+            {vignetteEnabled && (() => {
+              // Get night mode colors based on selection
+              const getNightColors = () => {
+                const baseColors = {
+                  amber: { mid: '251, 191, 36', deep: '245, 158, 11', edge: '217, 119, 6' },
+                  red: { mid: '239, 68, 68', deep: '220, 38, 38', edge: '185, 28, 28' },
+                  lavender: { mid: '167, 139, 250', deep: '139, 92, 246', edge: '109, 40, 217' },
+                  custom: { mid: '30, 58, 138', deep: '23, 37, 84', edge: '15, 23, 42' }
+                };
+                return baseColors[nightColor] || baseColors.amber;
+              };
+              const colors = getNightColors();
+              const intensityValues = {
+                subtle: { mid: 0.2, deep: 0.35, edge: 0.5 },
+                medium: { mid: 0.35, deep: 0.55, edge: 0.7 },
+                deep: { mid: 0.5, deep: 0.7, edge: 0.85 }
+              };
+              const intensity = intensityValues[nightIntensity];
+              return (
+                <div
+                  className="absolute inset-0 animate-study-pulse"
+                  style={{
+                    background: `radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(${colors.mid}, ${intensity.mid}) 60%, rgba(${colors.deep}, ${intensity.deep}) 85%, rgba(${colors.edge}, ${intensity.edge}) 100%)`
+                  }}
+                />
+              );
+            })()}
 
-            {/* Desk Lamp Spotlight - centered on content area */}
-            {deskLampEnabled && (
-              <div
-                className="absolute inset-0 animate-lamp-flicker"
-                style={{
-                  background: 'radial-gradient(ellipse 60% 50% at 50% 55%, rgba(255, 251, 235, 0.35) 0%, rgba(254, 243, 199, 0.2) 30%, rgba(251, 191, 36, 0.1) 50%, transparent 70%)',
-                  mixBlendMode: 'screen'
-                }}
-              />
-            )}
+            {/* Desk Lamp Spotlight - customizable intensity and color */}
+            {deskLampEnabled && (() => {
+              // Get lamp colors based on selection
+              const getLampColors = () => {
+                const presets = {
+                  warm: { inner: '255, 251, 235', mid: '254, 243, 199', outer: '251, 191, 36' },
+                  white: { inner: '255, 255, 255', mid: '250, 250, 250', outer: '229, 231, 235' },
+                  cool: { inner: '239, 246, 255', mid: '219, 234, 254', outer: '147, 197, 253' },
+                  custom: { inner: '255, 251, 235', mid: '254, 243, 199', outer: '251, 191, 36' }
+                };
+                return presets[lampColor] || presets.warm;
+              };
+              const colors = getLampColors();
+              // Intensity affects opacity (0.2 to 0.6 range)
+              const baseOpacity = 0.2 + (lampIntensity * 0.4);
+              const midOpacity = baseOpacity * 0.6;
+              const outerOpacity = baseOpacity * 0.3;
+              // Lamp size based on intensity (50% to 80% coverage)
+              const size = 50 + (lampIntensity * 30);
+              return (
+                <div
+                  className="absolute inset-0 animate-lamp-flicker"
+                  style={{
+                    background: `radial-gradient(ellipse ${size}% ${size * 0.85}% at 50% 55%, rgba(${colors.inner}, ${baseOpacity}) 0%, rgba(${colors.mid}, ${midOpacity}) 30%, rgba(${colors.outer}, ${outerOpacity}) 50%, transparent 70%)`,
+                    mixBlendMode: 'screen'
+                  }}
+                />
+              );
+            })()}
           </div>
 
-          {/* Study Mode Control Panel - only shown when showStudyControls is true */}
+          {/* Study Mode Control Panel - Redesigned with grouped sections */}
           {showStudyControls && (
             <div className="fixed bottom-24 right-6 z-[10000] pointer-events-auto">
-              <div className="bg-neutral-900/95 backdrop-blur-sm rounded-xl p-3 border border-neutral-700 shadow-2xl flex flex-col gap-2">
-                {/* Header with close button */}
-                <div className="flex items-center justify-between pb-2 border-b border-neutral-700 mb-1">
-                  <span className="text-xs font-medium text-neutral-300">Study Mode</span>
+              <div className="bg-neutral-900/95 backdrop-blur-md rounded-2xl border border-neutral-700 shadow-2xl w-72 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700 bg-neutral-800/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📚</span>
+                    <span className="text-sm font-semibold text-white">Study Mode</span>
+                  </div>
                   <button
                     onClick={() => {
                       setAmbianceMode('none');
-                      setShowStudyControls(true); // Reset for next time
+                      setNoiseType('none');
                     }}
-                    className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white transition-colors"
+                    className="p-1.5 hover:bg-red-500/20 rounded-lg text-neutral-400 hover:text-red-400 transition-colors"
                     title="Exit Study Mode"
                   >
-                    <X size={14} />
+                    <X size={18} />
                   </button>
                 </div>
 
-                <button
-                  onClick={() => setBrownNoiseEnabled(!brownNoiseEnabled)}
-                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                    brownNoiseEnabled
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                  }`}
-                  title="Toggle Brown Noise"
-                >
-                  <span className="text-sm">🎵</span>
-                  <span>Brown Noise</span>
-                </button>
-                <button
-                  onClick={() => setDeskLampEnabled(!deskLampEnabled)}
-                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                    deskLampEnabled
-                      ? 'bg-yellow-500 text-neutral-900 shadow-lg shadow-yellow-500/30'
-                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                  }`}
-                  title="Toggle Desk Lamp Spotlight"
-                >
-                  <span className="text-sm">💡</span>
-                  <span>Desk Lamp</span>
-                </button>
-                <button
-                  onClick={() => setVignetteEnabled(!vignetteEnabled)}
-                  className={`px-3 py-2 text-xs rounded-lg transition-all flex items-center gap-2 ${
-                    vignetteEnabled
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                      : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
-                  }`}
-                  title="Toggle Blue Vignette"
-                >
-                  <span className="text-sm">🌙</span>
-                  <span>Night Mode</span>
-                </button>
+                <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                  {/* Noise Generator Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-neutral-300">
+                      <span className="text-sm">🎵</span>
+                      <span className="text-xs font-medium uppercase tracking-wide">Sound</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(['none', 'white', 'pink', 'brown'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setNoiseType(type)}
+                          className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                            noiseType === type
+                              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                          }`}
+                        >
+                          {type === 'none' ? 'Off' : type}
+                        </button>
+                      ))}
+                    </div>
+                    {noiseType !== 'none' && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-neutral-400">
+                          <span>Volume</span>
+                          <span>{Math.round(noiseVolume * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={noiseVolume}
+                          onChange={(e) => setNoiseVolume(parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-neutral-700 rounded-full appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Desk Lamp Section */}
+                  <div className="space-y-3 pt-3 border-t border-neutral-700/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-neutral-300">
+                        <span className="text-sm">💡</span>
+                        <span className="text-xs font-medium uppercase tracking-wide">Desk Lamp</span>
+                      </div>
+                      <button
+                        onClick={() => setDeskLampEnabled(!deskLampEnabled)}
+                        className={`w-10 h-5 rounded-full transition-all relative ${
+                          deskLampEnabled ? 'bg-yellow-500' : 'bg-neutral-700'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          deskLampEnabled ? 'left-5' : 'left-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    {deskLampEnabled && (
+                      <>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-neutral-400">
+                            <span>Intensity</span>
+                            <span>{Math.round(lampIntensity * 100)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1"
+                            step="0.05"
+                            value={lampIntensity}
+                            onChange={(e) => setLampIntensity(parseFloat(e.target.value))}
+                            className="w-full h-1.5 bg-neutral-700 rounded-full appearance-none cursor-pointer accent-yellow-500"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-xs text-neutral-400">Color</span>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {([
+                              { id: 'warm', color: '#fbbf24', label: 'Warm' },
+                              { id: 'white', color: '#ffffff', label: 'White' },
+                              { id: 'cool', color: '#93c5fd', label: 'Cool' },
+                            ] as const).map((preset) => (
+                              <button
+                                key={preset.id}
+                                onClick={() => setLampColor(preset.id)}
+                                className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${
+                                  lampColor === preset.id
+                                    ? 'bg-neutral-700 ring-2 ring-yellow-500'
+                                    : 'bg-neutral-800 hover:bg-neutral-700'
+                                }`}
+                              >
+                                <div
+                                  className="w-5 h-5 rounded-full border border-neutral-600"
+                                  style={{ backgroundColor: preset.color }}
+                                />
+                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Night Mode Section */}
+                  <div className="space-y-3 pt-3 border-t border-neutral-700/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-neutral-300">
+                        <span className="text-sm">🌙</span>
+                        <span className="text-xs font-medium uppercase tracking-wide">Night Mode</span>
+                      </div>
+                      <button
+                        onClick={() => setVignetteEnabled(!vignetteEnabled)}
+                        className={`w-10 h-5 rounded-full transition-all relative ${
+                          vignetteEnabled ? 'bg-indigo-500' : 'bg-neutral-700'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          vignetteEnabled ? 'left-5' : 'left-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    {vignetteEnabled && (
+                      <>
+                        <div className="space-y-1.5">
+                          <span className="text-xs text-neutral-400">Intensity</span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(['subtle', 'medium', 'deep'] as const).map((level) => (
+                              <button
+                                key={level}
+                                onClick={() => setNightIntensity(level)}
+                                className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                                  nightIntensity === level
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                                }`}
+                              >
+                                {level}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-xs text-neutral-400">Color Temperature</span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                              { id: 'amber', color: '#f59e0b', label: 'Amber' },
+                              { id: 'red', color: '#ef4444', label: 'Red' },
+                              { id: 'lavender', color: '#a78bfa', label: 'Lavender' },
+                            ] as const).map((preset) => (
+                              <button
+                                key={preset.id}
+                                onClick={() => setNightColor(preset.id)}
+                                className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${
+                                  nightColor === preset.id
+                                    ? 'bg-neutral-700 ring-2 ring-indigo-500'
+                                    : 'bg-neutral-800 hover:bg-neutral-700'
+                                }`}
+                              >
+                                <div
+                                  className="w-5 h-5 rounded-full border border-neutral-600"
+                                  style={{ backgroundColor: preset.color }}
+                                />
+                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
