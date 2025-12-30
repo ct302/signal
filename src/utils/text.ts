@@ -650,6 +650,11 @@ export const sanitizeLatex = (text: string): string => {
   // Only convert when followed by a space and lowercase word (not valid math like \int)
   result = result.replace(/\\in(?=\s+[a-z])/gi, 'in');
 
+  // Also fix already-rendered ∈ symbol when misused as prose "in" (followed by articles)
+  // This catches cases where LLM outputs ∈ directly instead of \in
+  // Pattern: "∈ the", "∈ a", "∈ an", "∈ this", etc. → "in the", etc.
+  result = result.replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1');
+
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
   // We need to handle them appearing OUTSIDE of $ delimiters
