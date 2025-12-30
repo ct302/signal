@@ -235,7 +235,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                       '--glow-color': color,
                     } as React.CSSProperties}
                   >
-                    <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                    <span className={`font-semibold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-900'}`}>
                       {cleanLabel(concept.tech_term)}
                     </span>
                     <ChevronRight
@@ -410,7 +410,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         transform: isActive ? 'translateX(-4px) rotate(180deg)' : 'rotate(180deg)'
                       }}
                     />
-                    <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                    <span className={`font-semibold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-900'}`}>
                       {cleanLabel(concept.analogy_term)}
                     </span>
                   </div>
