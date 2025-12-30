@@ -2,12 +2,52 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
 
-// Generate "Why This Works" bullet points
-const generateWhyBullets = (techTerm: string, analogyTerm: string, domain: string): string[] => {
+// Generate dynamic "Why This Works" bullet points based on actual concept characteristics
+const generateWhyBullets = (
+  techTerm: string,
+  analogyTerm: string,
+  domain: string,
+  importance: number,
+  index: number
+): string[] => {
+  // Different insight patterns based on importance level and concept index
+  const highImportanceInsights = [
+    `"${analogyTerm}" is a cornerstone concept in ${domain}—${techTerm} plays the exact same structural role in technical systems`,
+    `Experts in ${domain} rely on ${analogyTerm} instinctively; this same instinct directly applies to understanding ${techTerm}`,
+    `The way ${analogyTerm} constrains decisions in ${domain} mirrors how ${techTerm} constrains technical design`,
+  ];
+
+  const mediumImportanceInsights = [
+    `${analogyTerm} and ${techTerm} solve the same fundamental problem in their respective domains`,
+    `Your mental model for "${analogyTerm}" already contains the logic needed to reason about ${techTerm}`,
+    `Both concepts answer "how do we handle complexity?" in remarkably similar ways`,
+  ];
+
+  const lowImportanceInsights = [
+    `${analogyTerm} provides intuitive vocabulary for what ${techTerm} describes formally`,
+    `The patterns you recognize in ${analogyTerm} are the same patterns ${techTerm} captures mathematically`,
+    `Understanding ${analogyTerm} gives you a head start—${techTerm} just adds precision`,
+  ];
+
+  // Select insights based on importance
+  const baseInsights = importance > 0.7
+    ? highImportanceInsights
+    : importance > 0.4
+      ? mediumImportanceInsights
+      : lowImportanceInsights;
+
+  // Add a transfer insight
+  const transferInsights = [
+    `When you visualize ${analogyTerm}, you're already visualizing ${techTerm}—just with different labels`,
+    `The "aha moment" for ${techTerm} is the same one you had when ${analogyTerm} first clicked`,
+    `If you can explain ${analogyTerm} to a friend, you can explain ${techTerm} to a colleague`,
+    `The intuition behind ${analogyTerm} IS the intuition behind ${techTerm}`,
+  ];
+
   return [
-    `Both "${analogyTerm}" and "${techTerm}" represent the same underlying pattern`,
-    `When you understand ${analogyTerm} in ${domain}, you've already grasped ${techTerm}`,
-    `The mental model transfers directly—same concept, different vocabulary`,
+    baseInsights[index % baseInsights.length],
+    transferInsights[(index + 1) % transferInsights.length],
+    `This isn't analogy as decoration—it's structural equivalence. ${techTerm} and ${analogyTerm} are isomorphic.`,
   ];
 };
 
@@ -78,9 +118,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const leftColumnRef = useRef<HTMLDivElement>(null);
-  const rightColumnRef = useRef<HTMLDivElement>(null);
-  const [linePositions, setLinePositions] = useState<Map<number, { left: DOMRect; right: DOMRect }>>(new Map());
   const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
 
   // Get importance for a concept
@@ -97,42 +134,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
     }
     return 0.5;
   }, [importanceMap]);
-
-  // Update line positions when layout changes
-  const updateLinePositions = useCallback(() => {
-    if (!containerRef.current) return;
-
-    const positions = new Map<number, { left: DOMRect; right: DOMRect }>();
-
-    conceptMap.forEach((concept) => {
-      const leftEl = containerRef.current?.querySelector(`[data-tech-id="${concept.id}"]`);
-      const rightEl = containerRef.current?.querySelector(`[data-analogy-id="${concept.id}"]`);
-
-      if (leftEl && rightEl) {
-        positions.set(concept.id, {
-          left: leftEl.getBoundingClientRect(),
-          right: rightEl.getBoundingClientRect()
-        });
-      }
-    });
-
-    setLinePositions(positions);
-  }, [conceptMap]);
-
-  useEffect(() => {
-    updateLinePositions();
-    window.addEventListener('resize', updateLinePositions);
-
-    // Multiple updates to catch layout shifts
-    const t1 = setTimeout(updateLinePositions, 100);
-    const t2 = setTimeout(updateLinePositions, 300);
-
-    return () => {
-      window.removeEventListener('resize', updateLinePositions);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [updateLinePositions]);
 
   // Handle keyboard
   useEffect(() => {
@@ -170,12 +171,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
     setScrollHighlight(activeConcept);
     const timeout = setTimeout(() => setScrollHighlight(null), 1000);
 
-    // Update line positions after scroll
-    setTimeout(updateLinePositions, 350);
-
     return () => clearTimeout(timeout);
-  }, [activeConcept, updateLinePositions]);
-  const containerRect = containerRef.current?.getBoundingClientRect();
+  }, [activeConcept]);
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col">
@@ -198,96 +195,6 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       {/* Main Content */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        {/* SVG Connection Lines */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-          <defs>
-            {/* Animated gradient for active connection */}
-            <linearGradient id="neural-pulse" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0">
-                <animate attributeName="offset" values="-0.5;1" dur="1.5s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="1">
-                <animate attributeName="offset" values="0;1.5" dur="1.5s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="100%" stopColor="#ec4899" stopOpacity="0">
-                <animate attributeName="offset" values="0.5;2" dur="1.5s" repeatCount="indefinite" />
-              </stop>
-            </linearGradient>
-
-            {/* Glow filter */}
-            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* Draw connection lines */}
-          {containerRect && conceptMap.map((concept, index) => {
-            const positions = linePositions.get(concept.id);
-            if (!positions) return null;
-
-            const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
-            const isActive = activeConcept === concept.id;
-            const isInactive = activeConcept !== null && activeConcept !== concept.id;
-
-            // Calculate line coordinates relative to container
-            const startX = positions.left.right - containerRect.left;
-            const startY = positions.left.top + positions.left.height / 2 - containerRect.top;
-            const endX = positions.right.left - containerRect.left;
-            const endY = positions.right.top + positions.right.height / 2 - containerRect.top;
-
-            // Control points for smooth curve
-            const midX = (startX + endX) / 2;
-
-            return (
-              <g key={concept.id} className="transition-all duration-500">
-                {/* Background line */}
-                <path
-                  d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
-                  fill="none"
-                  stroke={isActive ? color : (isDarkMode ? '#374151' : '#d1d5db')}
-                  strokeWidth={isActive ? 3 : 1.5}
-                  strokeOpacity={isInactive ? 0.15 : (isActive ? 1 : 0.4)}
-                  className="transition-all duration-300"
-                />
-
-                {/* Animated pulse overlay for active */}
-                {isActive && (
-                  <path
-                    d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
-                    fill="none"
-                    stroke="url(#neural-pulse)"
-                    strokeWidth={4}
-                    filter="url(#glow)"
-                    className="transition-all duration-300"
-                  />
-                )}
-
-                {/* Endpoint circles */}
-                <circle
-                  cx={startX}
-                  cy={startY}
-                  r={isActive ? 6 : 4}
-                  fill={isActive ? color : (isDarkMode ? '#4b5563' : '#9ca3af')}
-                  opacity={isInactive ? 0.2 : 1}
-                  className="transition-all duration-300"
-                />
-                <circle
-                  cx={endX}
-                  cy={endY}
-                  r={isActive ? 6 : 4}
-                  fill={isActive ? color : (isDarkMode ? '#4b5563' : '#9ca3af')}
-                  opacity={isInactive ? 0.2 : 1}
-                  className="transition-all duration-300"
-                />
-              </g>
-            );
-          })}
-        </svg>
-
         {/* Three Column Layout */}
         <div className="h-full flex">
           {/* Left Column - Technical Terms */}
@@ -316,7 +223,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                       px-4 py-3 rounded-xl cursor-pointer transition-all duration-300
                       flex items-center justify-between gap-2
                       ${isActive
-                        ? 'scale-105 shadow-lg'
+                        ? 'scale-105 concept-glow-active'
                         : 'hover:scale-102'
                       }
                       ${isInactive ? 'opacity-30' : 'opacity-100'}
@@ -325,8 +232,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                     style={{
                       backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
                       border: `2px solid ${isActive ? color : 'transparent'}`,
-                      boxShadow: isActive ? `0 4px 20px ${color}30` : undefined,
-                    }}
+                      '--glow-color': color,
+                    } as React.CSSProperties}
                   >
                     <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                       {cleanLabel(concept.tech_term)}
@@ -401,7 +308,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                               </h4>
                             </div>
                             <ul className="space-y-2">
-                              {generateWhyBullets(techTerm, analogyTerm, analogyDomain).map((bullet, i) => (
+                              {generateWhyBullets(techTerm, analogyTerm, analogyDomain, importance, index).map((bullet, i) => (
                                 <li key={i} className={`text-xs flex items-start gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                                   <span style={{ color }} className="mt-1">•</span>
                                   <span>{bullet}</span>
@@ -483,7 +390,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                       px-4 py-3 rounded-xl cursor-pointer transition-all duration-300
                       flex items-center gap-2
                       ${isActive
-                        ? 'scale-105 shadow-lg'
+                        ? 'scale-105 concept-glow-active'
                         : 'hover:scale-102'
                       }
                       ${isInactive ? 'opacity-30' : 'opacity-100'}
@@ -492,8 +399,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                     style={{
                       backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
                       border: `2px solid ${isActive ? color : 'transparent'}`,
-                      boxShadow: isActive ? `0 4px 20px ${color}30` : undefined,
-                    }}
+                      '--glow-color': color,
+                    } as React.CSSProperties}
                   >
                     <ChevronRight
                       size={18}
@@ -537,11 +444,25 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           50% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
           100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
         }
+        @keyframes conceptGlow {
+          0% {
+            box-shadow: 0 0 15px var(--glow-color), 0 4px 20px color-mix(in srgb, var(--glow-color) 30%, transparent);
+          }
+          50% {
+            box-shadow: 0 0 25px var(--glow-color), 0 4px 30px color-mix(in srgb, var(--glow-color) 50%, transparent);
+          }
+          100% {
+            box-shadow: 0 0 15px var(--glow-color), 0 4px 20px color-mix(in srgb, var(--glow-color) 30%, transparent);
+          }
+        }
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out;
         }
         .scroll-highlight {
           animation: scrollPulse 0.8s ease-out;
+        }
+        .concept-glow-active {
+          animation: conceptGlow 2s ease-in-out infinite;
         }
         .hover\\:scale-102:hover {
           transform: scale(1.02);
