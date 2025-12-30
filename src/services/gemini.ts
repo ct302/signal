@@ -530,7 +530,8 @@ TARGET AUDIENCE: Graduate students, professionals, and experts who want depth, p
 DOMAIN INTEGRATION REQUIREMENT:
 Your explanation must weave ${domain || 'the chosen domain'} throughout - not as decoration, but as the STRUCTURAL BACKBONE.
 Write as if you're an expert who deeply understands BOTH the technical concept AND ${domain || 'the domain'}.
-Example voice: "Just as a quarterback reads defensive formations to find optimal passing lanes, this concept reveals how..."
+Your voice should sound like: "Just as [${domain || 'domain'} experts] intuitively [do X], this concept formalizes that same logic..."
+The ${domain || 'domain'} integration should feel NATURAL, not forced - like you're genuinely passionate about both fields.
 
 REQUIRED STRUCTURE FOR technical_explanation (400-500 words):
 
