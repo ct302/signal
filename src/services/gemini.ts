@@ -529,7 +529,7 @@ const getComplexityPrompt = (level: number): string => {
     default:
       return `Write for a general adult audience with some familiarity with the subject.
 - Balance clarity with technical accuracy
-- TARGET LENGTH: 250-300 words for EACH explanation (tech and analogy)
+- TARGET LENGTH: 280-330 words for EACH explanation (tech and analogy)
 - Include WHAT it is, WHY it matters, and a practical example`;
   }
 };
@@ -875,8 +875,8 @@ Return ONLY valid JSON, no other text.`;
  * Fetch definition for a term
  * Word count targets:
  * - ELI5: 80-100 words (simple, engaging, memorable)
- * - ELI50: 100-120 words (balanced, clear, practical)
- * - ELI100: 120-150 words (thorough, technical, precise)
+ * - ELI50: 130-150 words (balanced, clear, practical)
+ * - ELI100: 150-180 words (thorough, technical, precise)
  */
 export const fetchDefinition = async (term: string, context: string, level: number) => {
   // Word count and style guidance per level
@@ -888,12 +888,12 @@ export const fetchDefinition = async (term: string, context: string, level: numb
     },
     50: {
       name: "Standard (General Audience)",
-      words: "100-120 words",
+      words: "130-150 words",
       style: "Balance clarity with substance. Include WHAT it is, WHY it matters, and a practical example. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac."
     },
     100: {
       name: "Advanced Academic",
-      words: "120-150 words",
+      words: "150-180 words",
       style: "Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations. Cover the concept thoroughly with WHAT/WHY/HOW. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes."
     }
   };
