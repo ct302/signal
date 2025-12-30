@@ -436,18 +436,18 @@ export default function App() {
     }
 
     if (synthesis) {
-      setSynthesisSummary(cleanText(fixUnicode(synthesis.summary || "")));
-      setSynthesisCitation(cleanText(fixUnicode(synthesis.citation || "")));
+      setSynthesisSummary(stripMathSymbols(cleanText(fixUnicode(synthesis.summary || ""))));
+      setSynthesisCitation(stripMathSymbols(cleanText(fixUnicode(synthesis.citation || ""))));
     }
 
     // Parse condensed view data (WHAT/WHY + bullet points)
     const condensed = findContext(data, ["condensed"]);
     if (condensed) {
       setCondensedData({
-        what: cleanText(fixUnicode(condensed.what || "")),
-        why: cleanText(fixUnicode(condensed.why || "")),
+        what: stripMathSymbols(cleanText(fixUnicode(condensed.what || ""))),
+        why: stripMathSymbols(cleanText(fixUnicode(condensed.why || ""))),
         bullets: Array.isArray(condensed.bullets)
-          ? condensed.bullets.map((b: string) => cleanText(fixUnicode(b || "")))
+          ? condensed.bullets.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
           : []
       });
     } else {
@@ -1614,7 +1614,9 @@ export default function App() {
 
                 const activeMap = customMap || conceptMap;
                 const weight = calculateIntelligentWeight(word, activeMap, importanceMap, false);
-                const isImportant = weight >= currentThreshold;
+                // Invert threshold: low slider = high bar, high slider = low bar
+                const effectiveThreshold = 1.1 - currentThreshold;
+                const isImportant = weight >= effectiveThreshold;
 
                 let colorClassName = "";
                 if (isColorMode && isImportant) {
@@ -1725,7 +1727,9 @@ export default function App() {
     const wordId = `word-${index}`;
     if (item.isSpace) return <span key={index}>{item.text}</span>;
 
-    const isImportant = item.weight >= threshold;
+    // Invert threshold: low slider = high bar (show less), high slider = low bar (show all)
+    const effectiveThreshold = 1.1 - threshold;
+    const isImportant = item.weight >= effectiveThreshold;
     // Only show clickable cursor in locked modes (not morph mode)
     const isClickableMode = viewMode !== 'morph';
     let style: React.CSSProperties = {
@@ -1763,7 +1767,8 @@ export default function App() {
         style.padding = '0 2px';
         style.borderRadius = '4px';
         if (!isIsomorphicMode) {
-          const intensity = Math.min((item.weight - threshold) / (1 - threshold), 1);
+          // Use pure weight-based intensity (higher weight = more highlight)
+          const intensity = Math.min(item.weight, 1);
           style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
         }
       } else {
