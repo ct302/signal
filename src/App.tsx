@@ -1058,13 +1058,29 @@ export default function App() {
           setIsNarrativeMode(false);
           break;
         case 's':
-          // Story mode toggle
+          // Story mode toggle (mutually exclusive with Bullets and Essence)
           if (!hasStarted) return;
+          if (!isNarrativeMode) {
+            // Turning on Story - disable Bullets and Essence
+            setIsBulletMode(false);
+            if (isFirstPrinciplesMode) {
+              setShowCondensedView(false);
+              setIsFirstPrinciplesMode(false);
+            }
+          }
           setIsNarrativeMode(!isNarrativeMode);
           break;
         case 'b':
-          // Bullet point mode toggle (only works in Tech Lock mode)
+          // Bullet point mode toggle (mutually exclusive with Story and Essence)
           if (!hasStarted || viewMode !== 'tech') return;
+          if (!isBulletMode) {
+            // Turning on Bullets - disable Story and Essence
+            setIsNarrativeMode(false);
+            if (isFirstPrinciplesMode) {
+              setShowCondensedView(false);
+              setIsFirstPrinciplesMode(false);
+            }
+          }
           setIsBulletMode(!isBulletMode);
           break;
         case 'q':
@@ -1392,7 +1408,9 @@ export default function App() {
         setTimeout(() => setIsCondensedMorphing(false), 150);
       }, 200);
     } else {
-      // Transition INTO first principles
+      // Transition INTO first principles (mutually exclusive with Story and Bullets)
+      setIsNarrativeMode(false);
+      setIsBulletMode(false);
       setIsCondensedMorphing(true);
       condensedMorphTimerRef.current = setTimeout(() => {
         setShowCondensedView(true);
@@ -2105,7 +2123,17 @@ export default function App() {
                     )}
                     {hasStarted && (
                       <button
-                        onClick={() => setIsNarrativeMode(!isNarrativeMode)}
+                        onClick={() => {
+                          if (!isNarrativeMode) {
+                            // Turning on Story - disable Bullets and Essence
+                            setIsBulletMode(false);
+                            if (isFirstPrinciplesMode) {
+                              setShowCondensedView(false);
+                              setIsFirstPrinciplesMode(false);
+                            }
+                          }
+                          setIsNarrativeMode(!isNarrativeMode);
+                        }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isNarrativeMode
                             ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
@@ -2119,7 +2147,17 @@ export default function App() {
                     {/* Bullet Point Mode - Only in Tech Lock */}
                     {hasStarted && viewMode === 'tech' && (
                       <button
-                        onClick={() => setIsBulletMode(!isBulletMode)}
+                        onClick={() => {
+                          if (!isBulletMode) {
+                            // Turning on Bullets - disable Story and Essence
+                            setIsNarrativeMode(false);
+                            if (isFirstPrinciplesMode) {
+                              setShowCondensedView(false);
+                              setIsFirstPrinciplesMode(false);
+                            }
+                          }
+                          setIsBulletMode(!isBulletMode);
+                        }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                           isBulletMode
                             ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
