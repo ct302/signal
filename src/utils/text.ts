@@ -645,6 +645,11 @@ export const sanitizeLatex = (text: string): string => {
   // Normal prose rarely has " / " - this is almost always a KaTeX artifact
   result = result.replace(/\s+\/\s+(?=[a-z])/gi, ' not ');
 
+  // Fix \in used as the word "in" outside of math context
+  // \in renders as ∈ (element of) symbol, but in prose should be the word "in"
+  // Only convert when followed by a space and lowercase word (not valid math like \int)
+  result = result.replace(/\\in(?=\s+[a-z])/gi, 'in');
+
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
   // We need to handle them appearing OUTSIDE of $ delimiters

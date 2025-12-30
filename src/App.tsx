@@ -30,7 +30,10 @@ import {
   Copy,
   Check,
   AlertCircle,
-  Dices
+  Dices,
+  History,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 // Types
@@ -288,6 +291,9 @@ export default function App() {
   const [tutorResponse, setTutorResponse] = useState<TutorResponse | null>(null);
   const [isTutorLoading, setIsTutorLoading] = useState(false);
   const [tutorHistory, setTutorHistory] = useState<TutorHistoryEntry[]>([]);
+  const [showTutorHistory, setShowTutorHistory] = useState(false);
+  const [tutorThreshold, setTutorThreshold] = useState(0.5);
+  const [isTutorColorMode, setIsTutorColorMode] = useState(false);
 
   // Quiz State
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -1486,6 +1492,9 @@ export default function App() {
     setTutorResponse(null);
     setIsTutorLoading(false);
     setTutorHistory([]);
+    setShowTutorHistory(false);
+    setTutorThreshold(0.5);
+    setIsTutorColorMode(false);
 
     // Quiz State
     setShowQuizModal(false);
@@ -1537,6 +1546,52 @@ export default function App() {
     const processed = wrapBareLatex(sanitized);
     const parts = processed.split(LATEX_REGEX);
 
+    // Helper to render markdown bold/italic within text
+    const renderMarkdown = (str: string, key: string): React.ReactNode => {
+      // Split on **bold** and *italic* patterns
+      const markdownParts: React.ReactNode[] = [];
+      let remaining = str;
+      let partIndex = 0;
+
+      while (remaining.length > 0) {
+        // Look for **bold** first
+        const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
+        // Look for *italic*
+        const italicMatch = remaining.match(/(?<!\*)\*([^*]+)\*(?!\*)/);
+
+        // Find which comes first
+        const boldIdx = boldMatch ? remaining.indexOf(boldMatch[0]) : -1;
+        const italicIdx = italicMatch ? remaining.indexOf(italicMatch[0]) : -1;
+
+        if (boldIdx === -1 && italicIdx === -1) {
+          // No more markdown, add remaining text
+          if (remaining) markdownParts.push(<span key={`${key}-${partIndex++}`}>{remaining}</span>);
+          break;
+        }
+
+        // Process whichever comes first
+        if (boldIdx !== -1 && (italicIdx === -1 || boldIdx <= italicIdx)) {
+          // Add text before bold
+          if (boldIdx > 0) {
+            markdownParts.push(<span key={`${key}-${partIndex++}`}>{remaining.slice(0, boldIdx)}</span>);
+          }
+          // Add bold text
+          markdownParts.push(<strong key={`${key}-${partIndex++}`} className="font-semibold">{boldMatch![1]}</strong>);
+          remaining = remaining.slice(boldIdx + boldMatch![0].length);
+        } else {
+          // Add text before italic
+          if (italicIdx > 0) {
+            markdownParts.push(<span key={`${key}-${partIndex++}`}>{remaining.slice(0, italicIdx)}</span>);
+          }
+          // Add italic text
+          markdownParts.push(<em key={`${key}-${partIndex++}`}>{italicMatch![1]}</em>);
+          remaining = remaining.slice(italicIdx + italicMatch![0].length);
+        }
+      }
+
+      return markdownParts.length > 0 ? markdownParts : str;
+    };
+
     return parts.map((part, i) => {
       if (!part) return null;
       const isLatex = part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1);
@@ -1556,7 +1611,7 @@ export default function App() {
         }
         return <span key={i}>{latexContent}</span>;
       }
-      return <span key={i} className={colorClass}>{part}</span>;
+      return <span key={i} className={colorClass}>{renderMarkdown(part, `md-${i}`)}</span>;
     });
   };
 
@@ -1883,7 +1938,9 @@ export default function App() {
               allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex });
               return;
             }
-            const weight = calculateIntelligentWeight(word, conceptMap, importanceMap, isAnalogyVisualMode);
+            // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
+            const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
+            const weight = calculateIntelligentWeight(word, conceptMap, importanceMap, useAnalogyTerms);
             let cIdx = getConceptId(word, conceptMap);
             const mappedId = getConceptId(word, conceptMap);
             if (mappedId !== -1) {
@@ -2568,10 +2625,69 @@ export default function App() {
               {/* Follow-up Section */}
               {showFollowUp && (
                 <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
-                    <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
+                  {/* Header with minimize and history buttons */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
+                      <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {/* History toggle button - only show if there's history */}
+                      {tutorHistory.length > 0 && (
+                        <button
+                          onClick={() => setShowTutorHistory(!showTutorHistory)}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            showTutorHistory
+                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-600')
+                              : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100')
+                          }`}
+                          title="View conversation history"
+                        >
+                          <History size={14} />
+                        </button>
+                      )}
+                      {/* Minimize button */}
+                      <button
+                        onClick={() => setShowFollowUp(false)}
+                        className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'}`}
+                        title="Minimize"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* History Panel - shows last 5 Q&A pairs */}
+                  {showTutorHistory && tutorHistory.length > 0 && (
+                    <div className={`mb-3 p-3 rounded-lg max-h-48 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                      <div className="space-y-2">
+                        {(() => {
+                          // Group history into Q&A pairs (last 5 pairs = 10 entries)
+                          const pairs: { question: string; answer: string }[] = [];
+                          for (let i = 0; i < tutorHistory.length; i += 2) {
+                            if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
+                              pairs.push({
+                                question: tutorHistory[i].text,
+                                answer: tutorHistory[i + 1].text
+                              });
+                            }
+                          }
+                          return pairs.slice(-5).map((pair, idx) => (
+                            <div key={idx} className={`text-xs p-2 rounded ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`}>
+                              <p className={`font-medium mb-1 ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                Q: {pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question}
+                              </p>
+                              <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}>
+                                A: {pair.answer.length > 120 ? pair.answer.slice(0, 120) + '...' : pair.answer}
+                              </p>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Input area */}
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -2589,10 +2705,26 @@ export default function App() {
                       {isTutorLoading ? <Loader2 className="animate-spin" size={16} /> : 'Ask'}
                     </button>
                   </div>
+
+                  {/* Current response with attention controls */}
                   {tutorResponse && (
                     <div className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
-                      <p className={`font-medium mb-1 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
-                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>{renderRichText(tutorResponse.answer)}</div>
+                      <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
+
+                      {/* Answer with attention rendering */}
+                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
+                        {renderAttentiveText(
+                          tutorResponse.answer,
+                          tutorThreshold,
+                          setTutorThreshold,
+                          isTutorColorMode,
+                          setIsTutorColorMode,
+                          conceptMap,
+                          isDarkMode ? 'text-neutral-200' : 'text-neutral-700',
+                          1.0,
+                          undefined
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
