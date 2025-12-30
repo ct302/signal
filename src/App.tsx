@@ -2320,7 +2320,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsIsomorphicMode(!isIsomorphicMode)}
-                      className={`p-2 rounded-lg transition-colors ${
+                      className={`p-2 rounded-lg transition-colors mr-1 ${
                         isIsomorphicMode
                           ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-600')
                           : (isDarkMode ? 'text-neutral-500 hover:bg-neutral-700' : 'text-neutral-400 hover:bg-neutral-100')

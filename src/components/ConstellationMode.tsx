@@ -172,7 +172,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               {topicName}
             </span>
           </div>
-          <span className="text-neutral-500 text-sm ml-4">
+          <span className="text-neutral-300 text-sm ml-4">
             {conceptMap.length} concept mappings
           </span>
         </div>
@@ -268,7 +268,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       className={`relative z-10 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 ${
                         isActive
                           ? 'bg-neutral-800 text-white'
-                          : 'bg-neutral-900 text-neutral-500'
+                          : 'bg-neutral-800/80 text-amber-200/80'
                       }`}
                       style={{
                         borderColor: isActive ? data.color : 'transparent',
@@ -410,7 +410,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </p>
               </div>
 
-              <div className="text-center text-neutral-500 text-xs pt-4">
+              <div className="text-center text-neutral-300 text-xs pt-4">
                 Click other concepts to explore more mappings
               </div>
             </div>
@@ -421,10 +421,10 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       {/* Footer */}
       <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900/80">
         <div className="flex items-center justify-between">
-          <span className="text-neutral-400 text-sm">
+          <span className="text-amber-200/70 text-sm">
             Click any mapping to explore the connection in depth
           </span>
-          <span className="text-neutral-500 text-xs">
+          <span className="text-neutral-300 text-xs">
             Press Esc to close
           </span>
         </div>

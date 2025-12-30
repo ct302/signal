@@ -1,6 +1,31 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Columns, Zap, ChevronRight } from 'lucide-react';
+import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
+
+// Generate "Why This Works" bullet points
+const generateWhyBullets = (techTerm: string, analogyTerm: string, domain: string): string[] => {
+  return [
+    `Both "${analogyTerm}" and "${techTerm}" represent the same underlying pattern`,
+    `When you understand ${analogyTerm} in ${domain}, you've already grasped ${techTerm}`,
+    `The mental model transfers directly—same concept, different vocabulary`,
+  ];
+};
+
+// Generate bridge narrative
+const generateBridgeNarrative = (
+  techTerm: string,
+  analogyTerm: string,
+  domain: string,
+  index: number
+): string => {
+  const narratives = [
+    `Just as ${analogyTerm} shapes how experts think in ${domain}, ${techTerm} serves the same foundational role in technical work. The insight you've built from experience transfers directly—you're not learning something new, you're translating something you already know.`,
+    `In ${domain}, ${analogyTerm} is the invisible framework behind every great decision. ${techTerm} works the same way mathematically. Your intuition about ${analogyTerm} is the same intuition that powers ${techTerm}.`,
+    `Think of how ${analogyTerm} connects everything in ${domain}. That connective tissue? It's ${techTerm} in disguise. Master one, and you've mastered the other.`,
+    `Every time you've used ${analogyTerm} instinctively in ${domain}, you've been applying ${techTerm} without knowing it. The formal concept just gives a name to what you already understand.`,
+  ];
+  return narratives[index % narratives.length];
+};
 
 interface IsomorphicDualPaneProps {
   conceptMap: ConceptMapItem[];
@@ -266,7 +291,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         {/* Three Column Layout */}
         <div className="h-full flex">
           {/* Left Column - Technical Terms */}
-          <div className={`w-[35%] p-6 overflow-y-auto border-r ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-blue-50/30'}`}>
+          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-r transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-blue-50/30'}`}>
             <div className="flex items-center gap-2 mb-6">
               <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-blue-900/70 text-blue-200' : 'bg-blue-200 text-blue-800'}`}>
                 ⚡ Technical
@@ -320,54 +345,112 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             </div>
           </div>
 
-          {/* Center Column - Connection Indicator */}
-          <div className={`w-[30%] flex flex-col items-center justify-center ${isDarkMode ? 'bg-neutral-900/30' : 'bg-neutral-50'}`}>
+          {/* Center Column - Connection Indicator (expands when concept selected) */}
+          <div className={`${selectedConcept !== null ? 'w-[40%]' : 'w-[30%]'} flex flex-col items-center transition-all duration-500 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/30' : 'bg-neutral-50'}`}>
             {activeConcept !== null ? (
-              <div className="text-center px-4">
+              <div className={`${selectedConcept !== null ? 'p-6 w-full' : 'text-center px-4 py-8'}`}>
                 {(() => {
                   const concept = conceptMap.find(c => c.id === activeConcept);
                   if (!concept) return null;
                   const index = conceptMap.findIndex(c => c.id === activeConcept);
                   const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
                   const importance = getConceptImportance(concept);
+                  const techTerm = cleanLabel(concept.tech_term);
+                  const analogyTerm = cleanLabel(concept.analogy_term);
+                  const isExpanded = selectedConcept === concept.id;
 
                   return (
                     <div className="animate-fadeIn">
                       {/* Pulsing connection indicator */}
-                      <div
-                        className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center animate-pulse"
-                        style={{ backgroundColor: color + '30', boxShadow: `0 0 30px ${color}50` }}
-                      >
-                        <Zap size={28} style={{ color }} />
+                      <div className="text-center">
+                        <div
+                          className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center animate-pulse"
+                          style={{ backgroundColor: color + '30', boxShadow: `0 0 30px ${color}50` }}
+                        >
+                          <Zap size={28} style={{ color }} />
+                        </div>
+
+                        <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                          maps to
+                        </p>
+
+                        {/* Importance bar */}
+                        <div className="mt-4 px-4 max-w-[200px] mx-auto">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Importance</span>
+                            <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
+                          </div>
+                          <div className={`h-2 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${importance * 100}%`, backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
                       </div>
 
-                      <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                        maps to
-                      </p>
+                      {/* Expanded Content - Only when concept is clicked/selected */}
+                      {isExpanded && (
+                        <div className="mt-8 space-y-6 animate-fadeIn">
+                          {/* Why This Works */}
+                          <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <Lightbulb size={16} style={{ color }} />
+                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                Why This Works
+                              </h4>
+                            </div>
+                            <ul className="space-y-2">
+                              {generateWhyBullets(techTerm, analogyTerm, analogyDomain).map((bullet, i) => (
+                                <li key={i} className={`text-xs flex items-start gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                                  <span style={{ color }} className="mt-1">•</span>
+                                  <span>{bullet}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
 
-                      {/* Importance bar */}
-                      <div className="mt-4 px-4">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>Importance</span>
-                          <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
+                          {/* The Bridge Story */}
+                          <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700' : 'bg-gradient-to-br from-amber-50 to-blue-50 border border-neutral-200'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <BookOpen size={16} style={{ color }} />
+                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                The Bridge
+                              </h4>
+                            </div>
+                            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                              {generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
+                            </p>
+                          </div>
+
+                          {/* Quick Insight */}
+                          <div className="text-center">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: color + '20' }}>
+                              <Sparkles size={12} style={{ color }} />
+                              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                                {analogyTerm} = {techTerm}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className={`h-2 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${importance * 100}%`, backgroundColor: color }}
-                          />
-                        </div>
-                      </div>
+                      )}
+
+                      {/* Click hint when hovering but not selected */}
+                      {!isExpanded && (
+                        <p className={`text-xs mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          Click to explore why this mapping works
+                        </p>
+                      )}
                     </div>
                   );
                 })()}
               </div>
             ) : (
-              <div className="text-center px-4">
+              <div className="text-center px-4 py-8">
                 <div className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center ${isDarkMode ? 'bg-neutral-800' : 'bg-neutral-200'}`}>
-                  <Columns size={20} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                  <Columns size={20} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
                 </div>
-                <p className={`text-sm ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                   Hover or click a concept<br/>to see the connection
                 </p>
               </div>
@@ -375,7 +458,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           </div>
 
           {/* Right Column - Analogy Terms */}
-          <div className={`w-[35%] p-6 overflow-y-auto border-l ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-amber-50/30'}`}>
+          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-l transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-amber-50/30'}`}>
             <div className="flex items-center gap-2 mb-6">
               <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-amber-900/70 text-amber-200' : 'bg-amber-200 text-amber-800'}`}>
                 🎯 {analogyDomain}
@@ -434,10 +517,10 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
       {/* Footer */}
       <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900">
         <div className="flex items-center justify-between">
-          <span className="text-neutral-500 text-xs">
+          <span className="text-blue-200/70 text-xs">
             Click concepts to select • Hover to preview connections
           </span>
-          <span className="text-neutral-600 text-xs">
+          <span className="text-neutral-300 text-xs">
             Press P or Esc to close
           </span>
         </div>

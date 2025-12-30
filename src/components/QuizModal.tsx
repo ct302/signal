@@ -110,6 +110,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
         height: size.height === 'auto' ? 'auto' : size.height,
         minWidth: '320px',
         maxWidth: '90vw',
+        maxHeight: '85vh',
         minHeight: '200px'
       }}
     >
@@ -174,7 +175,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
         </div>
 
         {/* Question */}
-        <div className="text-sm font-medium mb-4 text-white">
+        <div className="text-sm font-medium mb-4 text-white break-words overflow-wrap-anywhere">
           {renderRichText(quizData.question, "text-white")}
         </div>
 
@@ -185,7 +186,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
               key={idx}
               onClick={() => !quizFeedback && !isQuizLoading && onOptionClick(idx)}
               disabled={!!quizFeedback || isQuizLoading}
-              className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${
+              className={`w-full text-left p-3 rounded-lg border transition-all text-sm break-words overflow-wrap-anywhere ${
                 quizFeedback
                   ? idx === quizData.correctIndex
                     ? 'bg-green-900/50 border-green-500 text-green-100'
