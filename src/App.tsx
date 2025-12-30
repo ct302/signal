@@ -512,6 +512,7 @@ export default function App() {
   const fetchAnalogy = async (confirmedTopic: string, complexity: number = 50) => {
     setIsLoading(true);
     setApiError(null); // Clear any previous error
+    setLastSubmittedTopic(confirmedTopic); // Set before API call so retry works on failure
     setShowContext(false); // Keep collapsed until user clicks to expand
     setShowFollowUp(false);
     setTutorResponse(null);
