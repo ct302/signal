@@ -624,13 +624,26 @@ export const sanitizeLatex = (text: string): string => {
   // 0. Fix \not patterns BEFORE any other processing
   // \not renders as "/" in KaTeX when malformed, convert to proper form
   // Handle both inside and outside math mode
+
+  // First, handle proper mathematical negations - convert to forms without \not
   result = result.replace(/\\not\s*\\?empty/gi, '\\neq \\emptyset');
   result = result.replace(/\\not\s*\\?in\b/gi, '\\notin');
   result = result.replace(/\\not\s*=/g, '\\neq');
-  result = result.replace(/\\not\s*\\?subset/gi, '\\not\\subset');
-  result = result.replace(/\\not\s*\\?equiv/gi, '\\not\\equiv');
-  // Fix standalone \not that might render as /
-  result = result.replace(/\\not\s+(?=[a-zA-Z])/g, '\\lnot\\,');
+  result = result.replace(/\\not\s*\\?subset/gi, '\\nsubseteq');
+  result = result.replace(/\\not\s*\\?equiv/gi, '\\not\\equiv'); // This is valid LaTeX
+
+  // NOW: Aggressively convert ALL remaining \not patterns to plain text "not "
+  // This catches cases like "\not cause", "\not the", "\not a", etc.
+  // These are NOT valid LaTeX negations and would render as "/" in KaTeX
+  // Use a regex that won't match inside valid LaTeX like \not\equiv
+  result = result.replace(/\\not(?!\\)(?:\s+)?/g, 'not ');
+
+  // Also catch \lnot used outside of proper math context (renders as / or ¬)
+  result = result.replace(/\\lnot\s*/g, 'not ');
+
+  // Catch any stray "/" surrounded by spaces (artifact from malformed \not rendering)
+  // Normal prose rarely has " / " - this is almost always a KaTeX artifact
+  result = result.replace(/\s+\/\s+(?=[a-z])/gi, ' not ');
 
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
