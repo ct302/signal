@@ -2736,7 +2736,7 @@ export default function App() {
                                   Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
                                 </p>
                                 <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
-                                  A: {isSelected ? pair.answer : (pair.answer.length > 120 ? pair.answer.slice(0, 120) + '...' : pair.answer)}
+                                  A: {isSelected ? stripMathSymbols(pair.answer) : (pair.answer.length > 120 ? stripMathSymbols(pair.answer.slice(0, 120)) + '...' : stripMathSymbols(pair.answer))}
                                 </p>
                                 {isSelected && (
                                   <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
@@ -2780,10 +2780,10 @@ export default function App() {
                     <div className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
                       <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
 
-                      {/* Answer with attention rendering */}
+                      {/* Answer with attention rendering - strip math symbols for clean prose */}
                       <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
                         {renderAttentiveText(
-                          tutorResponse.answer,
+                          stripMathSymbols(tutorResponse.answer),
                           tutorThreshold,
                           setTutorThreshold,
                           isTutorColorMode,
