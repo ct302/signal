@@ -188,212 +188,6 @@ const getSymbolDefinition = (term: string): { symbol: string; technical: string;
   return null;
 };
 
-// Tech Morph Tooltip - Shows definitions on hover in Tech Locked mode
-// Features: Draggable, LaTeX rendering, concept mapping
-const TechMorphTooltip: React.FC<{
-  term: string;
-  position: { x: number; y: number };
-  conceptMap: ConceptMapItem[];
-  domain: string;
-  isDarkMode: boolean;
-  onClose: () => void;
-  renderRichText: (text: string, colorClass?: string) => React.ReactNode;
-}> = ({ term, position, conceptMap, domain, isDarkMode, onClose, renderRichText }) => {
-  // Drag state
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [tooltipPos, setTooltipPos] = useState({
-    x: Math.min(position.x, window.innerWidth - 320),
-    y: position.y + 20
-  });
-
-  // Handle drag start
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - tooltipPos.x,
-      y: e.clientY - tooltipPos.y
-    });
-  };
-
-  // Handle drag move
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setTooltipPos({
-        x: Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 320)),
-        y: Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - 200))
-      });
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragOffset]);
-
-  // Find matching concept from map - improved matching
-  const cleanTerm = term.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
-  const matchedConcept = conceptMap.find(c => {
-    const techLower = c.tech_term.toLowerCase();
-    const analogyLower = c.analogy_term.toLowerCase();
-    return (
-      techLower === cleanTerm ||
-      techLower.includes(cleanTerm) ||
-      cleanTerm.includes(techLower) ||
-      analogyLower === cleanTerm ||
-      analogyLower.includes(cleanTerm)
-    );
-  });
-
-  // Check if this is a Greek/math symbol for hybrid definition
-  const symbolDef = getSymbolDefinition(term);
-
-  // Display term - use matched concept's tech_term if available, cleaned otherwise
-  const displayTerm = matchedConcept?.tech_term || term.replace(/[\$\\]/g, '').trim();
-
-  const bgColor = isDarkMode ? 'bg-neutral-800' : 'bg-white';
-  const borderColor = isDarkMode ? 'border-neutral-700' : 'border-neutral-200';
-  const textColor = isDarkMode ? 'text-neutral-200' : 'text-neutral-800';
-  const mutedColor = isDarkMode ? 'text-neutral-400' : 'text-neutral-500';
-
-  return (
-    <div
-      className={`fixed z-[200] ${bgColor} ${borderColor} border rounded-xl shadow-xl p-4 max-w-xs select-none`}
-      style={{
-        left: tooltipPos.x,
-        top: tooltipPos.y,
-      }}
-    >
-      {/* Draggable Header */}
-      <div
-        className={`flex items-center gap-2 mb-3 pb-2 border-b ${borderColor} cursor-move`}
-        onMouseDown={handleMouseDown}
-      >
-        <span className="text-lg">🔬</span>
-        <span className={`font-bold ${textColor} flex-1`}>
-          {renderRichText(displayTerm, textColor)}
-        </span>
-        <button
-          onClick={onClose}
-          className={`${mutedColor} hover:text-red-400 transition-colors p-1`}
-          title="Close (or drag header to move)"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* Content: Narrative > Symbol > Fallback */}
-      {matchedConcept?.narrative_mapping ? (
-        <div className="space-y-3">
-          {/* Narrative Story */}
-          <div>
-            <div className={`text-xs uppercase font-bold ${mutedColor} mb-2`}>
-              📖 The Story
-            </div>
-            <p className={`text-sm ${textColor} leading-relaxed`}>
-              {matchedConcept.narrative_mapping}
-            </p>
-          </div>
-
-          {/* Symbol Technical Meaning - Add if it's a symbol */}
-          {symbolDef && (
-            <div className={`pt-2 border-t ${borderColor}`}>
-              <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-                🔣 Symbol Meaning
-              </div>
-              <p className={`text-sm ${textColor}`}>{symbolDef.technical}</p>
-            </div>
-          )}
-
-          {/* Compact Mapping */}
-          <div className={`pt-2 border-t ${borderColor}`}>
-            <div className="flex items-center justify-center gap-2 text-sm">
-              <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
-              <span className={mutedColor}>↔</span>
-              <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
-            </div>
-          </div>
-        </div>
-      ) : symbolDef ? (
-        /* Symbol-only definition - hybrid technical + domain hint */
-        <div className="space-y-3">
-          {/* Symbol Technical Meaning */}
-          <div>
-            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-              📐 Technical
-            </div>
-            <p className={`text-sm ${textColor}`}>{symbolDef.technical}</p>
-          </div>
-
-          {/* Domain Hint */}
-          <div>
-            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-              🎯 Think of it as
-            </div>
-            <p className={`text-sm text-emerald-500`}>"{symbolDef.domainHint}"</p>
-          </div>
-
-          {/* Visual Symbol */}
-          <div className={`pt-2 border-t ${borderColor} text-center`}>
-            <span className={`text-2xl ${textColor}`}>{symbolDef.symbol}</span>
-          </div>
-        </div>
-      ) : (
-        /* Fallback for older content without narrative_mapping */
-        <div className="space-y-3">
-          {/* Technical Definition */}
-          <div>
-            <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-              📐 Technical
-            </div>
-            <p className={`text-sm ${textColor}`}>
-              {matchedConcept
-                ? <span>Core concept: {renderRichText(matchedConcept.tech_term, textColor)}</span>
-                : `Technical term in this context`
-              }
-            </p>
-          </div>
-
-          {/* Analogy Definition */}
-          {matchedConcept && (
-            <div>
-              <div className={`text-xs uppercase font-bold ${mutedColor} mb-1`}>
-                🎯 {domain} Equivalent
-              </div>
-              <p className={`text-sm ${textColor}`}>
-                Maps to "{renderRichText(matchedConcept.analogy_term, 'text-emerald-500 font-medium')}" in {domain}
-              </p>
-            </div>
-          )}
-
-          {/* Mapping Arrow */}
-          {matchedConcept && (
-            <div className={`pt-2 border-t ${borderColor} flex items-center justify-center gap-2 text-sm`}>
-              <span className="text-purple-500 font-medium">{renderRichText(matchedConcept.tech_term, 'text-purple-500')}</span>
-              <span className={mutedColor}>↔</span>
-              <span className="text-emerald-500 font-medium">{matchedConcept.analogy_term}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Drag hint */}
-      <div className={`mt-2 text-[10px] ${mutedColor} text-center`}>
-        Drag header to move
-      </div>
-    </div>
-  );
-};
-
 export default function App() {
   // Custom Hooks
   const isMobile = useMobile();
@@ -487,11 +281,6 @@ export default function App() {
   const [miniDefThreshold, setMiniDefThreshold] = useState(0.3);
   const [isMiniDefColorMode, setIsMiniDefColorMode] = useState(false);
 
-  // Tech Morph Tooltip State (hover definitions in Tech Locked mode)
-  const [techMorphTerm, setTechMorphTerm] = useState<{ term: string; position: { x: number; y: number }; conceptIndex?: number } | null>(null);
-  // Track which concept is being hovered for multi-word term underlining
-  const [hoveredConceptIndex, setHoveredConceptIndex] = useState<number | null>(null);
-
   // Tutor State
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [followUpQuery, setFollowUpQuery] = useState("");
@@ -559,7 +348,6 @@ export default function App() {
   const historyPanelRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const techMorphHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -2003,71 +1791,6 @@ export default function App() {
       forceRender = true;
     }
 
-    // Tech Morph hover handler - shows tooltip with definitions in Tech Locked mode
-    // Only trigger for words that are actual technical terms (have conceptIndex or match conceptMap)
-    // Uses debounce to prevent jittery behavior
-    const handleTechMorphHover = (e: React.MouseEvent) => {
-      // Clear any pending hover timer
-      if (techMorphHoverTimerRef.current) {
-        clearTimeout(techMorphHoverTimerRef.current);
-      }
-
-      if (viewMode === 'tech' && isImportant) {
-        // Only show tooltip for actual technical terms - those with a concept mapping
-        const hasConceptMapping = item.conceptIndex !== undefined && item.conceptIndex >= 0;
-
-        // Also check if term matches any concept in the map (fallback for unmapped but technical words)
-        const cleanText = item.text.toLowerCase().replace(/[.,!?;:'"()[\]{}\\$^_]/g, '').trim();
-        const matchesConceptMap = conceptMap.some(c =>
-          c.tech_term.toLowerCase().includes(cleanText) ||
-          cleanText.includes(c.tech_term.toLowerCase()) ||
-          c.analogy_term.toLowerCase().includes(cleanText)
-        );
-
-        // Check if this is a Greek/math symbol (also hoverable)
-        const isSymbol = item.isLatex || getSymbolDefinition(item.text) !== null;
-
-        // Skip common non-technical words
-        const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'we', 'us', 'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'which', 'who', 'whom', 'where', 'when', 'why', 'how', 'what', 'if', 'then', 'else', 'so', 'not', 'no', 'yes', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'same', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'where', 'about', 'into', 'over', 'after', 'before', 'between', 'under', 'again', 'further', 'once'];
-        const isCommonWord = commonWords.includes(cleanText);
-
-        if ((hasConceptMapping || matchesConceptMap || isSymbol) && !isCommonWord) {
-          // Get element position for stable tooltip placement
-          const target = e.currentTarget as HTMLElement;
-          const rect = target.getBoundingClientRect();
-
-          // Set hovered concept immediately for underline styling (no debounce)
-          if (item.conceptIndex !== undefined && item.conceptIndex >= 0) {
-            setHoveredConceptIndex(item.conceptIndex);
-          }
-
-          // Debounce: wait 150ms before showing tooltip to prevent jitter
-          techMorphHoverTimerRef.current = setTimeout(() => {
-            setTechMorphTerm({
-              term: item.text,
-              // Position below the word, not at mouse cursor (more stable)
-              position: { x: rect.left, y: rect.bottom },
-              conceptIndex: item.conceptIndex
-            });
-          }, 150);
-        }
-      }
-    };
-
-    const handleTechMorphLeave = () => {
-      // Clear pending hover timer
-      if (techMorphHoverTimerRef.current) {
-        clearTimeout(techMorphHoverTimerRef.current);
-        techMorphHoverTimerRef.current = null;
-      }
-      // Clear hovered concept for underline styling
-      setHoveredConceptIndex(null);
-      // Delay closing to allow moving to tooltip
-      setTimeout(() => {
-        setTechMorphTerm(null);
-      }, 200);
-    };
-
     if (item.isLatex || forceRender) {
       let latexContent = contentToRender.replace(/\\\\/g, "\\");
       let rawContent = latexContent.startsWith('$$')
@@ -2076,14 +1799,8 @@ export default function App() {
           ? latexContent.slice(1, -1)
           : latexContent;
 
-      // Add hover class for important clickable words (only in locked modes)
-      // Also apply underline when any word in the same concept group is hovered (multi-word term support)
-      const isPartOfHoveredConcept = hoveredConceptIndex !== null && item.conceptIndex === hoveredConceptIndex;
-      const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
-      const activeUnderline = isPartOfHoveredConcept ? 'underline decoration-dotted' : '';
-
       if (!isKatexLoaded || !window.katex) {
-        return <span id={wordId} key={index} className={`${classes} ${hoverClass} ${activeUnderline}`} title="Math loading...">{rawContent}</span>;
+        return <span id={wordId} key={index} className={classes} title="Math loading...">{rawContent}</span>;
       }
 
       try {
@@ -2094,31 +1811,21 @@ export default function App() {
             id={wordId}
             key={index}
             style={mathStyle}
-            className={`${classes} ${hoverClass} ${activeUnderline} not-italic normal-case`}
+            className={`${classes} not-italic normal-case`}
             dangerouslySetInnerHTML={{ __html: html }}
-            onMouseEnter={handleTechMorphHover}
-            onMouseLeave={handleTechMorphLeave}
           />
         );
       } catch (e) {
-        return <span id={wordId} key={index} style={style} className={`${classes} ${hoverClass} ${activeUnderline}`}>{item.text}</span>;
+        return <span id={wordId} key={index} style={style} className={classes}>{item.text}</span>;
       }
     }
-
-    // Add hover class for important clickable words (only in locked modes)
-    // Also apply underline when any word in the same concept group is hovered (multi-word term support)
-    const isPartOfHoveredConcept = hoveredConceptIndex !== null && item.conceptIndex === hoveredConceptIndex;
-    const hoverClass = isImportant && isClickableMode ? 'hover:underline hover:decoration-dotted hover:decoration-current cursor-help' : '';
-    const activeUnderline = isPartOfHoveredConcept ? 'underline decoration-dotted' : '';
 
     return (
       <span
         id={wordId}
         key={index}
         style={style}
-        className={`${classes} ${hoverClass} ${activeUnderline}`}
-        onMouseEnter={handleTechMorphHover}
-        onMouseLeave={handleTechMorphLeave}
+        className={classes}
       >
         {item.text}
       </span>
@@ -3031,19 +2738,6 @@ export default function App() {
           onEliClick={(level) => handleDefEliClick(level, true)}
           onCopy={copyToClipboard}
           renderAttentiveText={renderAttentiveText}
-          renderRichText={renderRichText}
-        />
-      )}
-
-      {/* Tech Morph Tooltip - Hover definitions in Tech Locked mode */}
-      {techMorphTerm && viewMode === 'tech' && (
-        <TechMorphTooltip
-          term={techMorphTerm.term}
-          position={techMorphTerm.position}
-          conceptMap={conceptMap}
-          domain={analogyDomain}
-          isDarkMode={isDarkMode}
-          onClose={() => setTechMorphTerm(null)}
           renderRichText={renderRichText}
         />
       )}
