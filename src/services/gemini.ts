@@ -511,8 +511,9 @@ export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[
 /**
  * Get complexity level description for prompt
  * Each level has explicit word count targets to ensure substantive explanations
+ * ELI100 gets special treatment with domain integration requirements
  */
-const getComplexityPrompt = (level: number): string => {
+const getComplexityPrompt = (level: number, domain?: string): string => {
   switch (level) {
     case 5:
       return `IMPORTANT: Write for a 5-year-old child.
@@ -522,11 +523,39 @@ const getComplexityPrompt = (level: number): string => {
 - TARGET LENGTH: 200-250 words for EACH explanation (tech and analogy)
 - Focus on WHY this matters and make it stick!`;
     case 100:
-      return `Write for an advanced academic audience.
-- Include technical depth, mathematical notation where appropriate
-- Use precise terminology and nuanced explanations
-- TARGET LENGTH: 300-350 words for EACH explanation (tech and analogy)
-- Cover WHAT, WHY, and HOW with thorough depth`;
+      return `IMPORTANT: This is ELI100 - the ADVANCED level for experts who want the FULL picture.
+
+TARGET AUDIENCE: Graduate students, professionals, and experts who want depth, precision, and insight.
+
+DOMAIN INTEGRATION REQUIREMENT:
+Your explanation must weave ${domain || 'the chosen domain'} throughout - not as decoration, but as the STRUCTURAL BACKBONE.
+Write as if you're an expert who deeply understands BOTH the technical concept AND ${domain || 'the domain'}.
+Example voice: "Just as a quarterback reads defensive formations to find optimal passing lanes, this concept reveals how..."
+
+REQUIRED STRUCTURE FOR technical_explanation (400-500 words):
+
+1. FORMAL DEFINITION (1 paragraph)
+   - Precise mathematical/technical definition with proper LaTeX notation
+   - Key equations or formal relationships
+   - This IS the advanced level - use real math: $\\\\int$, $\\\\nabla$, $\\\\partial$, matrices, etc.
+
+2. DOMAIN-GROUNDED EXPLANATION (2 paragraphs)
+   - Explain the concept THROUGH THE LENS of ${domain || 'the chosen domain'}
+   - Show how ${domain || 'domain'} experts intuitively do what this concept formalizes
+   - Use ${domain || 'domain'} vocabulary naturally alongside technical terms
+   - Make the reader think "Oh, I already understand this from ${domain || 'my domain knowledge'}!"
+
+3. DEEPER INSIGHT - THE "AHA MOMENT" (1 paragraph)
+   - A NON-OBVIOUS connection or insight that rewards the advanced learner
+   - Something that makes an expert say "I never thought of it that way"
+   - Connect to broader patterns, historical context, or surprising applications
+   - This is what separates ELI100 from Wikipedia
+
+4. WHERE THIS LEADS (2-3 sentences)
+   - What concepts build on this? What doors does understanding this open?
+   - Give the learner a roadmap for going deeper
+
+QUALITY BAR: The explanation should feel like a conversation with a brilliant professor who happens to love ${domain || 'the domain'} - not a textbook, not a Wikipedia stub.`;
     default:
       return `Write for a general adult audience with some familiarity with the subject.
 - Balance clarity with technical accuracy
@@ -546,8 +575,8 @@ export const generateAnalogy = async (
   complexity: number = 50,
   cachedDomainEnrichment?: CachedDomainEnrichment
 ) => {
-  const complexityInstructions = getComplexityPrompt(complexity);
   const shortDomain = getShortDomain(domain);
+  const complexityInstructions = getComplexityPrompt(complexity, shortDomain);
 
   // Check granularity separately for domain and topic
   // Web search is triggered by DOMAIN granularity - specific events need real historical data
