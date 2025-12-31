@@ -29,11 +29,21 @@ export interface ImportanceMapItem {
 export interface AttentionMapItem {
   word: string;
   weight: number;
+  entityId?: number; // For multi-word entities, all words share the same entityId
 }
 
 export interface AttentionMap {
   tech: AttentionMapItem[];
   analogy: AttentionMapItem[];
+}
+
+// Expanded lookup for individual words within multi-word entities
+export interface EntityWordLookup {
+  [word: string]: {
+    weight: number;
+    entityId: number;
+    fullEntity: string; // The complete multi-word phrase
+  };
 }
 
 export interface ProcessedWord {
@@ -43,6 +53,7 @@ export interface ProcessedWord {
   isLatex?: boolean;
   segmentIndex?: number;
   conceptIndex?: number;
+  entityId?: number; // For consistent coloring of multi-word entities
 }
 
 export interface Position {

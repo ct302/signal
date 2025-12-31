@@ -849,12 +849,24 @@ WEIGHT GUIDELINES:
 - 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
 - 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
 
+MULTI-WORD ENTITY RULE (CRITICAL):
+Keep multi-word entities as SINGLE entries - they are ONE semantic unit:
+- Full names: "Tom Brady" (not separate "Tom" and "Brady")
+- Compound terms: "running back", "offensive line", "gradient descent"
+- Technical phrases: "covariant derivative", "Taylor series", "neural network"
+- Place names: "Gillette Stadium", "New England"
+- Team names: "New England Patriots" or just "Patriots"
+Examples:
+  {"word": "Tom Brady", "weight": 0.9}
+  {"word": "gradient descent", "weight": 1.0}
+  {"word": "Super Bowl", "weight": 0.85}
+
 REQUIREMENTS:
 - Include EVERY content word from both explanations (not just key terms)
 - For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
 - For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
 - Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
-- Words that appear multiple times should only be listed once
+- Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
 - Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
 
 CRITICAL RULES:
