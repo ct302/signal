@@ -411,10 +411,15 @@ export default function App() {
 
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
-        // Tech text: keep math symbols but fix ∈ when misused as prose "in" (followed by articles)
-        // Pattern: "∈ the", "∈ a ", "∈ an", "∈ this", "∈ that" → "in the", etc.
+        // Tech text: keep most math symbols but fix common prose-context issues
+        // 1. Fix ∈ when misused as prose "in" (followed by articles)
+        // 2. Fix △/▲ triangle symbols to word "triangle" in prose context
+        // 3. Fix stray "/" that should be "not" (from \not rendering or LLM output)
         tech: cleanText(fixUnicode(s.tech || s.technical || ""))
-          .replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1'),
+          .replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1')
+          .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
+          .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || "")))

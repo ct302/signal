@@ -643,7 +643,14 @@ export const sanitizeLatex = (text: string): string => {
 
   // Catch any stray "/" surrounded by spaces (artifact from malformed \not rendering)
   // Normal prose rarely has " / " - this is almost always a KaTeX artifact
-  result = result.replace(/\s+\/\s+(?=[a-z])/gi, ' not ');
+  // Also catch Unicode division slash (∕ U+2215)
+  result = result.replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ');
+  // Also catch "/" followed by specific words that suggest negation
+  result = result.replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not ');
+
+  // Fix triangle symbols appearing as raw Unicode in prose context
+  // Convert to word "triangle" when followed by spaces (not in math expressions)
+  result = result.replace(/[△▲▵]\s+(?=[a-z])/gi, 'triangle ');
 
   // Fix \in used as the word "in" outside of math context
   // \in renders as ∈ (element of) symbol, but in prose should be the word "in"
