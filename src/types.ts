@@ -26,6 +26,16 @@ export interface ImportanceMapItem {
   importance: number;
 }
 
+export interface AttentionMapItem {
+  word: string;
+  weight: number;
+}
+
+export interface AttentionMap {
+  tech: AttentionMapItem[];
+  analogy: AttentionMapItem[];
+}
+
 export interface ProcessedWord {
   text: string;
   weight: number;

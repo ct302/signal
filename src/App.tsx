@@ -41,6 +41,7 @@ import {
   Segment,
   ConceptMapItem,
   ImportanceMapItem,
+  AttentionMap,
   ProcessedWord,
   Position,
   ContextData,
@@ -234,6 +235,7 @@ export default function App() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [conceptMap, setConceptMap] = useState<ConceptMapItem[]>([]);
   const [importanceMap, setImportanceMap] = useState<ImportanceMapItem[]>([]);
+  const [attentionMap, setAttentionMap] = useState<AttentionMap | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
@@ -454,6 +456,25 @@ export default function App() {
         term: cleanText(m.term || ""),
         importance: m.importance ?? 0.5
       })));
+    }
+
+    // Extract attention_map for word-level importance weights
+    const attentionMapData = findContext(data, ["attention_map", "attentionMap"]);
+    if (attentionMapData) {
+      const techAttention = Array.isArray(attentionMapData.tech) ? attentionMapData.tech : [];
+      const analogyAttention = Array.isArray(attentionMapData.analogy) ? attentionMapData.analogy : [];
+      setAttentionMap({
+        tech: techAttention.map((item: any) => ({
+          word: cleanText(item.word || "").toLowerCase(),
+          weight: typeof item.weight === 'number' ? item.weight : 0.5
+        })),
+        analogy: analogyAttention.map((item: any) => ({
+          word: cleanText(item.word || "").toLowerCase(),
+          weight: typeof item.weight === 'number' ? item.weight : 0.5
+        }))
+      });
+    } else {
+      setAttentionMap(null); // Fall back to heuristic weights
     }
 
     if (context) {
@@ -708,6 +729,21 @@ export default function App() {
 
   const calculateIntelligentWeight = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): number => {
     const cleanedWord = cleanText(word).toLowerCase();
+
+    // Priority 1: Check LLM-provided attention weights (most accurate)
+    if (attentionMap) {
+      const attentionList = isAnalogy ? attentionMap.analogy : attentionMap.tech;
+      const attentionEntry = attentionList.find(item =>
+        item.word === cleanedWord ||
+        item.word.includes(cleanedWord) ||
+        cleanedWord.includes(item.word)
+      );
+      if (attentionEntry) {
+        return attentionEntry.weight;
+      }
+    }
+
+    // Fallback: Use heuristics if no attention map or word not found
     if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) return 0.1;
 
     const terms = isAnalogy
@@ -1536,6 +1572,7 @@ export default function App() {
     setSegments([]);
     setConceptMap([]);
     setImportanceMap([]);
+    setAttentionMap(null);
     setProcessedWords([]);
     setContextData(null);
     setCondensedData(null);
@@ -1755,8 +1792,9 @@ export default function App() {
                 const activeMap = customMap || conceptMap;
                 const weight = calculateIntelligentWeight(word, activeMap, importanceMap, false);
                 // Invert threshold: low slider = high bar, high slider = low bar
+                // At 100% (threshold >= 0.99), ALL words should be fully visible
                 const effectiveThreshold = 1.1 - currentThreshold;
-                const isImportant = weight >= effectiveThreshold;
+                const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
 
                 let colorClassName = "";
                 if (isColorMode && isImportant) {
@@ -1868,8 +1906,9 @@ export default function App() {
     if (item.isSpace) return <span key={index}>{item.text}</span>;
 
     // Invert threshold: low slider = high bar (show less), high slider = low bar (show all)
+    // At 100% (threshold >= 0.99), ALL words should be fully visible and bold
     const effectiveThreshold = 1.1 - threshold;
-    const isImportant = item.weight >= effectiveThreshold;
+    const isImportant = threshold >= 0.99 || item.weight >= effectiveThreshold;
     // Only show clickable cursor in locked modes (not morph mode)
     const isClickableMode = viewMode !== 'morph';
     let style: React.CSSProperties = {

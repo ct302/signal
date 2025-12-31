@@ -346,7 +346,8 @@ const StoryCard: React.FC<{
 
   // Get styles for a word based on attention mode and importance
   const getWordStyles = (importance: number, isKeyword: boolean): React.CSSProperties => {
-    const isImportant = importance >= threshold;
+    // At 100% threshold (>= 0.99), ALL words should be fully visible
+    const isImportant = threshold >= 0.99 || importance >= threshold;
 
     const baseStyles: React.CSSProperties = {
       transition: 'all 0.2s ease',

@@ -667,6 +667,14 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
   ],
+  "attention_map": {
+    "tech": [
+      {"word": "each significant word from technical_explanation", "weight": 0.0-1.0}
+    ],
+    "analogy": [
+      {"word": "each significant word from analogy_explanation", "weight": 0.0-1.0}
+    ]
+  },
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
@@ -829,12 +837,33 @@ The "condensed" object provides a stripped-down, first-principles view of the co
   - If you removed any bullet, understanding would be incomplete
   - Order them from most fundamental to most nuanced
 
+ATTENTION_MAP RULES (CRITICAL FOR VISUAL HIGHLIGHTING):
+The attention_map provides word-level importance weights for the attention-based highlighting system.
+This simulates transformer attention - showing which words carry semantic weight vs. which are just connectors.
+
+WEIGHT GUIDELINES:
+- 1.0: Core concept terms, key technical vocabulary, central ideas (e.g., "derivative", "quarterback", "algorithm")
+- 0.8-0.9: Important supporting terms, action verbs central to meaning (e.g., "calculates", "intercepted", "transforms")
+- 0.6-0.7: Descriptive words that add meaning (e.g., "instantaneous", "crucial", "complex")
+- 0.4-0.5: Common verbs and adjectives (e.g., "shows", "different", "important")
+- 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
+- 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
+
+REQUIREMENTS:
+- Include EVERY content word from both explanations (not just key terms)
+- For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
+- Words that appear multiple times should only be listed once
+- Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
 3. importance_map should include ALL significant terms (15-25 items)
-4. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
-5. Return ONLY valid JSON, no markdown code blocks`;
+4. attention_map must cover ALL content words (50-100+ per explanation)
+5. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
+6. Return ONLY valid JSON, no markdown code blocks`;
 
   // Build search prompt to guide how web results are used
   // For granular domains, constrain to the specific event
