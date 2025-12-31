@@ -2,7 +2,35 @@
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // Default API key for demo purposes (users can override in Settings)
-export const DEFAULT_GEMINI_API_KEY = 'AIzaSyAFaKclEBd8HcVaAcWXFmQZ0nICRXjNUXM';
+export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
+
+// OpenRouter API key (demo/testing)
+export const DEFAULT_OPENROUTER_API_KEY = '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';
+
+// OpenRouter models - hardcoded selection
+export const OPENROUTER_MODELS = [
+  'xiaomi/mimo-v2-flash:free',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.3-70b-instruct:free'
+];
+
+// Fallback model chain for circuit breaker pattern
+// When primary model hits rate limit, try these in order
+export const OPENROUTER_FALLBACK_MODELS = [
+  'xiaomi/mimo-v2-flash:free',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.3-70b-instruct:free'
+];
+
+// Rate limit configuration
+export const RATE_LIMIT_CONFIG = {
+  maxRetries: 5,
+  initialBackoffMs: 1000,
+  maxBackoffMs: 32000,
+  jitterFactor: 0.25, // ±25% jitter
+  circuitBreakerThreshold: 3, // consecutive failures before trying fallback
+  circuitBreakerCooldownMs: 60000, // 60s cooldown for failed model
+};
 
 // KaTeX CDN
 export const KATEX_CSS = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
@@ -27,8 +55,8 @@ export const STOP_WORDS = new Set([
 // LaTeX regex pattern
 export const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\[a-zA-Z]+(?:[_^]\{[^}]*\}|\{[^}]*\})*)/g;
 
-// LaTeX command regex for wrapping
-export const LATEX_CMD_REGEX = /\\(frac|lim|sum|int|prod|sqrt|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|rho|tau|eta|nu|xi|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|left|right|text|mathrm|mathbf|vec|hat|bar|dot|ddot|tilde|prime)/;
+// LaTeX command regex for wrapping - comprehensive list including accents and dots
+export const LATEX_CMD_REGEX = /\\(frac|dfrac|tfrac|lim|limsup|liminf|sum|int|iint|iiint|oint|prod|sqrt|cdot|times|div|pm|mp|leq|geq|ll|gg|neq|approx|sim|simeq|cong|equiv|propto|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|Xi|Upsilon|left|right|big|Big|bigg|Bigg|text|mathrm|mathbf|mathcal|mathbb|mathit|mathsf|boldsymbol|textbf|textrm|vec|hat|widehat|bar|overline|underline|dot|ddot|dddot|tilde|widetilde|acute|grave|breve|check|ring|overbrace|underbrace|prime|backprime|circ|bullet|star|forall|exists|nexists|subset|supset|subseteq|supseteq|cup|cap|bigcup|bigcap|in|notin|ni|land|lor|neg|lnot|implies|iff|oplus|ominus|otimes|oslash|odot|dots|ldots|cdots|vdots|ddots|quad|qquad|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|exp|det|dim|gcd|ker|hom|arg|deg|max|min|sup|inf|langle|rangle|lfloor|rfloor|lceil|rceil|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|Leftrightarrow|mapsto|uparrow|downarrow|Uparrow|Downarrow|nearrow|searrow|swarrow|nwarrow|hookrightarrow|hookleftarrow|parallel|perp|mid|angle|triangle|square|diamond|emptyset|varnothing|aleph|hbar|ell|wp|Re|Im|binom|tbinom|dbinom|stackrel|overset|underset|phantom|operatorname|begin|end|matrix|pmatrix|bmatrix|vmatrix|cases|array|aligned)/;
 
 // Concept colors for isomorphic mapping
 export const CONCEPT_COLORS = [
@@ -43,14 +71,145 @@ export const CONCEPT_BG_COLORS = [
   'bg-indigo-200', 'bg-rose-200', 'bg-teal-200', 'bg-amber-200'
 ];
 
-// Quick start domains
-export const QUICK_START_DOMAINS = [
+// Quick start domains - full list (randomized subset shown to users)
+export const ALL_QUICK_START_DOMAINS = [
+  // Sports
   { emoji: '🏈', name: 'NFL' },
+  { emoji: '🏀', name: 'NBA' },
+  { emoji: '⚽', name: 'Soccer' },
+  { emoji: '⚾', name: 'Baseball' },
+  { emoji: '🏒', name: 'Hockey' },
+  { emoji: '🎾', name: 'Tennis' },
+  { emoji: '🥊', name: 'Boxing' },
+  { emoji: '🏎️', name: 'Formula 1' },
+  // Entertainment
   { emoji: '🎮', name: 'Video Games' },
-  { emoji: '🍳', name: 'Cooking' },
+  { emoji: '🎬', name: 'Movies' },
+  { emoji: '📺', name: 'TV Shows' },
   { emoji: '🎵', name: 'Music' },
-  { emoji: '🎬', name: 'Movies' }
+  { emoji: '🎭', name: 'Theater' },
+  { emoji: '🎨', name: 'Art' },
+  { emoji: '📷', name: 'Photography' },
+  // Practical
+  { emoji: '🍳', name: 'Cooking' },
+  { emoji: '🧵', name: 'Fashion' },
+  { emoji: '🏠', name: 'Home Improvement' },
+  { emoji: '🌱', name: 'Gardening' },
+  { emoji: '🚗', name: 'Cars' },
+  // Strategy
+  { emoji: '♟️', name: 'Chess' },
+  { emoji: '🎲', name: 'Board Games' },
+  { emoji: '🃏', name: 'Poker' },
+  { emoji: '💼', name: 'Business' },
+  { emoji: '💰', name: 'Investing' },
+  // Outdoors
+  { emoji: '⛰️', name: 'Hiking' },
+  { emoji: '🎣', name: 'Fishing' },
+  { emoji: '🏕️', name: 'Camping' },
+  { emoji: '🏄', name: 'Surfing' },
+  // Other
+  { emoji: '🎸', name: 'Guitar' },
+  { emoji: '🎹', name: 'Piano' },
+  { emoji: '📚', name: 'Literature' },
+  { emoji: '🍷', name: 'Wine' },
+  { emoji: '☕', name: 'Coffee' },
+  { emoji: '🐕', name: 'Dog Training' },
+  { emoji: '✈️', name: 'Aviation' },
+  { emoji: '🚀', name: 'Space' }
 ];
+
+// Helper to get randomized subset
+export const getRandomQuickStartDomains = (count: number = 5) => {
+  const shuffled = [...ALL_QUICK_START_DOMAINS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+};
+
+// Default domains (for backward compatibility)
+export const QUICK_START_DOMAINS = ALL_QUICK_START_DOMAINS.slice(0, 5);
+
+// Domain categories for proximity checking and suggestions
+export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Array<{ name: string; emoji: string }> }> = {
+  sports: {
+    keywords: ['nfl', 'football', 'nba', 'basketball', 'mlb', 'baseball', 'nhl', 'hockey', 'soccer', 'mls', 'tennis', 'golf', 'boxing', 'mma', 'ufc', 'wrestling', 'olympics', 'sports', 'athlete', 'player', 'team', 'game', 'score', 'championship', 'super bowl', 'world series', 'playoffs'],
+    related: [
+      { name: 'NBA', emoji: '🏀' },
+      { name: 'MLB', emoji: '⚾' },
+      { name: 'NHL', emoji: '🏒' },
+      { name: 'Soccer', emoji: '⚽' },
+      { name: 'Tennis', emoji: '🎾' }
+    ]
+  },
+  gaming: {
+    keywords: ['video games', 'gaming', 'esports', 'playstation', 'xbox', 'nintendo', 'steam', 'rpg', 'fps', 'moba', 'minecraft', 'fortnite', 'league of legends', 'valorant', 'call of duty', 'gamer', 'twitch', 'streamer'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Card Games', emoji: '🃏' },
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Anime', emoji: '🎌' }
+    ]
+  },
+  cooking: {
+    keywords: ['cooking', 'baking', 'cuisine', 'recipe', 'chef', 'kitchen', 'food', 'restaurant', 'culinary', 'ingredients', 'meal', 'dish', 'flavor', 'gordon ramsay', 'masterchef'],
+    related: [
+      { name: 'Chemistry', emoji: '🧪' },
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Wine', emoji: '🍷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  music: {
+    keywords: ['music', 'song', 'album', 'band', 'artist', 'concert', 'guitar', 'piano', 'drums', 'singer', 'musician', 'spotify', 'genre', 'rock', 'pop', 'hip hop', 'jazz', 'classical', 'beethoven', 'taylor swift'],
+    related: [
+      { name: 'Movies', emoji: '🎬' },
+      { name: 'Dance', emoji: '💃' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Poetry', emoji: '📜' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  },
+  movies: {
+    keywords: ['movies', 'film', 'cinema', 'director', 'actor', 'actress', 'hollywood', 'oscar', 'screenplay', 'blockbuster', 'marvel', 'dc', 'disney', 'netflix', 'streaming'],
+    related: [
+      { name: 'TV Shows', emoji: '📺' },
+      { name: 'Books', emoji: '📚' },
+      { name: 'Theater', emoji: '🎭' },
+      { name: 'Music', emoji: '🎵' },
+      { name: 'Video Games', emoji: '🎮' }
+    ]
+  },
+  chess: {
+    keywords: ['chess', 'chessboard', 'grandmaster', 'magnus carlsen', 'checkmate', 'pawn', 'rook', 'bishop', 'knight', 'queen', 'king', 'opening', 'endgame', 'gambit'],
+    related: [
+      { name: 'Board Games', emoji: '🎲' },
+      { name: 'Poker', emoji: '🃏' },
+      { name: 'Go', emoji: '⚫' },
+      { name: 'Strategy Games', emoji: '🎯' },
+      { name: 'Mathematics', emoji: '📐' }
+    ]
+  },
+  military: {
+    keywords: ['military', 'army', 'navy', 'air force', 'marines', 'war', 'battle', 'soldier', 'general', 'strategy', 'tactics', 'weapons', 'defense'],
+    related: [
+      { name: 'History', emoji: '📜' },
+      { name: 'Chess', emoji: '♟️' },
+      { name: 'Politics', emoji: '🏛️' },
+      { name: 'Engineering', emoji: '⚙️' },
+      { name: 'Space', emoji: '🚀' }
+    ]
+  },
+  nature: {
+    keywords: ['nature', 'wildlife', 'animals', 'plants', 'ecosystem', 'forest', 'ocean', 'mountains', 'weather', 'climate', 'biology', 'ecology'],
+    related: [
+      { name: 'Gardening', emoji: '🌱' },
+      { name: 'Photography', emoji: '📷' },
+      { name: 'Travel', emoji: '✈️' },
+      { name: 'Science', emoji: '🔬' },
+      { name: 'Art', emoji: '🎨' }
+    ]
+  }
+};
 
 // Local storage keys
 export const STORAGE_KEYS = {

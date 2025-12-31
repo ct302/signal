@@ -1,0 +1,483 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
+import { ConceptMapItem, ImportanceMapItem } from '../types';
+
+// Generate dynamic "Why This Works" bullet points based on actual concept characteristics
+const generateWhyBullets = (
+  techTerm: string,
+  analogyTerm: string,
+  domain: string,
+  importance: number,
+  index: number
+): string[] => {
+  // Different insight patterns based on importance level and concept index
+  const highImportanceInsights = [
+    `"${analogyTerm}" is a cornerstone concept in ${domain}—${techTerm} plays the exact same structural role in technical systems`,
+    `Experts in ${domain} rely on ${analogyTerm} instinctively; this same instinct directly applies to understanding ${techTerm}`,
+    `The way ${analogyTerm} constrains decisions in ${domain} mirrors how ${techTerm} constrains technical design`,
+  ];
+
+  const mediumImportanceInsights = [
+    `${analogyTerm} and ${techTerm} solve the same fundamental problem in their respective domains`,
+    `Your mental model for "${analogyTerm}" already contains the logic needed to reason about ${techTerm}`,
+    `Both concepts answer "how do we handle complexity?" in remarkably similar ways`,
+  ];
+
+  const lowImportanceInsights = [
+    `${analogyTerm} provides intuitive vocabulary for what ${techTerm} describes formally`,
+    `The patterns you recognize in ${analogyTerm} are the same patterns ${techTerm} captures mathematically`,
+    `Understanding ${analogyTerm} gives you a head start—${techTerm} just adds precision`,
+  ];
+
+  // Select insights based on importance
+  const baseInsights = importance > 0.7
+    ? highImportanceInsights
+    : importance > 0.4
+      ? mediumImportanceInsights
+      : lowImportanceInsights;
+
+  // Add a transfer insight
+  const transferInsights = [
+    `When you visualize ${analogyTerm}, you're already visualizing ${techTerm}—just with different labels`,
+    `The "aha moment" for ${techTerm} is the same one you had when ${analogyTerm} first clicked`,
+    `If you can explain ${analogyTerm} to a friend, you can explain ${techTerm} to a colleague`,
+    `The intuition behind ${analogyTerm} IS the intuition behind ${techTerm}`,
+  ];
+
+  return [
+    baseInsights[index % baseInsights.length],
+    transferInsights[(index + 1) % transferInsights.length],
+    `This isn't analogy as decoration—it's structural equivalence. ${techTerm} and ${analogyTerm} are isomorphic.`,
+  ];
+};
+
+// Generate bridge narrative
+const generateBridgeNarrative = (
+  techTerm: string,
+  analogyTerm: string,
+  domain: string,
+  index: number
+): string => {
+  const narratives = [
+    `Just as ${analogyTerm} shapes how experts think in ${domain}, ${techTerm} serves the same foundational role in technical work. The insight you've built from experience transfers directly—you're not learning something new, you're translating something you already know.`,
+    `In ${domain}, ${analogyTerm} is the invisible framework behind every great decision. ${techTerm} works the same way mathematically. Your intuition about ${analogyTerm} is the same intuition that powers ${techTerm}.`,
+    `Think of how ${analogyTerm} connects everything in ${domain}. That connective tissue? It's ${techTerm} in disguise. Master one, and you've mastered the other.`,
+    `Every time you've used ${analogyTerm} instinctively in ${domain}, you've been applying ${techTerm} without knowing it. The formal concept just gives a name to what you already understand.`,
+  ];
+  return narratives[index % narratives.length];
+};
+
+interface IsomorphicDualPaneProps {
+  conceptMap: ConceptMapItem[];
+  importanceMap: ImportanceMapItem[];
+  isDarkMode: boolean;
+  analogyDomain: string;
+  onClose: () => void;
+}
+
+// Color palette for concepts
+const CONCEPT_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#06b6d4'
+];
+
+// Helper to strip LaTeX for display
+const cleanLabel = (text: string): string => {
+  return text
+    .replace(/\$\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\\(/g, '')
+    .replace(/\\\)/g, '')
+    .replace(/\\\[/g, '')
+    .replace(/\\\]/g, '')
+    .replace(/\^{([^}]+)}/g, '^$1')
+    .replace(/_{([^}]+)}/g, '_$1')
+    .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
+    .replace(/\\[a-zA-Z]+/g, (match) => {
+      const commands: { [key: string]: string } = {
+        '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',
+        '\\gamma': 'γ', '\\delta': 'δ', '\\theta': 'θ', '\\lambda': 'λ',
+        '\\mu': 'μ', '\\pi': 'π', '\\sum': 'Σ', '\\prod': 'Π',
+        '\\int': '∫', '\\infty': '∞', '\\sqrt': '√', '\\cdot': '·',
+        '\\times': '×', '\\div': '÷', '\\pm': '±', '\\leq': '≤',
+        '\\geq': '≥', '\\neq': '≠', '\\approx': '≈', '\\partial': '∂',
+      };
+      return commands[match] || '';
+    })
+    .replace(/\{([^}]*)\}/g, '$1')
+    .trim();
+};
+
+export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
+  conceptMap,
+  importanceMap,
+  isDarkMode,
+  analogyDomain,
+  onClose
+}) => {
+  const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
+  const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
+
+  // Get importance for a concept
+  const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
+    const techTerm = cleanLabel(concept.tech_term).toLowerCase();
+    const analogyTerm = cleanLabel(concept.analogy_term).toLowerCase();
+
+    for (const imp of importanceMap) {
+      const term = imp.term.toLowerCase();
+      if (term.includes(techTerm) || techTerm.includes(term) ||
+          term.includes(analogyTerm) || analogyTerm.includes(term)) {
+        return imp.importance;
+      }
+    }
+    return 0.5;
+  }, [importanceMap]);
+
+  // Handle keyboard
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const activeConcept = selectedConcept ?? hoveredConcept;
+
+  // Auto-scroll paired concept into view when hovering/selecting
+  useEffect(() => {
+    if (activeConcept === null) {
+      setScrollHighlight(null);
+      return;
+    }
+
+    // Find the paired elements and scroll them into view
+    const techElement = containerRef.current?.querySelector(`[data-tech-id="${activeConcept}"]`);
+    const analogyElement = containerRef.current?.querySelector(`[data-analogy-id="${activeConcept}"]`);
+
+    // Scroll both elements into view with smooth animation
+    if (techElement) {
+      techElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (analogyElement) {
+      analogyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Trigger highlight animation
+    setScrollHighlight(activeConcept);
+    const timeout = setTimeout(() => setScrollHighlight(null), 1000);
+
+    return () => clearTimeout(timeout);
+  }, [activeConcept]);
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700 bg-neutral-900">
+        <div className="flex items-center gap-4">
+          <Columns className="text-blue-400" size={24} />
+          <div>
+            <h2 className="text-white text-lg font-bold">Concept Isomorphism</h2>
+            <p className="text-neutral-400 text-sm">{conceptMap.length} mappings • Technical ↔ {analogyDomain}</p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Main Content */}
+      <div ref={containerRef} className="flex-1 relative overflow-hidden">
+        {/* Three Column Layout */}
+        <div className="h-full flex">
+          {/* Left Column - Technical Terms */}
+          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-r transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-blue-50/30'}`}>
+            <div className="flex items-center gap-2 mb-6">
+              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-blue-900/70 text-blue-200' : 'bg-blue-200 text-blue-800'}`}>
+                ⚡ Technical
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {conceptMap.map((concept, index) => {
+                const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
+                const isActive = activeConcept === concept.id;
+                const isInactive = activeConcept !== null && activeConcept !== concept.id;
+                const isScrollingTo = scrollHighlight === concept.id;
+
+                return (
+                  <div
+                    key={concept.id}
+                    data-tech-id={concept.id}
+                    onClick={() => setSelectedConcept(selectedConcept === concept.id ? null : concept.id)}
+                    onMouseEnter={() => setHoveredConcept(concept.id)}
+                    onMouseLeave={() => setHoveredConcept(null)}
+                    className={`
+                      px-4 py-3 rounded-xl cursor-pointer transition-all duration-300
+                      flex items-center justify-between gap-2
+                      ${isActive
+                        ? 'scale-105 concept-glow-active'
+                        : 'hover:scale-102'
+                      }
+                      ${isInactive ? 'opacity-30' : 'opacity-100'}
+                      ${isScrollingTo ? 'scroll-highlight' : ''}
+                    `}
+                    style={{
+                      backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
+                      border: `2px solid ${isActive ? color : 'transparent'}`,
+                      '--glow-color': color,
+                    } as React.CSSProperties}
+                  >
+                    <span className={`font-semibold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-900'}`}>
+                      {cleanLabel(concept.tech_term)}
+                    </span>
+                    <ChevronRight
+                      size={18}
+                      className="transition-transform duration-300"
+                      style={{
+                        color: isActive ? color : (isDarkMode ? '#6b7280' : '#9ca3af'),
+                        transform: isActive ? 'translateX(4px)' : 'translateX(0)'
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Center Column - Connection Indicator (expands when concept selected) */}
+          <div className={`${selectedConcept !== null ? 'w-[40%]' : 'w-[30%]'} flex flex-col items-center transition-all duration-500 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/30' : 'bg-neutral-50'}`}>
+            {activeConcept !== null ? (
+              <div className={`${selectedConcept !== null ? 'p-6 w-full' : 'text-center px-4 py-8'}`}>
+                {(() => {
+                  const concept = conceptMap.find(c => c.id === activeConcept);
+                  if (!concept) return null;
+                  const index = conceptMap.findIndex(c => c.id === activeConcept);
+                  const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
+                  const importance = getConceptImportance(concept);
+                  const techTerm = cleanLabel(concept.tech_term);
+                  const analogyTerm = cleanLabel(concept.analogy_term);
+                  const isExpanded = selectedConcept === concept.id;
+
+                  // Get the six_word_definition and narrative_mapping from the concept
+                  const sixWordDef = concept.six_word_definition || '';
+                  const narrativeMapping = concept.narrative_mapping || '';
+
+                  return (
+                    <div className="animate-fadeIn">
+                      {/* 6-Word Definition - Always visible when concept is active */}
+                      {sixWordDef && (
+                        <div className="text-center mb-6">
+                          <p className={`text-xs uppercase tracking-wider mb-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                            {techTerm}
+                          </p>
+                          <p className={`text-base font-medium italic ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`} style={{ color }}>
+                            "{sixWordDef}"
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Pulsing connection indicator */}
+                      <div className="text-center">
+                        <div
+                          className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center animate-pulse"
+                          style={{ backgroundColor: color + '30', boxShadow: `0 0 25px ${color}40` }}
+                        >
+                          <Zap size={24} style={{ color }} />
+                        </div>
+
+                        <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                          maps to
+                        </p>
+
+                        {/* Importance bar */}
+                        <div className="mt-3 px-4 max-w-[180px] mx-auto">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Importance</span>
+                            <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
+                          </div>
+                          <div className={`h-1.5 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${importance * 100}%`, backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded Content - Only when concept is clicked/selected */}
+                      {isExpanded && (
+                        <div className="mt-6 space-y-4 animate-fadeIn">
+                          {/* The Connection Story - Uses actual narrative_mapping if available */}
+                          <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700' : 'bg-gradient-to-br from-amber-50 to-blue-50 border border-neutral-200'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <BookOpen size={16} style={{ color }} />
+                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                The Connection
+                              </h4>
+                            </div>
+                            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                              {narrativeMapping || generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
+                            </p>
+                          </div>
+
+                          {/* Why It Works - Condensed single insight */}
+                          <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+                            <div className="flex items-start gap-2">
+                              <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
+                              <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                Your intuition about <span className="font-medium" style={{ color }}>{analogyTerm}</span> IS the intuition for <span className="font-medium" style={{ color }}>{techTerm}</span>—same pattern, different vocabulary.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Equivalence Badge */}
+                          <div className="text-center">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: color + '20' }}>
+                              <Sparkles size={12} style={{ color }} />
+                              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                                {analogyTerm} = {techTerm}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Click hint when hovering but not selected */}
+                      {!isExpanded && (
+                        <p className={`text-xs mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          Click to explore the connection
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="text-center px-4 py-8">
+                <div className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center ${isDarkMode ? 'bg-neutral-800' : 'bg-neutral-200'}`}>
+                  <Columns size={20} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
+                </div>
+                <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                  Hover or click a concept<br/>to see the connection
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Analogy Terms */}
+          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-l transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-amber-50/30'}`}>
+            <div className="flex items-center gap-2 mb-6">
+              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-amber-900/70 text-amber-200' : 'bg-amber-200 text-amber-800'}`}>
+                🎯 {analogyDomain}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {conceptMap.map((concept, index) => {
+                const color = CONCEPT_COLORS[index % CONCEPT_COLORS.length];
+                const isActive = activeConcept === concept.id;
+                const isInactive = activeConcept !== null && activeConcept !== concept.id;
+                const isScrollingTo = scrollHighlight === concept.id;
+
+                return (
+                  <div
+                    key={concept.id}
+                    data-analogy-id={concept.id}
+                    onClick={() => setSelectedConcept(selectedConcept === concept.id ? null : concept.id)}
+                    onMouseEnter={() => setHoveredConcept(concept.id)}
+                    onMouseLeave={() => setHoveredConcept(null)}
+                    className={`
+                      px-4 py-3 rounded-xl cursor-pointer transition-all duration-300
+                      flex items-center gap-2
+                      ${isActive
+                        ? 'scale-105 concept-glow-active'
+                        : 'hover:scale-102'
+                      }
+                      ${isInactive ? 'opacity-30' : 'opacity-100'}
+                      ${isScrollingTo ? 'scroll-highlight' : ''}
+                    `}
+                    style={{
+                      backgroundColor: isActive ? color + '25' : (isDarkMode ? '#1f2937' : '#ffffff'),
+                      border: `2px solid ${isActive ? color : 'transparent'}`,
+                      '--glow-color': color,
+                    } as React.CSSProperties}
+                  >
+                    <ChevronRight
+                      size={18}
+                      className="transition-transform duration-300 rotate-180"
+                      style={{
+                        color: isActive ? color : (isDarkMode ? '#6b7280' : '#9ca3af'),
+                        transform: isActive ? 'translateX(-4px) rotate(180deg)' : 'rotate(180deg)'
+                      }}
+                    />
+                    <span className={`font-semibold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-900'}`}>
+                      {cleanLabel(concept.analogy_term)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900">
+        <div className="flex items-center justify-between">
+          <span className="text-blue-200/70 text-xs">
+            Click concepts to select • Hover to preview connections
+          </span>
+          <span className="text-neutral-300 text-xs">
+            Press P or Esc to close
+          </span>
+        </div>
+      </div>
+
+      {/* CSS for animations */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scrollPulse {
+          0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7); }
+          50% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+        }
+        @keyframes conceptGlow {
+          0% {
+            box-shadow: 0 0 15px var(--glow-color), 0 4px 20px color-mix(in srgb, var(--glow-color) 30%, transparent);
+          }
+          50% {
+            box-shadow: 0 0 25px var(--glow-color), 0 4px 30px color-mix(in srgb, var(--glow-color) 50%, transparent);
+          }
+          100% {
+            box-shadow: 0 0 15px var(--glow-color), 0 4px 20px color-mix(in srgb, var(--glow-color) 30%, transparent);
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+        .scroll-highlight {
+          animation: scrollPulse 0.8s ease-out;
+        }
+        .concept-glow-active {
+          animation: conceptGlow 2s ease-in-out infinite;
+        }
+        .hover\\:scale-102:hover {
+          transform: scale(1.02);
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default IsomorphicDualPane;

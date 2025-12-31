@@ -1,28 +1,205 @@
+import { sanitizeRawApiResponse } from './text';
+
+// Unique placeholder that won't appear in normal text
+const BACKSLASH_PLACEHOLDER = '___BKSLSH___';
+const QUOTE_PLACEHOLDER = '___QUOT___';
+
 /**
- * Safely parse JSON with fallback handling for common issues
+ * ROBUST POST-PROCESSING LAYER
+ *
+ * The Problem: LLMs return JSON with LaTeX like $\frac{1}{2}$.
+ * JSON sees \f as "form feed" escape and fails.
+ *
+ * The Solution: Replace ALL backslashes with placeholders FIRST,
+ * then parse, then restore. This completely sidesteps the conflict.
+ */
+
+/**
+ * Step 1: Aggressively neutralize all backslashes before any parsing
+ * This must happen FIRST, before any other string manipulation
+ */
+const neutralizeBackslashes = (str: string): string => {
+  // Protect escaped quotes first (\" -> placeholder)
+  // We need these to stay as \" for JSON parsing
+  let result = str.replace(/\\"/g, QUOTE_PLACEHOLDER);
+
+  // Now replace ALL remaining backslashes with placeholder
+  // This includes \frac, \bar, \n, \t, everything
+  result = result.replace(/\\/g, BACKSLASH_PLACEHOLDER);
+
+  // Restore the escaped quotes (they're needed for JSON structure)
+  result = result.replace(new RegExp(QUOTE_PLACEHOLDER, 'g'), '\\"');
+
+  return result;
+};
+
+/**
+ * Step 2: Fix literal control characters ONLY inside JSON string values
+ * Structural whitespace (between keys/values) must be preserved
+ */
+const fixControlCharactersInStrings = (str: string): string => {
+  let result = '';
+  let inString = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    const prevChar = i > 0 ? str[i - 1] : '';
+
+    // Toggle string state on unescaped quotes
+    // After neutralizeBackslashes, escaped quotes look like: ___QUOT___" or \"
+    // We only need to check for \" since that's what we restore
+    if (char === '"' && prevChar !== '\\') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    // Only escape control chars INSIDE strings
+    if (inString) {
+      if (char === '\n' || char === '\r') {
+        result += '\\n';
+        continue;
+      }
+      if (char === '\t') {
+        result += '\\t';
+        continue;
+      }
+      // Other control characters -> space
+      if (char.charCodeAt(0) < 32 && char !== '\n' && char !== '\r' && char !== '\t') {
+        result += ' ';
+        continue;
+      }
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
+/**
+ * Step 3: Attempt to repair truncated JSON
+ * If the response got cut off, try to close it properly
+ */
+const repairTruncatedJson = (str: string): string => {
+  // Count unclosed braces and brackets
+  let braceCount = 0;
+  let bracketCount = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') braceCount++;
+      else if (char === '}') braceCount--;
+      else if (char === '[') bracketCount++;
+      else if (char === ']') bracketCount--;
+    }
+  }
+
+  // If we ended inside a string, close it
+  if (inString) {
+    str += '"';
+  }
+
+  // Close any unclosed brackets/braces
+  while (bracketCount > 0) {
+    str += ']';
+    bracketCount--;
+  }
+  while (braceCount > 0) {
+    str += '}';
+    braceCount--;
+  }
+
+  return str;
+};
+
+/**
+ * Step 4: Restore backslash placeholders in parsed object
+ */
+const restoreBackslashes = (obj: any): any => {
+  if (typeof obj === 'string') {
+    return obj.replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\');
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(restoreBackslashes);
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const key in obj) {
+      result[key] = restoreBackslashes(obj[key]);
+    }
+    return result;
+  }
+  return obj;
+};
+
+/**
+ * Main entry point: Safely parse JSON from LLM output
+ *
+ * IMPORTANT: We ALWAYS use the backslash placeholder approach, not just on failure.
+ * This is because native JSON.parse can succeed while silently mangling backslashes:
+ * - \t in \tilde becomes a tab character
+ * - \f in \frac becomes a form feed character
+ * - \n in \nabla becomes a newline
+ *
+ * By always using placeholders, we preserve LaTeX backslashes correctly.
  */
 export const safeJsonParse = (text: string | null | undefined): any => {
   if (!text) return null;
 
+  // Step 1: Strip markdown code blocks
   let clean = text
-    .replace(/```json\s*/g, "")
-    .replace(/```\s*/g, "")
-    .replace(/\s*```$/g, "")
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
     .trim();
 
   if (!clean) return null;
 
+  // Step 2: Extract JSON object
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error('No JSON object found in response');
+    return null;
+  }
+
+  let jsonString = jsonMatch[0];
+
+  // Step 2.5: NUCLEAR SANITIZATION - Clean math symbols from analogy fields
+  // This runs on raw JSON text BEFORE parsing to catch everything at the source
+  jsonString = sanitizeRawApiResponse(jsonString);
+
+  // Step 3: ALWAYS apply our backslash-safe pipeline
+  // We don't try native JSON.parse first because it mangles LaTeX backslashes
   try {
-    return JSON.parse(clean);
-  } catch (e) {
-    // Try fixing common escape issues
-    const fixed = clean.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
-    try {
-      return JSON.parse(fixed);
-    } catch (e2) {
-      console.error("JSON parsing failed completely:", e2);
-      return null;
-    }
+    // ORDER MATTERS:
+    // 1. Neutralize backslashes FIRST (removes all escape conflicts)
+    // 2. Fix control characters INSIDE STRINGS ONLY (preserve structural whitespace)
+    // 3. Repair truncation (close unclosed strings/braces)
+    let processed = neutralizeBackslashes(jsonString);
+    processed = fixControlCharactersInStrings(processed);
+    processed = repairTruncatedJson(processed);
+
+    const parsed = JSON.parse(processed);
+    return restoreBackslashes(parsed);
+  } catch (e: any) {
+    console.error('JSON parsing failed:', e.message);
+    console.error('Raw response (first 500 chars):', jsonString.substring(0, 500));
+    console.error('Raw response (last 200 chars):', jsonString.substring(jsonString.length - 200));
+    return null;
   }
 };
 
