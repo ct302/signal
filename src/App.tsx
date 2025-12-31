@@ -417,12 +417,16 @@ export default function App() {
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
         // Tech text: keep most math symbols but fix common prose-context issues
-        // 1. Fix ∈ when misused as prose "in" (followed by articles)
-        // 2. Fix △/▲ triangle symbols to word "triangle" in prose context
-        // 3. Fix stray "/" that should be "not" (from \not rendering or LLM output)
+        // Must aggressively fix symbols that shouldn't appear in readable prose
         tech: cleanText(fixUnicode(s.tech || s.technical || ""))
-          .replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1')
+          // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
+          .replace(/∈\s*(?=[a-z])/gi, 'in ')
+          // Fix △/▲ triangle symbols to word "triangle" in prose context
           .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
+          .replace(/(?<=\s|^)\/ust\b/gi, 'just')
+          .replace(/(?<=\s|^)\/ot\b/gi, 'not')
+          // Fix stray "/" between words that should be "not"
           .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
           .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
