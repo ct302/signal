@@ -17,7 +17,8 @@ export interface ConceptMapItem {
   id: number;
   tech_term: string;
   analogy_term: string;
-  narrative_mapping?: string; // 2-3 sentence mini-story bridging tech to analogy
+  six_word_definition?: string; // Exactly 6 words defining the tech_term (domain-agnostic)
+  narrative_mapping?: string; // 2-3 sentence vivid mini-story bridging tech to analogy (domain-specific)
 }
 
 export interface ImportanceMapItem {

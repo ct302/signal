@@ -660,7 +660,8 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "id": 0,
       "tech_term": "technical term from tech text",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
-      "narrative_mapping": "2-3 sentence mini-story connecting the tech concept to its ${shortDomain} equivalent"
+      "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
+      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations."
     }
   ],
   "importance_map": [
@@ -809,7 +810,13 @@ CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
-- narrative_mapping: A 2-3 sentence NARRATIVE MINI-STORY that bridges the tech concept to the analogy domain. This should be a vivid, memorable connection that helps the reader deeply understand WHY these two concepts map to each other. Write it as a story snippet, not a dry definition.
+- six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
+  - "tensor components" → "Numbers describing multi-directional physical quantities"
+  - "covariant derivative" → "Rate of change respecting curved space"
+  - "eigenvalue" → "Scaling factor for special direction vectors"
+- narrative_mapping: A 2-3 sentence VIVID MINI-STORY showing HOW these concepts connect through a SPECIFIC ${shortDomain} scenario. NOT generic templates - use real ${shortDomain} vocabulary, names, situations. The reader should think "Oh, THAT'S what it means!" Examples:
+  - Bad: "defensive assignments is like tensor components because they both track multiple things"
+  - Good: "When Monte Kiffin designed the Tampa 2, each defender's gap responsibility was a component in his defensive tensor—change one assignment, and the entire coverage matrix shifts."
 
 CONDENSED VIEW RULES:
 The "condensed" object provides a stripped-down, first-principles view of the concept:

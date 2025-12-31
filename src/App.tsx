@@ -432,7 +432,10 @@ export default function App() {
         .map((c: any, i: number) => ({
           id: c.id ?? i,
           tech_term: cleanText(c.tech_term || c.techTerm || ""),
-          analogy_term: cleanText(c.analogy_term || c.analogyTerm || "")
+          analogy_term: cleanText(c.analogy_term || c.analogyTerm || ""),
+          // Load the new fields for rich concept isomorphism display
+          six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
+          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || "")
         }))
         .filter((c: { tech_term: string; analogy_term: string }) => {
           const techLower = c.tech_term.toLowerCase().trim();

@@ -266,15 +266,31 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                   const analogyTerm = cleanLabel(concept.analogy_term);
                   const isExpanded = selectedConcept === concept.id;
 
+                  // Get the six_word_definition and narrative_mapping from the concept
+                  const sixWordDef = concept.six_word_definition || '';
+                  const narrativeMapping = concept.narrative_mapping || '';
+
                   return (
                     <div className="animate-fadeIn">
+                      {/* 6-Word Definition - Always visible when concept is active */}
+                      {sixWordDef && (
+                        <div className="text-center mb-6">
+                          <p className={`text-xs uppercase tracking-wider mb-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                            {techTerm}
+                          </p>
+                          <p className={`text-base font-medium italic ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`} style={{ color }}>
+                            "{sixWordDef}"
+                          </p>
+                        </div>
+                      )}
+
                       {/* Pulsing connection indicator */}
                       <div className="text-center">
                         <div
-                          className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center animate-pulse"
-                          style={{ backgroundColor: color + '30', boxShadow: `0 0 30px ${color}50` }}
+                          className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center animate-pulse"
+                          style={{ backgroundColor: color + '30', boxShadow: `0 0 25px ${color}40` }}
                         >
-                          <Zap size={28} style={{ color }} />
+                          <Zap size={24} style={{ color }} />
                         </div>
 
                         <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
@@ -282,12 +298,12 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         </p>
 
                         {/* Importance bar */}
-                        <div className="mt-4 px-4 max-w-[200px] mx-auto">
+                        <div className="mt-3 px-4 max-w-[180px] mx-auto">
                           <div className="flex items-center justify-between text-xs mb-1">
                             <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Importance</span>
                             <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
                           </div>
-                          <div className={`h-2 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
+                          <div className={`h-1.5 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
                             <div
                               className="h-full rounded-full transition-all duration-500"
                               style={{ width: `${importance * 100}%`, backgroundColor: color }}
@@ -298,39 +314,31 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
                       {/* Expanded Content - Only when concept is clicked/selected */}
                       {isExpanded && (
-                        <div className="mt-8 space-y-6 animate-fadeIn">
-                          {/* Why This Works */}
-                          <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
-                            <div className="flex items-center gap-2 mb-3">
-                              <Lightbulb size={16} style={{ color }} />
-                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                Why This Works
-                              </h4>
-                            </div>
-                            <ul className="space-y-2">
-                              {generateWhyBullets(techTerm, analogyTerm, analogyDomain, importance, index).map((bullet, i) => (
-                                <li key={i} className={`text-xs flex items-start gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                                  <span style={{ color }} className="mt-1">•</span>
-                                  <span>{bullet}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* The Bridge Story */}
+                        <div className="mt-6 space-y-4 animate-fadeIn">
+                          {/* The Connection Story - Uses actual narrative_mapping if available */}
                           <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700' : 'bg-gradient-to-br from-amber-50 to-blue-50 border border-neutral-200'}`}>
                             <div className="flex items-center gap-2 mb-3">
                               <BookOpen size={16} style={{ color }} />
                               <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                The Bridge
+                                The Connection
                               </h4>
                             </div>
-                            <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                              {generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
+                            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                              {narrativeMapping || generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
                             </p>
                           </div>
 
-                          {/* Quick Insight */}
+                          {/* Why It Works - Condensed single insight */}
+                          <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+                            <div className="flex items-start gap-2">
+                              <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
+                              <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                Your intuition about <span className="font-medium" style={{ color }}>{analogyTerm}</span> IS the intuition for <span className="font-medium" style={{ color }}>{techTerm}</span>—same pattern, different vocabulary.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Equivalence Badge */}
                           <div className="text-center">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: color + '20' }}>
                               <Sparkles size={12} style={{ color }} />
@@ -345,7 +353,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                       {/* Click hint when hovering but not selected */}
                       {!isExpanded && (
                         <p className={`text-xs mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                          Click to explore why this mapping works
+                          Click to explore the connection
                         </p>
                       )}
                     </div>
