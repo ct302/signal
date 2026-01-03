@@ -23,7 +23,9 @@ import {
   Maximize2,
   Minimize2,
   ClipboardCopy,
-  FileCode
+  FileCode,
+  Type,
+  Palette
 } from 'lucide-react';
 import {
   MasterySession,
@@ -287,6 +289,19 @@ const HEATMAP_COLORS_STAGE1_LIGHT = [
   'bg-yellow-100 text-yellow-700'
 ];
 
+// Color mode text colors (for colorful word highlighting)
+const COLOR_MODE_COLORS_DARK = [
+  'text-red-400', 'text-blue-400', 'text-emerald-400', 'text-purple-400',
+  'text-orange-400', 'text-cyan-400', 'text-pink-400', 'text-lime-400',
+  'text-indigo-400', 'text-rose-400', 'text-teal-400', 'text-amber-400'
+];
+
+const COLOR_MODE_COLORS_LIGHT = [
+  'text-red-600', 'text-blue-600', 'text-emerald-600', 'text-purple-600',
+  'text-orange-600', 'text-cyan-600', 'text-pink-600', 'text-lime-600',
+  'text-indigo-600', 'text-rose-600', 'text-teal-600', 'text-amber-600'
+];
+
 // ============================================
 // STORY CARD COMPONENT
 // ============================================
@@ -307,6 +322,8 @@ const StoryCard: React.FC<{
   const [threshold, setThreshold] = useState(0.3);
   const [showAttentionControls, setShowAttentionControls] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1);
+  const [isColorMode, setIsColorMode] = useState(false);
 
   // Calculate word importance based on keywords and position
   const calculateWordImportance = (word: string, wordIndex: number, totalWords: number): number => {
@@ -399,6 +416,19 @@ const StoryCard: React.FC<{
     );
 
     return isDarkMode ? darkColors[colorIndex] : lightColors[colorIndex];
+  };
+
+  // Get color mode text class based on importance (colorful text highlighting)
+  const getColorModeClass = (importance: number, wordIndex: number): string => {
+    if (!isColorMode) return '';
+    // At 100% threshold, show all words; otherwise only show words above threshold
+    const isImportant = threshold >= 0.99 || importance >= threshold;
+    if (!isImportant) return '';
+
+    const colors = isDarkMode ? COLOR_MODE_COLORS_DARK : COLOR_MODE_COLORS_LIGHT;
+    // Use word index to assign consistent colors across similar importance levels
+    const colorIndex = Math.floor(importance * 10) % colors.length;
+    return colors[colorIndex];
   };
 
   // Render story with importance-based styling
@@ -498,6 +528,7 @@ const StoryCard: React.FC<{
         const importance = calculateWordImportance(token, overallWordIndex, wordCount);
         const styles = getWordStyles(importance, !!matchedKeyword);
         const heatmapClass = getHeatmapClass(importance);
+        const colorModeClass = getColorModeClass(importance, overallWordIndex);
 
         overallWordIndex++;
 
@@ -511,6 +542,7 @@ const StoryCard: React.FC<{
                 ${heatmapClass || (isDarkMode
                   ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
+                ${colorModeClass}
               `}
               style={styles}
               onMouseEnter={(e) => {
@@ -529,7 +561,7 @@ const StoryCard: React.FC<{
         return (
           <span
             key={key}
-            className={heatmapClass}
+            className={`${heatmapClass} ${colorModeClass}`}
             style={styles}
           >
             {token}
@@ -655,6 +687,36 @@ const StoryCard: React.FC<{
                 <span className={`text-xs w-8 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{Math.round(threshold * 100)}%</span>
               </div>
               <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
+              {/* Text Scale Button */}
+              <button
+                onClick={() => {
+                  const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                  const currentIndex = scales.indexOf(textScale);
+                  setTextScale(scales[(currentIndex + 1) % scales.length]);
+                }}
+                className={`p-2 rounded-lg transition-all flex items-center gap-1 ${
+                  textScale > 1
+                    ? 'bg-purple-500 text-white'
+                    : isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
+                }`}
+                title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'}`}
+              >
+                <Type size={18} className={textScale > 1 ? 'animate-pulse' : ''} />
+                <span className="text-xs font-medium">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+              </button>
+              {/* Color Palette Button */}
+              <button
+                onClick={() => setIsColorMode(!isColorMode)}
+                className={`p-2 rounded-lg transition-all ${
+                  isColorMode
+                    ? 'bg-purple-500 text-white'
+                    : isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
+                }`}
+                title={isColorMode ? 'Disable color mode' : 'Enable color mode'}
+              >
+                <Palette size={18} />
+              </button>
+              <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
               <button
                 onClick={onRegenerate}
                 className={`p-2 rounded-lg transition-all ${isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'}`}
@@ -676,7 +738,13 @@ const StoryCard: React.FC<{
         {/* Fullscreen Content */}
         <div className="max-w-4xl mx-auto px-8 pt-24 pb-12">
           {story?.content ? (
-            <div className={`text-lg leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+            <div
+              className={`leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+              style={{
+                fontSize: `${1.125 * textScale}rem`,
+                lineHeight: textScale >= 1.5 ? '1.8' : '1.75'
+              }}
+            >
               {renderStoryWithImportance()}
             </div>
           ) : (
@@ -776,6 +844,43 @@ const StoryCard: React.FC<{
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
+            {/* Text Scale Button */}
+            <button
+              onClick={() => {
+                const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                const currentIndex = scales.indexOf(textScale);
+                setTextScale(scales[(currentIndex + 1) % scales.length]);
+              }}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200 flex items-center gap-1
+                ${textScale > 1
+                  ? 'bg-purple-500 text-white'
+                  : isDarkMode
+                    ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+              `}
+              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'}`}
+            >
+              <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+              <span className="text-xs font-medium">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+            </button>
+
+            {/* Color Palette Button */}
+            <button
+              onClick={() => setIsColorMode(!isColorMode)}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200
+                ${isColorMode
+                  ? 'bg-purple-500 text-white'
+                  : isDarkMode
+                    ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+              `}
+              title={isColorMode ? 'Disable color mode' : 'Enable color mode'}
+            >
+              <Palette size={14} />
+            </button>
+
             {/* Regenerate Button */}
             <button
               onClick={onRegenerate}
@@ -808,7 +913,13 @@ const StoryCard: React.FC<{
       </div>
 
       {/* Story Content */}
-      <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+      <div
+        className={`leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+        style={{
+          fontSize: `${1 * textScale}rem`,
+          lineHeight: textScale >= 1.5 ? '1.8' : '1.75'
+        }}
+      >
         {renderStoryWithImportance()}
       </div>
 
