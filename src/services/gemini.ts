@@ -816,6 +816,7 @@ SPECIFIC DETAILS REQUIRED:
 
 CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
+IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive coverage (Mastery Mode requires 10).
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
 - six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
@@ -1730,27 +1731,33 @@ CRITICAL RULES:
 - MAINTAIN the same players/people from Stage 1 - now show them in action
 - The reader should feel like they're watching a replay of one key moment`,
 
-    3: `STAGE 3 - DEEP DIVE INTO THE MECHANICS (ALL 10 TECHNICAL TERMS):
-Take the SAME specific moment from Stage 2 and go EVEN DEEPER into the mechanics.
+    3: `STAGE 3 - COMPREHENSIVE DEEP DIVE (ALL 10 TECHNICAL TERMS):
+Take the SAME specific moment from Stage 2 and create a COMPREHENSIVE analysis of the mechanics.
 
 PREVIOUS STORY (this is the moment to analyze deeper):
 ${previousStory || '(Generate fresh story)'}
 
-NARRATIVE SCOPE: Now we're breaking down the MECHANICS of that play - the decisions, reactions, timing.
-Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 might be:
-"As Duncan received the entry pass, his body angle created a sealing position. Randolph's footwork
-(basis vectors) determined his defensive options. Tony Allen's rotation speed (rate of change)..."
+NARRATIVE SCOPE: This is the FULL MASTERY story - a detailed breakdown of the entire play/moment.
+Break down EVERY aspect: the setup, the execution, the reactions, the outcome, and the implications.
+Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 provides the complete picture:
+"The play began when Parker initiated the entry pass sequence. Duncan's positioning on the left block
+created a sealing angle (basis vectors) that forced Randolph into a reactive stance. As the ball
+arrived, Duncan's footwork established his pivot point (origin), while his body rotation traced
+an arc (geodesic) through the defense. Tony Allen, reading the play from the weak side, calculated
+his rotation speed (rate of change) against Duncan's spin move..."
 
-ALL 10 TECHNICAL TERMS TO WEAVE IN:
+ALL 10 TECHNICAL TERMS - EVERY ONE MUST APPEAR:
 ${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME MOMENT as Stage 2 - but now examining the underlying mechanics in detail
-- Each term should illuminate WHY things happened the way they did
+- SAME MOMENT as Stage 2 - but now the COMPLETE picture with full detail
+- MUST use ALL 10 technical terms - weave each one naturally into the narrative
+- Each term should illuminate WHY and HOW things happened
 - Use format: "${domain} term (technical term)" for all terms
-- Roughly 180-250 words for the fuller analysis
-- The reader should understand the MECHANICS behind the moment
-- Show how each element (term) contributed to the outcome`
+- LENGTH: 300-400 words - this is the comprehensive mastery version
+- The reader should understand the COMPLETE MECHANICS behind the moment
+- Show the interconnections between all elements (terms)
+- This is the "full replay analysis" that ties everything together`
   };
 
   const prompt = `${webSearchContext}You are creating a ${domain} narrative story to teach "${topic}" through analogy.

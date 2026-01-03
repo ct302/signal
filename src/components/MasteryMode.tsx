@@ -2442,7 +2442,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
         session.currentStage,
         userInput,
         visibleKeywords,
-        analogyText
+        currentStory?.content || analogyText // Use the Mastery story, fallback to original
       );
 
       setCurrentEvaluation(evaluation);
