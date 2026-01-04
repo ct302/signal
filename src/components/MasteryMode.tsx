@@ -46,6 +46,8 @@ import {
   generateMasterySummary,
   regenerateContextualDefinitions
 } from '../services';
+import { useKatex } from '../hooks/useKatex';
+import { renderLatex } from '../utils/latex';
 
 // Cached state for persistence across modal open/close
 export interface MasterySessionCache {
@@ -83,7 +85,8 @@ const KeywordHoverModal: React.FC<{
   isDarkMode: boolean;
   position: { x: number; y: number };
   domainEmoji?: string;
-}> = ({ keyword, stage, isDarkMode, position, domainEmoji = '🏈' }) => {
+  isKatexLoaded: boolean;
+}> = ({ keyword, stage, isDarkMode, position, domainEmoji = '🏈', isKatexLoaded }) => {
   const techDef = stage === 3 ? keyword.techDefinition6 : keyword.techDefinition3;
   const analogyDef = stage === 3 ? keyword.analogyDefinition6 : keyword.analogyDefinition3;
 
@@ -103,7 +106,7 @@ const KeywordHoverModal: React.FC<{
     >
       {/* Term name */}
       <div className={`font-bold text-sm mb-3 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-        {keyword.term}
+        {renderLatex(keyword.term, isKatexLoaded)}
       </div>
 
       {/* Definitions */}
@@ -112,7 +115,7 @@ const KeywordHoverModal: React.FC<{
         <div className="flex items-start gap-2">
           <span className="text-sm">🔬</span>
           <span className={`text-xs leading-relaxed ${isDarkMode ? 'text-cyan-300' : 'text-cyan-700'}`}>
-            {techDef}
+            {renderLatex(techDef, isKatexLoaded)}
           </span>
         </div>
 
@@ -198,7 +201,8 @@ const StoryCard: React.FC<{
   domain: string;
   isLoading: boolean;
   onRegenerate: () => void;
-}> = ({ story, keywords, stage, isDarkMode, domain, isLoading, onRegenerate }) => {
+  isKatexLoaded: boolean;
+}> = ({ story, keywords, stage, isDarkMode, domain, isLoading, onRegenerate, isKatexLoaded }) => {
   const [hoveredKeyword, setHoveredKeyword] = useState<MasteryKeyword | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [attentionMode, setAttentionMode] = useState<AttentionMode>('opacity');
@@ -550,6 +554,7 @@ const StoryCard: React.FC<{
             stage={stage}
             isDarkMode={isDarkMode}
             position={hoverPosition}
+            isKatexLoaded={isKatexLoaded}
           />
         )}
       </div>
@@ -669,6 +674,7 @@ const StoryCard: React.FC<{
           stage={stage}
           isDarkMode={isDarkMode}
           position={hoverPosition}
+          isKatexLoaded={isKatexLoaded}
         />
       )}
     </div>
@@ -932,7 +938,8 @@ const KeywordPanel: React.FC<{
   isDarkMode: boolean;
   domain: string;
   detectedKeywords: string[];
-}> = ({ keywords, stage, isDarkMode, domain, detectedKeywords }) => {
+  isKatexLoaded: boolean;
+}> = ({ keywords, stage, isDarkMode, domain, detectedKeywords, isKatexLoaded }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
   if (stage === 1) return null;
@@ -1024,7 +1031,7 @@ const KeywordPanel: React.FC<{
                       {index + 1}
                     </span>
                     <span className={`font-bold text-sm ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-                      {keyword.term}
+                      {renderLatex(keyword.term, isKatexLoaded)}
                     </span>
                   </div>
 
@@ -1039,7 +1046,7 @@ const KeywordPanel: React.FC<{
                       TECH:
                     </span>
                     <span className={`text-xs ml-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                      {techDef}
+                      {renderLatex(techDef, isKatexLoaded)}
                     </span>
                   </div>
 
@@ -1183,7 +1190,8 @@ const FeedbackPanel: React.FC<{
 const GlossaryView: React.FC<{
   keywords: MasteryKeyword[];
   isDarkMode: boolean;
-}> = ({ keywords, isDarkMode }) => {
+  isKatexLoaded: boolean;
+}> = ({ keywords, isDarkMode, isKatexLoaded }) => {
   return (
     <div className="space-y-3">
       <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
@@ -1198,7 +1206,7 @@ const GlossaryView: React.FC<{
           >
             <div className="flex items-center gap-3 mb-3">
               <span className={`font-bold text-lg ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                {keyword.term}
+                {renderLatex(keyword.term, isKatexLoaded)}
               </span>
               <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>↔</span>
               <span className={`font-bold text-lg ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
@@ -1213,7 +1221,7 @@ const GlossaryView: React.FC<{
                   Technical (3-word)
                 </div>
                 <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.techDefinition3}
+                  {renderLatex(keyword.techDefinition3, isKatexLoaded)}
                 </div>
               </div>
 
@@ -1232,7 +1240,7 @@ const GlossaryView: React.FC<{
                   Technical (6-word)
                 </div>
                 <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.techDefinition6}
+                  {renderLatex(keyword.techDefinition6, isKatexLoaded)}
                 </div>
               </div>
 
@@ -1259,7 +1267,8 @@ const OverviewMode: React.FC<{
   historyEntry: CompleteMasteryHistory;
   isDarkMode: boolean;
   onClose: () => void;
-}> = ({ historyEntry, isDarkMode, onClose }) => {
+  isKatexLoaded: boolean;
+}> = ({ historyEntry, isDarkMode, onClose, isKatexLoaded }) => {
   const [activeTab, setActiveTab] = useState<'journey' | 'glossary'>('journey');
   const [copied, setCopied] = useState(false);
   const [obsidianCopied, setObsidianCopied] = useState(false);
@@ -1870,7 +1879,7 @@ const OverviewMode: React.FC<{
               })}
             </div>
           ) : (
-            <GlossaryView keywords={historyEntry.glossary} isDarkMode={isDarkMode} />
+            <GlossaryView keywords={historyEntry.glossary} isDarkMode={isDarkMode} isKatexLoaded={isKatexLoaded} />
           )}
         </div>
       </div>
@@ -2034,6 +2043,9 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
   const [existingMastery, setExistingMastery] = useState<CompleteMasteryHistory | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // KaTeX loading state for LaTeX rendering
+  const isKatexLoaded = useKatex();
 
   // Notify parent of state changes for persistence
   useEffect(() => {
@@ -2417,12 +2429,12 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
 
   // Show overview for existing mastery
   if (showOverview && existingMastery) {
-    return <OverviewMode historyEntry={existingMastery} isDarkMode={isDarkMode} onClose={onClose} />;
+    return <OverviewMode historyEntry={existingMastery} isDarkMode={isDarkMode} onClose={onClose} isKatexLoaded={isKatexLoaded} />;
   }
 
   // Show overview for just completed mastery
   if (showOverview && completedHistory) {
-    return <OverviewMode historyEntry={completedHistory} isDarkMode={isDarkMode} onClose={onClose} />;
+    return <OverviewMode historyEntry={completedHistory} isDarkMode={isDarkMode} onClose={onClose} isKatexLoaded={isKatexLoaded} />;
   }
 
   // Show celebration
@@ -2523,6 +2535,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
             domain={domain}
             isLoading={isGeneratingStory}
             onRegenerate={handleRegenerateStory}
+            isKatexLoaded={isKatexLoaded}
           />
 
           {/* Stage Instructions */}
@@ -2539,6 +2552,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
             isDarkMode={isDarkMode}
             domain={domain}
             detectedKeywords={detectedKeywords}
+            isKatexLoaded={isKatexLoaded}
           />
 
           {/* Input Area */}
