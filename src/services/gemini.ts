@@ -1710,13 +1710,22 @@ HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
 - Feature at least 2-3 NAMED INDIVIDUALS that ${domain} enthusiasts would recognize`,
 
     2: `STAGE 2 - ZOOM INTO A SPECIFIC MOMENT (6 TECHNICAL TERMS):
-Take the SAME game/event from Stage 1 but ZOOM INTO A SPECIFIC PLAY/MOMENT within it.
 
-PREVIOUS STORY (this is the game/event to zoom into):
-${previousStory || '(Generate fresh story)'}
+⚠️ MANDATORY CONTINUITY - READ THE PREVIOUS STORY FIRST:
+---
+${previousStory || '(No previous story - generate fresh)'}
+---
 
-NARRATIVE SCOPE: Now focus on ONE SPECIFIC PLAY or MOMENT within that game.
-Example: If Stage 1 was about "Grizzlies vs Spurs series", Stage 2 might be:
+CRITICAL CONTINUITY REQUIREMENT:
+You are EXPANDING the story above - NOT creating a new one.
+- SAME setting/location as the previous story
+- SAME people/characters/entities as the previous story
+- SAME event/situation/scenario as the previous story
+You are zooming INTO a moment from what already exists.
+DO NOT switch to a different game, episode, scene, event, or scenario.
+
+NARRATIVE SCOPE: Focus on ONE SPECIFIC MOMENT within the story above.
+Example: If Stage 1 was about "Grizzlies vs Spurs series", Stage 2 zooms into:
 "In the 4th quarter of Game 3, Tim Duncan posted up Zach Randolph on the left block.
 As Duncan made his move, Tony Allen rotated from the weak side..."
 
@@ -1724,33 +1733,41 @@ TECHNICAL TERMS TO WEAVE IN (use their ${domain} equivalents, with technical ter
 ${keywords.slice(0, 6).map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME GAME/EVENT as Stage 1 - but now we're watching ONE specific play in slow motion
+- MUST continue the EXACT same scenario from the previous story
 - The terms should describe what's happening in THIS specific moment
 - Use format: "${domain} term (technical term)" when introducing each term
 - Roughly 150-200 words
-- MAINTAIN the same players/people from Stage 1 - now show them in action
+- MAINTAIN the same people/characters from Stage 1 - now show them in action
 - The reader should feel like they're watching a replay of one key moment`,
 
     3: `STAGE 3 - COMPREHENSIVE DEEP DIVE (ALL 10 TECHNICAL TERMS):
-Take the SAME specific moment from Stage 2 and create a COMPREHENSIVE analysis of the mechanics.
 
-PREVIOUS STORY (this is the moment to analyze deeper):
-${previousStory || '(Generate fresh story)'}
+⚠️⚠️ ABSOLUTE CONTINUITY REQUIREMENT - THIS IS THE STORY YOU MUST EXPAND:
+===================================================================
+${previousStory || '(No previous story - generate fresh)'}
+===================================================================
 
-NARRATIVE SCOPE: This is the FULL MASTERY story - a detailed breakdown of the entire play/moment.
+🚫 DO NOT CREATE A NEW STORY. You are DEEPENING the story above.
+🚫 DO NOT switch to a different game, match, episode, scene, recipe, performance, or event.
+🚫 DO NOT introduce new main characters/people who weren't in the previous story.
+
+WHAT YOU MUST DO:
+✓ Continue with the EXACT SAME setting from the story above
+✓ Feature the EXACT SAME people/characters from the story above
+✓ Analyze the EXACT SAME moment in MORE DETAIL
+✓ Think of this as "director's commentary" on the scene above
+
+NARRATIVE SCOPE: This is a detailed breakdown of the SAME moment from Stage 2.
 Break down EVERY aspect: the setup, the execution, the reactions, the outcome, and the implications.
 Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 provides the complete picture:
 "The play began when Parker initiated the entry pass sequence. Duncan's positioning on the left block
-created a sealing angle (basis vectors) that forced Randolph into a reactive stance. As the ball
-arrived, Duncan's footwork established his pivot point (origin), while his body rotation traced
-an arc (geodesic) through the defense. Tony Allen, reading the play from the weak side, calculated
-his rotation speed (rate of change) against Duncan's spin move..."
+created a sealing angle (basis vectors) that forced Randolph into a reactive stance..."
 
 ALL 10 TECHNICAL TERMS - EVERY ONE MUST APPEAR:
 ${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME MOMENT as Stage 2 - but now the COMPLETE picture with full detail
+- SAME MOMENT as Stage 2 - you are adding depth, NOT changing the story
 - MUST use ALL 10 technical terms - weave each one naturally into the narrative
 - Each term should illuminate WHY and HOW things happened
 - Use format: "${domain} term (technical term)" for all terms

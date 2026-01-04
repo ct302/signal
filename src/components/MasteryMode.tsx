@@ -504,7 +504,6 @@ const StoryCard: React.FC<{
                 }
               }}
               onMouseLeave={() => setHoveredKeyword(null)}
-              title={matchingKeyword ? `${matchingKeyword.term}: Click to see definition` : undefined}
             >
               {part}
             </span>
@@ -550,7 +549,6 @@ const StoryCard: React.FC<{
                 setHoverPosition({ x: e.clientX, y: e.clientY });
               }}
               onMouseLeave={() => setHoveredKeyword(null)}
-              title={`Hover for definition of "${matchedKeyword.term}"`}
             >
               {token}
             </span>
