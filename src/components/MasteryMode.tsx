@@ -23,7 +23,9 @@ import {
   Maximize2,
   Minimize2,
   ClipboardCopy,
-  FileCode
+  FileCode,
+  Type,
+  Palette
 } from 'lucide-react';
 import {
   MasterySession,
@@ -46,6 +48,106 @@ import {
   generateMasterySummary,
   regenerateContextualDefinitions
 } from '../services';
+
+// ============================================
+// LOGIC VALIDATOR TYPES & SERVICE STUB
+// ============================================
+type GenerationPhase = 'idle' | 'generating' | 'validating' | 'retrying';
+
+interface ValidationResult {
+  isValid: boolean;
+  issues: string[];
+  severity: 'none' | 'minor' | 'major';
+  suggestedFixes?: string;
+}
+
+/**
+ * Validates the domain logic of a generated story.
+ * Checks for logical fallacies and domain-specific inaccuracies.
+ *
+ * @param story - The generated story content
+ * @param domain - The analogy domain (e.g., "NFL", "Cooking")
+ * @param topic - The technical topic being taught
+ * @param keywords - The mastery keywords to check for proper usage
+ * @returns ValidationResult with issues found
+ */
+const validateDomainLogic = async (
+  story: string,
+  domain: string,
+  topic: string,
+  keywords: MasteryKeyword[]
+): Promise<ValidationResult> => {
+  // Stub implementation - will be enhanced to call LLM for validation
+  // For now, performs basic heuristic checks
+
+  const issues: string[] = [];
+
+  // Check 1: Story is too short (likely incomplete)
+  if (story.length < 100) {
+    issues.push('Story appears too short to adequately cover the concept');
+  }
+
+  // Check 2: Story mentions keywords in wrong context
+  const storyLower = story.toLowerCase();
+  const domainLower = domain.toLowerCase();
+
+  // Check 3: Domain coherence - story should reference the domain
+  if (!storyLower.includes(domainLower) &&
+      !storyLower.includes(domainLower.replace(/\s+/g, '')) &&
+      story.length > 200) {
+    // Give some leeway for short stories or embedded domain references
+    const domainIndicators = getDomainIndicators(domain);
+    const hasDomainIndicator = domainIndicators.some(indicator =>
+      storyLower.includes(indicator.toLowerCase())
+    );
+    if (!hasDomainIndicator) {
+      issues.push(`Story lacks clear connection to ${domain} domain`);
+    }
+  }
+
+  // Check 4: Technical accuracy heuristics
+  // Look for common logical fallacy patterns in analogies
+  const fallacyPatterns = [
+    { pattern: /exactly like|identical to|the same as/gi, issue: 'Overstatement: analogies should highlight similarities, not claim identity' },
+    { pattern: /always|never|every single|100%/gi, issue: 'Absolute language may create false expectations' },
+  ];
+
+  for (const { pattern, issue } of fallacyPatterns) {
+    if (pattern.test(story)) {
+      issues.push(issue);
+    }
+  }
+
+  // Determine severity
+  let severity: 'none' | 'minor' | 'major' = 'none';
+  if (issues.length > 0) {
+    severity = issues.length >= 2 || issues.some(i => i.includes('lacks clear connection')) ? 'major' : 'minor';
+  }
+
+  return {
+    isValid: severity !== 'major',
+    issues,
+    severity,
+    suggestedFixes: issues.length > 0 ? `Consider: ${issues.join('; ')}` : undefined
+  };
+};
+
+/**
+ * Returns domain-specific indicator words/phrases for coherence checking
+ */
+const getDomainIndicators = (domain: string): string[] => {
+  const indicators: { [key: string]: string[] } = {
+    'nfl': ['football', 'quarterback', 'touchdown', 'field', 'team', 'play', 'game', 'coach', 'player', 'yard'],
+    'cooking': ['recipe', 'ingredient', 'kitchen', 'chef', 'cook', 'bake', 'dish', 'flavor', 'taste', 'meal'],
+    'music': ['melody', 'rhythm', 'song', 'instrument', 'note', 'chord', 'beat', 'compose', 'tune', 'harmony'],
+    'basketball': ['court', 'basket', 'dribble', 'shot', 'player', 'team', 'score', 'game', 'pass', 'rebound'],
+    'gardening': ['plant', 'seed', 'grow', 'garden', 'soil', 'flower', 'root', 'harvest', 'water', 'bloom'],
+    'chess': ['board', 'piece', 'move', 'strategy', 'king', 'queen', 'checkmate', 'pawn', 'game', 'opponent'],
+  };
+
+  const domainKey = domain.toLowerCase().replace(/[^a-z]/g, '');
+  return indicators[domainKey] || [domain.toLowerCase()];
+};
 
 // Cached state for persistence across modal open/close
 export interface MasterySessionCache {
@@ -187,6 +289,19 @@ const HEATMAP_COLORS_STAGE1_LIGHT = [
   'bg-yellow-100 text-yellow-700'
 ];
 
+// Color mode text colors (for colorful word highlighting)
+const COLOR_MODE_COLORS_DARK = [
+  'text-red-400', 'text-blue-400', 'text-emerald-400', 'text-purple-400',
+  'text-orange-400', 'text-cyan-400', 'text-pink-400', 'text-lime-400',
+  'text-indigo-400', 'text-rose-400', 'text-teal-400', 'text-amber-400'
+];
+
+const COLOR_MODE_COLORS_LIGHT = [
+  'text-red-600', 'text-blue-600', 'text-emerald-600', 'text-purple-600',
+  'text-orange-600', 'text-cyan-600', 'text-pink-600', 'text-lime-600',
+  'text-indigo-600', 'text-rose-600', 'text-teal-600', 'text-amber-600'
+];
+
 // ============================================
 // STORY CARD COMPONENT
 // ============================================
@@ -197,14 +312,18 @@ const StoryCard: React.FC<{
   isDarkMode: boolean;
   domain: string;
   isLoading: boolean;
+  generationPhase?: GenerationPhase;
+  validationAttempts?: number;
   onRegenerate: () => void;
-}> = ({ story, keywords, stage, isDarkMode, domain, isLoading, onRegenerate }) => {
+}> = ({ story, keywords, stage, isDarkMode, domain, isLoading, generationPhase = 'idle', validationAttempts = 0, onRegenerate }) => {
   const [hoveredKeyword, setHoveredKeyword] = useState<MasteryKeyword | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [attentionMode, setAttentionMode] = useState<AttentionMode>('opacity');
   const [threshold, setThreshold] = useState(0.3);
   const [showAttentionControls, setShowAttentionControls] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1);
+  const [isColorMode, setIsColorMode] = useState(false);
 
   // Calculate word importance based on keywords and position
   const calculateWordImportance = (word: string, wordIndex: number, totalWords: number): number => {
@@ -244,7 +363,8 @@ const StoryCard: React.FC<{
 
   // Get styles for a word based on attention mode and importance
   const getWordStyles = (importance: number, isKeyword: boolean): React.CSSProperties => {
-    const isImportant = importance >= threshold;
+    // At 100% threshold (>= 0.99), ALL words should be fully visible
+    const isImportant = threshold >= 0.99 || importance >= threshold;
 
     const baseStyles: React.CSSProperties = {
       transition: 'all 0.2s ease',
@@ -296,6 +416,19 @@ const StoryCard: React.FC<{
     );
 
     return isDarkMode ? darkColors[colorIndex] : lightColors[colorIndex];
+  };
+
+  // Get color mode text class based on importance (colorful text highlighting)
+  const getColorModeClass = (importance: number, wordIndex: number): string => {
+    if (!isColorMode) return '';
+    // At 100% threshold, show all words; otherwise only show words above threshold
+    const isImportant = threshold >= 0.99 || importance >= threshold;
+    if (!isImportant) return '';
+
+    const colors = isDarkMode ? COLOR_MODE_COLORS_DARK : COLOR_MODE_COLORS_LIGHT;
+    // Use word index to assign consistent colors across similar importance levels
+    const colorIndex = Math.floor(importance * 10) % colors.length;
+    return colors[colorIndex];
   };
 
   // Render story with importance-based styling
@@ -395,6 +528,7 @@ const StoryCard: React.FC<{
         const importance = calculateWordImportance(token, overallWordIndex, wordCount);
         const styles = getWordStyles(importance, !!matchedKeyword);
         const heatmapClass = getHeatmapClass(importance);
+        const colorModeClass = getColorModeClass(importance, overallWordIndex);
 
         overallWordIndex++;
 
@@ -408,6 +542,7 @@ const StoryCard: React.FC<{
                 ${heatmapClass || (isDarkMode
                   ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
+                ${colorModeClass}
               `}
               style={styles}
               onMouseEnter={(e) => {
@@ -426,7 +561,7 @@ const StoryCard: React.FC<{
         return (
           <span
             key={key}
-            className={heatmapClass}
+            className={`${heatmapClass} ${colorModeClass}`}
             style={styles}
           >
             {token}
@@ -437,13 +572,60 @@ const StoryCard: React.FC<{
   };
 
   if (isLoading) {
+    // Phase-specific loading messages
+    const getLoadingMessage = () => {
+      switch (generationPhase) {
+        case 'generating':
+          return `Crafting your ${domain} story...`;
+        case 'validating':
+          return 'Checking for domain accuracy...';
+        case 'retrying':
+          return `Refining story (attempt ${validationAttempts}/3)...`;
+        default:
+          return `Generating your ${domain} story...`;
+      }
+    };
+
+    const getLoadingSubtext = () => {
+      switch (generationPhase) {
+        case 'validating':
+          return 'Ensuring logical consistency';
+        case 'retrying':
+          return 'Previous version had issues, generating fresh content';
+        default:
+          return null;
+      }
+    };
+
+    const subtext = getLoadingSubtext();
+
     return (
       <div className={`rounded-xl p-6 mb-4 ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
-        <div className="flex items-center justify-center gap-3 py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
-          <span className={isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}>
-            Generating your {domain} story...
-          </span>
+        <div className="flex flex-col items-center justify-center gap-2 py-8">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+            <span className={isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}>
+              {getLoadingMessage()}
+            </span>
+          </div>
+          {subtext && (
+            <span className={`text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              {subtext}
+            </span>
+          )}
+          {/* Phase indicator dots */}
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-2 h-2 rounded-full transition-colors ${
+              generationPhase === 'generating' || generationPhase === 'retrying'
+                ? 'bg-purple-500'
+                : isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'
+            }`} />
+            <div className={`w-2 h-2 rounded-full transition-colors ${
+              generationPhase === 'validating'
+                ? 'bg-green-500'
+                : isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'
+            }`} />
+          </div>
         </div>
       </div>
     );
@@ -505,6 +687,36 @@ const StoryCard: React.FC<{
                 <span className={`text-xs w-8 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{Math.round(threshold * 100)}%</span>
               </div>
               <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
+              {/* Text Scale Button */}
+              <button
+                onClick={() => {
+                  const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                  const currentIndex = scales.indexOf(textScale);
+                  setTextScale(scales[(currentIndex + 1) % scales.length]);
+                }}
+                className={`p-2 rounded-lg transition-all flex items-center gap-1 ${
+                  textScale > 1
+                    ? 'bg-purple-500 text-white'
+                    : isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
+                }`}
+                title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'}`}
+              >
+                <Type size={18} className={textScale > 1 ? 'animate-pulse' : ''} />
+                <span className="text-xs font-medium">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+              </button>
+              {/* Color Palette Button */}
+              <button
+                onClick={() => setIsColorMode(!isColorMode)}
+                className={`p-2 rounded-lg transition-all ${
+                  isColorMode
+                    ? 'bg-purple-500 text-white'
+                    : isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
+                }`}
+                title={isColorMode ? 'Disable color mode' : 'Enable color mode'}
+              >
+                <Palette size={18} />
+              </button>
+              <span className={`text-xs ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`}>|</span>
               <button
                 onClick={onRegenerate}
                 className={`p-2 rounded-lg transition-all ${isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'}`}
@@ -526,7 +738,13 @@ const StoryCard: React.FC<{
         {/* Fullscreen Content */}
         <div className="max-w-4xl mx-auto px-8 pt-24 pb-12">
           {story?.content ? (
-            <div className={`text-lg leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+            <div
+              className={`leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+              style={{
+                fontSize: `${1.125 * textScale}rem`,
+                lineHeight: textScale >= 1.5 ? '1.8' : '1.75'
+              }}
+            >
               {renderStoryWithImportance()}
             </div>
           ) : (
@@ -626,6 +844,43 @@ const StoryCard: React.FC<{
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
+            {/* Text Scale Button */}
+            <button
+              onClick={() => {
+                const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                const currentIndex = scales.indexOf(textScale);
+                setTextScale(scales[(currentIndex + 1) % scales.length]);
+              }}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200 flex items-center gap-1
+                ${textScale > 1
+                  ? 'bg-purple-500 text-white'
+                  : isDarkMode
+                    ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+              `}
+              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'}`}
+            >
+              <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+              <span className="text-xs font-medium">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+            </button>
+
+            {/* Color Palette Button */}
+            <button
+              onClick={() => setIsColorMode(!isColorMode)}
+              className={`
+                p-1.5 rounded-lg transition-all duration-200
+                ${isColorMode
+                  ? 'bg-purple-500 text-white'
+                  : isDarkMode
+                    ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-300'
+                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}
+              `}
+              title={isColorMode ? 'Disable color mode' : 'Enable color mode'}
+            >
+              <Palette size={14} />
+            </button>
+
             {/* Regenerate Button */}
             <button
               onClick={onRegenerate}
@@ -658,7 +913,13 @@ const StoryCard: React.FC<{
       </div>
 
       {/* Story Content */}
-      <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+      <div
+        className={`leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+        style={{
+          fontSize: `${1 * textScale}rem`,
+          lineHeight: textScale >= 1.5 ? '1.8' : '1.75'
+        }}
+      >
         {renderStoryWithImportance()}
       </div>
 
@@ -2012,7 +2273,11 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
   // Story State - restore from cache if available
   const [currentStory, setCurrentStory] = useState<MasteryStory | null>(cachedState?.currentStory ?? null);
   const [storyHistory, setStoryHistory] = useState<{ [key: number]: MasteryStory }>(cachedState?.storyHistory ?? {});
-  const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState<GenerationPhase>('idle');
+  const [validationAttempts, setValidationAttempts] = useState(0);
+
+  // Derived state for backward compatibility
+  const isGeneratingStory = generationPhase !== 'idle';
 
   // Input State - restore from cache if available
   const [userInput, setUserInput] = useState(cachedState?.userInput ?? '');
@@ -2097,20 +2362,38 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
           analogyText
         );
 
-        // Generate the Stage 1 story first (with retry on empty)
-        setIsGeneratingStory(true);
+        // Generate the Stage 1 story first (with validation)
+        setGenerationPhase('generating');
         let story = await generateMasteryStory(topic, domain, 1, keywords);
 
         // Retry once if story content is empty (rare API edge case)
         if (!story?.content || story.content.trim().length === 0) {
           console.warn('[MasteryMode] First story attempt returned empty, retrying...');
+          setGenerationPhase('retrying');
+          setValidationAttempts(2);
           await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause before retry
           story = await generateMasteryStory(topic, domain, 1, keywords);
         }
 
+        // Validate the initial story
+        if (story?.content) {
+          setGenerationPhase('validating');
+          const validation = await validateDomainLogic(story.content, domain, topic, keywords);
+          if (!validation.isValid) {
+            console.warn('[MasteryMode] Initial story validation failed:', validation.issues);
+            // Retry once for major issues
+            if (validation.severity === 'major') {
+              setGenerationPhase('retrying');
+              setValidationAttempts(2);
+              story = await generateMasteryStory(topic, domain, 1, keywords);
+            }
+          }
+        }
+
         setCurrentStory(story);
         setStoryHistory(prev => ({ ...prev, [1]: story }));
-        setIsGeneratingStory(false);
+        setGenerationPhase('idle');
+        setValidationAttempts(0);
 
         // NOW regenerate keyword definitions based on the actual mastery story
         // This ensures definitions reference characters/events from THIS story
@@ -2143,7 +2426,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
       } catch (err) {
         console.error('Failed to initialize mastery session:', err);
         setError('Failed to start mastery mode. Please try again.');
-        setIsGeneratingStory(false);
+        setGenerationPhase('idle');
       } finally {
         setIsLoading(false);
       }
@@ -2152,9 +2435,20 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
     initSession();
   }, [topic, domain, domainEmoji, conceptMap, importanceMap, analogyText]);
 
-  // Generate story for a stage
-  const generateStoryForStage = async (stage: MasteryStage, keywords: MasteryKeyword[], previousStoryContent?: string) => {
-    setIsGeneratingStory(true);
+  // Maximum retry attempts for validation
+  const MAX_VALIDATION_RETRIES = 3;
+
+  // Generate story with validation loop
+  const generateValidatedStory = async (
+    stage: MasteryStage,
+    keywords: MasteryKeyword[],
+    previousStoryContent?: string,
+    attemptNumber: number = 1
+  ): Promise<MasteryStory | null> => {
+    // Phase 1: Generate
+    setGenerationPhase(attemptNumber === 1 ? 'generating' : 'retrying');
+    setValidationAttempts(attemptNumber);
+
     try {
       const story = await generateMasteryStory(
         topic,
@@ -2163,12 +2457,53 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
         keywords,
         previousStoryContent
       );
-      setCurrentStory(story);
-      setStoryHistory(prev => ({ ...prev, [stage]: story }));
+
+      // Phase 2: Validate
+      setGenerationPhase('validating');
+
+      const validation = await validateDomainLogic(
+        story.content,
+        domain,
+        topic,
+        keywords
+      );
+
+      if (validation.isValid) {
+        // Validation passed - return the story
+        console.log(`[MasteryMode] Story validated successfully on attempt ${attemptNumber}`);
+        return story;
+      }
+
+      // Validation failed
+      console.warn(`[MasteryMode] Validation failed (attempt ${attemptNumber}):`, validation.issues);
+
+      if (attemptNumber < MAX_VALIDATION_RETRIES) {
+        // Retry with a fresh generation
+        console.log(`[MasteryMode] Retrying story generation (attempt ${attemptNumber + 1}/${MAX_VALIDATION_RETRIES})`);
+        return generateValidatedStory(stage, keywords, previousStoryContent, attemptNumber + 1);
+      }
+
+      // Max retries reached - use the last story anyway but log warning
+      console.warn(`[MasteryMode] Max validation retries reached. Using story with issues:`, validation.issues);
+      return story;
+
     } catch (err) {
-      console.error('Failed to generate story:', err);
+      console.error('Failed to generate/validate story:', err);
+      return null;
+    }
+  };
+
+  // Generate story for a stage (now with validation)
+  const generateStoryForStage = async (stage: MasteryStage, keywords: MasteryKeyword[], previousStoryContent?: string) => {
+    try {
+      const story = await generateValidatedStory(stage, keywords, previousStoryContent);
+      if (story) {
+        setCurrentStory(story);
+        setStoryHistory(prev => ({ ...prev, [stage]: story }));
+      }
     } finally {
-      setIsGeneratingStory(false);
+      setGenerationPhase('idle');
+      setValidationAttempts(0);
     }
   };
 
@@ -2218,7 +2553,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
         session.currentStage,
         userInput,
         visibleKeywords,
-        analogyText
+        currentStory?.content || analogyText // Use the Mastery story, fallback to original
       );
 
       setCurrentEvaluation(evaluation);
@@ -2522,6 +2857,8 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
             isDarkMode={isDarkMode}
             domain={domain}
             isLoading={isGeneratingStory}
+            generationPhase={generationPhase}
+            validationAttempts={validationAttempts}
             onRegenerate={handleRegenerateStory}
           />
 

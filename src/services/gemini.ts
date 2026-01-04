@@ -667,6 +667,14 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
   ],
+  "attention_map": {
+    "tech": [
+      {"word": "each significant word from technical_explanation", "weight": 0.0-1.0}
+    ],
+    "analogy": [
+      {"word": "each significant word from analogy_explanation", "weight": 0.0-1.0}
+    ]
+  },
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
@@ -808,6 +816,7 @@ SPECIFIC DETAILS REQUIRED:
 
 CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
+IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive coverage (Mastery Mode requires 10).
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
 - six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
@@ -829,12 +838,45 @@ The "condensed" object provides a stripped-down, first-principles view of the co
   - If you removed any bullet, understanding would be incomplete
   - Order them from most fundamental to most nuanced
 
+ATTENTION_MAP RULES (CRITICAL FOR VISUAL HIGHLIGHTING):
+The attention_map provides word-level importance weights for the attention-based highlighting system.
+This simulates transformer attention - showing which words carry semantic weight vs. which are just connectors.
+
+WEIGHT GUIDELINES:
+- 1.0: Core concept terms, key technical vocabulary, central ideas (e.g., "derivative", "quarterback", "algorithm")
+- 0.8-0.9: Important supporting terms, action verbs central to meaning (e.g., "calculates", "intercepted", "transforms")
+- 0.6-0.7: Descriptive words that add meaning (e.g., "instantaneous", "crucial", "complex")
+- 0.4-0.5: Common verbs and adjectives (e.g., "shows", "different", "important")
+- 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
+- 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
+
+MULTI-WORD ENTITY RULE (CRITICAL):
+Keep multi-word entities as SINGLE entries - they are ONE semantic unit:
+- Full names: "Tom Brady" (not separate "Tom" and "Brady")
+- Compound terms: "running back", "offensive line", "gradient descent"
+- Technical phrases: "covariant derivative", "Taylor series", "neural network"
+- Place names: "Gillette Stadium", "New England"
+- Team names: "New England Patriots" or just "Patriots"
+Examples:
+  {"word": "Tom Brady", "weight": 0.9}
+  {"word": "gradient descent", "weight": 1.0}
+  {"word": "Super Bowl", "weight": 0.85}
+
+REQUIREMENTS:
+- Include EVERY content word from both explanations (not just key terms)
+- For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
+- Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
+- Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
 3. importance_map should include ALL significant terms (15-25 items)
-4. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
-5. Return ONLY valid JSON, no markdown code blocks`;
+4. attention_map must cover ALL content words (50-100+ per explanation)
+5. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
+6. Return ONLY valid JSON, no markdown code blocks`;
 
   // Build search prompt to guide how web results are used
   // For granular domains, constrain to the specific event
@@ -1689,27 +1731,33 @@ CRITICAL RULES:
 - MAINTAIN the same players/people from Stage 1 - now show them in action
 - The reader should feel like they're watching a replay of one key moment`,
 
-    3: `STAGE 3 - DEEP DIVE INTO THE MECHANICS (ALL 10 TECHNICAL TERMS):
-Take the SAME specific moment from Stage 2 and go EVEN DEEPER into the mechanics.
+    3: `STAGE 3 - COMPREHENSIVE DEEP DIVE (ALL 10 TECHNICAL TERMS):
+Take the SAME specific moment from Stage 2 and create a COMPREHENSIVE analysis of the mechanics.
 
 PREVIOUS STORY (this is the moment to analyze deeper):
 ${previousStory || '(Generate fresh story)'}
 
-NARRATIVE SCOPE: Now we're breaking down the MECHANICS of that play - the decisions, reactions, timing.
-Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 might be:
-"As Duncan received the entry pass, his body angle created a sealing position. Randolph's footwork
-(basis vectors) determined his defensive options. Tony Allen's rotation speed (rate of change)..."
+NARRATIVE SCOPE: This is the FULL MASTERY story - a detailed breakdown of the entire play/moment.
+Break down EVERY aspect: the setup, the execution, the reactions, the outcome, and the implications.
+Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 provides the complete picture:
+"The play began when Parker initiated the entry pass sequence. Duncan's positioning on the left block
+created a sealing angle (basis vectors) that forced Randolph into a reactive stance. As the ball
+arrived, Duncan's footwork established his pivot point (origin), while his body rotation traced
+an arc (geodesic) through the defense. Tony Allen, reading the play from the weak side, calculated
+his rotation speed (rate of change) against Duncan's spin move..."
 
-ALL 10 TECHNICAL TERMS TO WEAVE IN:
+ALL 10 TECHNICAL TERMS - EVERY ONE MUST APPEAR:
 ${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME MOMENT as Stage 2 - but now examining the underlying mechanics in detail
-- Each term should illuminate WHY things happened the way they did
+- SAME MOMENT as Stage 2 - but now the COMPLETE picture with full detail
+- MUST use ALL 10 technical terms - weave each one naturally into the narrative
+- Each term should illuminate WHY and HOW things happened
 - Use format: "${domain} term (technical term)" for all terms
-- Roughly 180-250 words for the fuller analysis
-- The reader should understand the MECHANICS behind the moment
-- Show how each element (term) contributed to the outcome`
+- LENGTH: 300-400 words - this is the comprehensive mastery version
+- The reader should understand the COMPLETE MECHANICS behind the moment
+- Show the interconnections between all elements (terms)
+- This is the "full replay analysis" that ties everything together`
   };
 
   const prompt = `${webSearchContext}You are creating a ${domain} narrative story to teach "${topic}" through analogy.
