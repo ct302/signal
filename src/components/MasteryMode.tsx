@@ -14,7 +14,6 @@ import {
   BookOpen,
   MessageCircle,
   Dices,
-  Share2,
   Medal,
   Eye,
   Check,
@@ -23,7 +22,6 @@ import {
   Maximize2,
   Minimize2,
   ClipboardCopy,
-  FileCode,
   Type,
   Palette
 } from 'lucide-react';
@@ -1437,81 +1435,6 @@ const FeedbackPanel: React.FC<{
 };
 
 // ============================================
-// GLOSSARY VIEW COMPONENT
-// ============================================
-const GlossaryView: React.FC<{
-  keywords: MasteryKeyword[];
-  isDarkMode: boolean;
-}> = ({ keywords, isDarkMode }) => {
-  return (
-    <div className="space-y-3">
-      <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-        Complete Glossary
-      </h3>
-
-      <div className="grid gap-3">
-        {keywords.map((keyword) => (
-          <div
-            key={keyword.id}
-            className={`p-4 rounded-xl ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <span className={`font-bold text-lg ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                {keyword.term}
-              </span>
-              <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>↔</span>
-              <span className={`font-bold text-lg ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                {keyword.analogyTerm}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {/* 3-word definitions */}
-              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
-                <div className={`text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                  Technical (3-word)
-                </div>
-                <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.techDefinition3}
-                </div>
-              </div>
-
-              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
-                <div className={`text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                  Analogy (3-word)
-                </div>
-                <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.analogyDefinition3}
-                </div>
-              </div>
-
-              {/* 6-word definitions */}
-              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
-                <div className={`text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                  Technical (6-word)
-                </div>
-                <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.techDefinition6}
-                </div>
-              </div>
-
-              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}>
-                <div className={`text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                  Analogy (6-word)
-                </div>
-                <div className={`text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  {keyword.analogyDefinition6}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ============================================
 // OVERVIEW MODE COMPONENT
 // ============================================
 const OverviewMode: React.FC<{
@@ -1519,29 +1442,11 @@ const OverviewMode: React.FC<{
   isDarkMode: boolean;
   onClose: () => void;
 }> = ({ historyEntry, isDarkMode, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'journey' | 'glossary'>('journey');
   const [copied, setCopied] = useState(false);
-  const [obsidianCopied, setObsidianCopied] = useState(false);
-  const [htmlCopied, setHtmlCopied] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
-  const handleShare = async () => {
-    const shareText = `🎓 I mastered ${historyEntry.topic} using ${historyEntry.domain} analogies!\n\n` +
-      `📊 Scores: Stage 1: ${historyEntry.finalScores.stage1}% | Stage 2: ${historyEntry.finalScores.stage2}% | Stage 3: ${historyEntry.finalScores.stage3}%\n\n` +
-      `💡 Key Insight: ${historyEntry.masterySummary.coreIntuition}\n\n` +
-      `#Signal #Learning`;
-
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      console.error('Failed to copy to clipboard');
-    }
-  };
-
-  // Generate Obsidian-ready markdown export
-  const handleObsidianExport = async () => {
+  // Single copy function - Markdown for Obsidian/Notion
+  const handleCopyMarkdown = async () => {
     const completedDate = new Date(historyEntry.completedAt).toLocaleDateString('en-US', {
       year: 'numeric', month: 'long', day: 'numeric'
     });
@@ -1614,195 +1519,10 @@ const OverviewMode: React.FC<{
 
     try {
       await navigator.clipboard.writeText(markdown);
-      setObsidianCopied(true);
-      setTimeout(() => setObsidianCopied(false), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      console.error('Failed to copy Obsidian markdown');
-    }
-  };
-
-  // Generate full HTML export of the entire page
-  const handleHtmlExport = async () => {
-    const completedDate = new Date(historyEntry.completedAt).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'long', day: 'numeric'
-    });
-
-    let html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Mastery: ${historyEntry.topic}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; background: #fafafa; color: #333; }
-    h1 { color: #7c3aed; margin-bottom: 8px; }
-    .subtitle { color: #666; margin-bottom: 24px; }
-    .summary-box { background: linear-gradient(135deg, #fef3c7, #fed7aa); border: 1px solid #fcd34d; border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-    .summary-box h2 { color: #b45309; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-    .summary-item { margin-bottom: 12px; }
-    .summary-label { text-transform: uppercase; font-size: 11px; font-weight: 700; color: #b45309; margin-bottom: 4px; }
-    .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-    .score-card { background: white; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .score-value { font-size: 28px; font-weight: 700; }
-    .score-value.s1 { color: #3b82f6; }
-    .score-value.s2 { color: #a855f7; }
-    .score-value.s3 { color: #22c55e; }
-    .score-label { font-size: 12px; color: #888; }
-    .section { margin-bottom: 32px; }
-    .section h3 { color: #7c3aed; border-bottom: 2px solid #e9d5ff; padding-bottom: 8px; margin-bottom: 16px; }
-    .stage { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .stage h4 { color: #6b21a8; margin-bottom: 12px; }
-    .story { background: #f5f3ff; padding: 16px; border-radius: 8px; margin-bottom: 12px; font-style: italic; }
-    .response { border-left: 3px solid #7c3aed; padding-left: 16px; color: #555; }
-    .insight { background: #fef3c7; padding: 12px; border-radius: 8px; margin-top: 12px; }
-    .insight-icon { color: #f59e0b; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-    th { background: #f9fafb; font-weight: 600; color: #374151; }
-    .tech-term { color: #7c3aed; font-weight: 600; }
-    .analogy-term { color: #059669; }
-    .footer { text-align: center; color: #888; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-  </style>
-</head>
-<body>
-  <h1>🎓 ${historyEntry.topic}</h1>
-  <p class="subtitle">Mastered through <strong>${historyEntry.domain}</strong> ${historyEntry.domainEmoji} analogies • ${completedDate}</p>
-
-  <div class="summary-box">
-    <h2>🏆 Your Mastery Summary</h2>
-    <div class="summary-item">
-      <div class="summary-label">Key Strength</div>
-      <p>${historyEntry.masterySummary.keyStrength}</p>
-    </div>
-    <div class="summary-item">
-      <div class="summary-label">Core Intuition</div>
-      <p>${historyEntry.masterySummary.coreIntuition}</p>
-    </div>
-    <div class="summary-item">
-      <div class="summary-label">What Made You Unique</div>
-      <p>${historyEntry.masterySummary.uniqueApproach}</p>
-    </div>
-  </div>
-
-  <div class="scores">
-    <div class="score-card">
-      <div class="score-value s1">${historyEntry.finalScores.stage1}%</div>
-      <div class="score-label">Stage 1</div>
-    </div>
-    <div class="score-card">
-      <div class="score-value s2">${historyEntry.finalScores.stage2}%</div>
-      <div class="score-label">Stage 2</div>
-    </div>
-    <div class="score-card">
-      <div class="score-value s3">${historyEntry.finalScores.stage3}%</div>
-      <div class="score-label">Stage 3</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h3>📖 Learning Journey</h3>`;
-
-    for (const stage of [1, 2, 3] as const) {
-      const stageKey = `stage${stage}` as 'stage1' | 'stage2' | 'stage3';
-      const story = historyEntry.stories[stageKey];
-      const response = historyEntry.userResponses[stageKey];
-      const intuition = historyEntry.intuitions[stageKey];
-
-      // Generate the challenge question for this stage
-      const stageQuestion = stage === 1
-        ? `Explain "${historyEntry.topic}" in your own words using the ${historyEntry.domain} analogy. No keywords required - just demonstrate your intuitive understanding through storytelling.`
-        : stage === 2
-          ? `Explain "${historyEntry.topic}" again, but incorporate at least 3 of the 6 keywords shown. Keep it narrative - tell the story using these concepts.`
-          : `Final stage! Explain "${historyEntry.topic}" using at least 6 of all 10 keywords. This should be your most complete narrative explanation.`;
-
-      html += `
-    <div class="stage">
-      <h4>Stage ${stage}: ${stage === 1 ? 'Pure Intuition' : stage === 2 ? 'Vocabulary' : 'Full Mastery'}</h4>
-      <div class="insight" style="background: linear-gradient(135deg, ${stage === 1 ? '#dbeafe, #bfdbfe' : stage === 2 ? '#f3e8ff, #e9d5ff' : '#d1fae5, #a7f3d0'}); border-color: ${stage === 1 ? '#3b82f6' : stage === 2 ? '#a855f7' : '#10b981'}; border-left: 4px solid;">
-        <span class="insight-icon">🎯</span> <strong>The Challenge:</strong> ${stageQuestion}
-      </div>`;
-
-      if (story?.content) {
-        html += `
-      <div class="story">
-        <strong>📖 Story Prompt:</strong><br>
-        ${story.content.replace(/\n/g, '<br>')}
-      </div>`;
-      }
-
-      if (response) {
-        html += `
-      <div class="response">
-        <strong>💬 My Answer:</strong><br>
-        ${response.replace(/\n/g, '<br>')}
-      </div>`;
-      }
-
-      if (intuition?.insight) {
-        html += `
-      <div class="insight">
-        <span class="insight-icon">💡</span> <strong>Key Insight:</strong> ${intuition.insight}
-      </div>`;
-      }
-
-      if (intuition?.strength) {
-        html += `
-      <div class="insight" style="background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: #34d399;">
-        <span class="insight-icon">✨</span> <strong>What You Did Well:</strong> ${intuition.strength}
-      </div>`;
-      }
-
-      if (intuition?.keywordsCaptured?.length > 0) {
-        html += `
-      <div class="insight" style="background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: #60a5fa;">
-        <span class="insight-icon">📚</span> <strong>Concepts Demonstrated:</strong> ${intuition.keywordsCaptured.join(', ')}
-      </div>`;
-      }
-
-      html += `
-    </div>`;
-    }
-
-    html += `
-  </div>
-
-  <div class="section">
-    <h3>📚 Glossary</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Technical Term</th>
-          <th>${historyEntry.domain.split(' ')[0]} Equivalent</th>
-          <th>Definition</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-    historyEntry.glossary.forEach(keyword => {
-      html += `
-        <tr>
-          <td class="tech-term">${keyword.term}</td>
-          <td class="analogy-term">${keyword.analogyTerm}</td>
-          <td>${keyword.techDefinition6 || keyword.techDefinition3}</td>
-        </tr>`;
-    });
-
-    html += `
-      </tbody>
-    </table>
-  </div>
-
-  <div class="footer">
-    Generated by Signal • ${completedDate}
-  </div>
-</body>
-</html>`;
-
-    try {
-      await navigator.clipboard.writeText(html);
-      setHtmlCopied(true);
-      setTimeout(() => setHtmlCopied(false), 2000);
-    } catch {
-      console.error('Failed to copy HTML');
+      console.error('Failed to copy markdown');
     }
   };
 
@@ -1835,29 +1555,19 @@ const OverviewMode: React.FC<{
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={handleObsidianExport}
+              onClick={handleCopyMarkdown}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all shadow-sm whitespace-nowrap
-                ${obsidianCopied
+                ${copied
                   ? 'bg-green-500 text-white'
                   : isDarkMode
                     ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500'
                     : 'bg-gradient-to-r from-violet-500 to-purple-500 text-white hover:from-violet-600 hover:to-purple-600'}
               `}
-              title="Copy beautifully formatted markdown notes"
+              title="Copy as Markdown for Obsidian/Notion"
             >
-              {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
-              {obsidianCopied ? 'Copied!' : 'Copy Notes'}
-            </button>
-            <button
-              onClick={handleShare}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all
-                ${isDarkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'}
-              `}
-              title="Share achievement"
-            >
-              {copied ? <Check size={16} /> : <Share2 size={16} />}
+              {copied ? <Check size={16} /> : <ClipboardCopy size={16} />}
+              {copied ? 'Copied!' : 'Copy Notes'}
             </button>
             <button
               onClick={() => setIsMaximized(!isMaximized)}
@@ -1876,76 +1586,16 @@ const OverviewMode: React.FC<{
           </div>
         </div>
 
-      {/* Tabs */}
-      <div className={`px-6 py-2 border-b ${isDarkMode ? 'border-neutral-800' : 'border-neutral-200'}`}>
-        <div className="flex gap-4">
-          <button
-            onClick={() => setActiveTab('journey')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              activeTab === 'journey'
-                ? 'bg-purple-500 text-white'
-                : isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-neutral-800'
-            }`}
-          >
-            Your Journey
-          </button>
-          <button
-            onClick={() => setActiveTab('glossary')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              activeTab === 'glossary'
-                ? 'bg-purple-500 text-white'
-                : isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-neutral-800'
-            }`}
-          >
-            Glossary
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
+      {/* Content - Single page with Journey + Glossary */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-3xl mx-auto">
-          {activeTab === 'journey' ? (
-            <div className="space-y-6">
+        <div className="max-w-3xl mx-auto space-y-8">
               {/* Mastery Summary */}
               <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-yellow-900/20 to-orange-900/20 border border-yellow-500/30' : 'bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200'}`}>
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="text-yellow-500" size={24} />
-                    <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
-                      Your Mastery Summary
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Copy Markdown Notes Button */}
-                    <button
-                      onClick={handleObsidianExport}
-                      className={`
-                        flex items-center gap-2 px-3 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
-                        ${obsidianCopied
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700'}
-                      `}
-                      title="Copy as Markdown for Obsidian/Notion"
-                    >
-                      {obsidianCopied ? <Check size={16} /> : <ClipboardCopy size={16} />}
-                      {obsidianCopied ? 'Copied!' : 'Markdown'}
-                    </button>
-                    {/* Copy Full HTML Page Button */}
-                    <button
-                      onClick={handleHtmlExport}
-                      className={`
-                        flex items-center gap-2 px-3 py-2 rounded-xl font-semibold text-sm transition-all shadow-md
-                        ${htmlCopied
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700'}
-                      `}
-                      title="Copy full page as HTML - paste into any document"
-                    >
-                      {htmlCopied ? <Check size={16} /> : <FileCode size={16} />}
-                      {htmlCopied ? 'Copied!' : 'Full Page'}
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Trophy className="text-yellow-500" size={24} />
+                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                    Your Mastery Summary
+                  </h3>
                 </div>
 
                 <div className="space-y-3">
@@ -2127,10 +1777,34 @@ const OverviewMode: React.FC<{
                 </div>
               );
               })}
-            </div>
-          ) : (
-            <GlossaryView keywords={historyEntry.glossary} isDarkMode={isDarkMode} />
-          )}
+
+              {/* Glossary Section - now inline below journey */}
+              <div className={`p-6 rounded-xl ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  📚 Complete Glossary
+                </h3>
+                <div className="grid gap-3">
+                  {historyEntry.glossary.map((keyword) => (
+                    <div
+                      key={keyword.id}
+                      className={`p-4 rounded-lg ${isDarkMode ? 'bg-neutral-900/50' : 'bg-neutral-50'}`}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`font-bold ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
+                          {keyword.term}
+                        </span>
+                        <span className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}>↔</span>
+                        <span className={`font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                          {keyword.analogyTerm}
+                        </span>
+                      </div>
+                      <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                        {keyword.techDefinition6 || keyword.techDefinition3}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
         </div>
       </div>
       </div>{/* Close modal container */}
@@ -2151,23 +1825,6 @@ const CompletionCelebration: React.FC<{
   onViewOverview: () => void;
   onClose: () => void;
 }> = ({ topic, domain, domainEmoji, finalScores, masterySummary, isDarkMode, onViewOverview, onClose }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleShare = async () => {
-    const shareText = `🎓 I mastered ${topic} using ${domain} analogies!\n\n` +
-      `📊 Scores: Stage 1: ${finalScores.stage1}% | Stage 2: ${finalScores.stage2}% | Stage 3: ${finalScores.stage3}%\n\n` +
-      `💡 Key Insight: ${masterySummary.coreIntuition}\n\n` +
-      `#Signal #Learning`;
-
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      console.error('Failed to copy to clipboard');
-    }
-  };
-
   return (
     <div className={`fixed inset-0 z-[110] flex items-center justify-center ${isDarkMode ? 'bg-black/90' : 'bg-white/90'}`}>
       <div className={`max-w-md w-full mx-4 p-8 rounded-2xl text-center ${isDarkMode ? 'bg-neutral-900' : 'bg-white shadow-2xl'}`}>
@@ -2218,22 +1875,11 @@ const CompletionCelebration: React.FC<{
         {/* Actions */}
         <div className="flex gap-3">
           <button
-            onClick={handleShare}
-            className={`
-              flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all
-              ${isDarkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'}
-            `}
-          >
-            {copied ? <Check size={18} /> : <Share2 size={18} />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
-
-          <button
             onClick={onViewOverview}
             className="flex-1 py-3 px-4 rounded-lg font-medium bg-gradient-to-r from-purple-500 to-blue-500 text-white flex items-center justify-center gap-2 hover:opacity-90 transition-all"
           >
             <Eye size={18} />
-            View Journey
+            View Your Journey
           </button>
         </div>
 
