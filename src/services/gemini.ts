@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
 import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
 import { stripMathSymbols } from '../utils/text';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
@@ -98,25 +98,32 @@ const getProviderConfig = (): ProviderConfig => {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      // Use stored API key if present, otherwise fall back to defaults
-      if (parsed.provider === 'google' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_GEMINI_API_KEY;
-      }
-      if (parsed.provider === 'openrouter' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
-      }
       return parsed;
     } catch {
       // Fall through to default
     }
   }
-  // Default to OpenRouter with Xiaomi MiMo v2 Flash (free tier)
+  // Default config without API key - user must provide their own
   return {
     provider: 'openrouter',
-    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    apiKey: '',
     model: 'xiaomi/mimo-v2-flash:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
+};
+
+// Validate that API key is present (throws user-friendly error if missing)
+const validateApiKey = (config: ProviderConfig): void => {
+  if (config.provider !== 'ollama' && !config.apiKey) {
+    throw new Error(
+      `No API key configured. Please open Settings (gear icon) and enter your ${
+        config.provider === 'google' ? 'Google Gemini' :
+        config.provider === 'openrouter' ? 'OpenRouter' :
+        config.provider === 'openai' ? 'OpenAI' :
+        config.provider === 'anthropic' ? 'Anthropic' : ''
+      } API key.`
+    );
+  }
 };
 
 // Build API URL based on provider
@@ -244,9 +251,8 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
 const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<string> => {
   const baseConfig = getProviderConfig();
 
-  if (!baseConfig.apiKey && baseConfig.provider !== 'ollama') {
-    throw new Error(`No API key configured for ${baseConfig.provider}. Please add your API key in Settings.`);
-  }
+  // Validate API key is present (throws user-friendly error if missing)
+  validateApiKey(baseConfig);
 
   // For OpenRouter, use circuit breaker to select available model
   const effectiveModel = baseConfig.provider === 'openrouter'

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Settings as SettingsIcon, X, Eye, EyeOff, RefreshCw, Check, AlertCircle, Edit3, List } from 'lucide-react';
 import { ProviderConfig, ProviderType, DEFAULT_MODELS, OllamaModel } from '../types';
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS } from '../constants';
 import { fetchOllamaModels } from '../services';
 
 // Custom model indicator
@@ -24,7 +24,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ProviderConfig>({
     provider: 'openrouter',
-    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    apiKey: '',
     model: 'xiaomi/mimo-v2-flash:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   });
@@ -41,13 +41,6 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        // Use default API key for providers if none stored
-        if (parsed.provider === 'google' && !parsed.apiKey) {
-          parsed.apiKey = DEFAULT_GEMINI_API_KEY;
-        }
-        if (parsed.provider === 'openrouter' && !parsed.apiKey) {
-          parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
-        }
         setConfig(parsed);
         if (parsed.provider === 'ollama') {
           loadOllamaModels(parsed.ollamaEndpoint);
@@ -281,6 +274,11 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
               <p className={`mt-1 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                 Stored locally in your browser. Never sent to our servers.
               </p>
+              {!config.apiKey && (
+                <p className={`mt-2 text-xs font-medium ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                  ⚠️ API key required to use Signal
+                </p>
+              )}
             </div>
           )}
 

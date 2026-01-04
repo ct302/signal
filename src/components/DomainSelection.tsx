@@ -85,7 +85,7 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
       {/* Main Content */}
       <div className="max-w-lg w-full space-y-8 text-center">
         <div className="space-y-2">
-          <h1 className="text-5xl font-black tracking-tight text-neutral-900">Signal V2</h1>
+          <h1 className="text-5xl font-black tracking-tight text-neutral-900">Signal</h1>
           <p className="text-neutral-500 text-lg">Learn anything through powerful analogies</p>
         </div>
 

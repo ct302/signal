@@ -1,11 +1,7 @@
 // API Configuration - Now dynamic via ProviderConfig
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
-// Default API key for demo purposes (users can override in Settings)
-export const DEFAULT_GEMINI_API_KEY = 'AIzaSyBE0wJnhKSiQlIbkr2yfrR9mpaQdfoCKZM';
-
-// OpenRouter API key (demo/testing)
-export const DEFAULT_OPENROUTER_API_KEY = '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';
+// No default API keys - users must provide their own for security
 
 // OpenRouter models - hardcoded selection
 export const OPENROUTER_MODELS = [
