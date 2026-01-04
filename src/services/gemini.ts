@@ -1329,7 +1329,7 @@ Return ONLY this JSON (no markdown):
       // Post-process: ensure no duplicate definitions
       // Track seen definitions and modify duplicates
       const seenDefs = new Set<string>();
-      return keywords.map((kw, idx) => {
+      return keywords.map((kw: MasteryKeyword, _idx: number) => {
         const modified = { ...kw };
 
         // Check and fix techDefinition6 duplicates
