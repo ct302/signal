@@ -19,7 +19,7 @@ import {
   BookOpen,
   HelpCircle,
   X,
-  Snowflake,
+  Cloud,
   Coffee,
   Network,
   Columns,
@@ -101,7 +101,9 @@ import {
   IsomorphicDualPane,
   ProximityWarningModal,
   MasteryMode,
-  MasterySessionCache
+  MasterySessionCache,
+  WeatherMode,
+  WeatherType
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -322,8 +324,9 @@ export default function App() {
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Ambiance Mode State
-  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
+  const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -1270,8 +1273,10 @@ export default function App() {
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
           break;
         case '2':
-          // Holiday mode
-          setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday');
+          // Weather mode toggle (cycles through: none -> sunny -> rain -> snow -> none)
+          const weatherCycle: WeatherType[] = ['none', 'sunny', 'rain', 'snow'];
+          const currentIndex = weatherCycle.indexOf(weatherMode);
+          setWeatherMode(weatherCycle[(currentIndex + 1) % weatherCycle.length]);
           break;
       }
     };
@@ -3208,15 +3213,15 @@ export default function App() {
           <Coffee size={20} />
         </button>
         <button
-          onClick={() => setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday')}
+          onClick={() => setWeatherMode(weatherMode === 'none' ? 'sunny' : 'none')}
           className={`p-3 rounded-full shadow-lg border transition-colors ${
-            ambianceMode === 'holiday'
-              ? 'bg-red-500 border-red-600 text-white'
-              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500')
+            weatherMode !== 'none'
+              ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
           }`}
-          title="Holiday Mode (2)"
+          title="Weather Mode (2)"
         >
-          <Snowflake size={20} />
+          <Cloud size={20} />
         </button>
         {hasStarted && (
           <button
@@ -3316,7 +3321,7 @@ export default function App() {
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
-                  <span>Holiday Mode</span>
+                  <span>Weather Mode</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
@@ -3619,69 +3624,12 @@ export default function App() {
         </>
       )}
 
-      {ambianceMode === 'holiday' && (
-        <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
-          {/* Base holiday tint - red and green */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.12) 0%, transparent 50%, rgba(22, 101, 52, 0.12) 100%)'
-            }}
-          />
-          {/* Snow particles - larger and more visible */}
-          <div className="absolute inset-0">
-            {Array.from({ length: 60 }).map((_, i) => (
-              <div
-                key={i}
-                className="absolute rounded-full animate-snowfall"
-                style={{
-                  left: `${(i * 1.7) % 100}%`,
-                  width: `${3 + (i % 4)}px`,
-                  height: `${3 + (i % 4)}px`,
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                  boxShadow: '0 0 4px rgba(255, 255, 255, 0.5)',
-                  animationDelay: `${(i * 0.15) % 10}s`,
-                  animationDuration: `${4 + (i % 6)}s`,
-                }}
-              />
-            ))}
-          </div>
-          {/* Twinkling Christmas lights along edges */}
-          <div className="absolute top-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={`light-top-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
-                style={{
-                  backgroundColor: i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15'}`,
-                  animationDelay: `${i * 0.2}s`,
-                }}
-              />
-            ))}
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={`light-bottom-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
-                style={{
-                  backgroundColor: i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15'}`,
-                  animationDelay: `${i * 0.15 + 0.5}s`,
-                }}
-              />
-            ))}
-          </div>
-          {/* Holiday vignette */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(127, 29, 29, 0.15) 100%)'
-            }}
-          />
-        </div>
-      )}
+      {/* Weather Mode */}
+      <WeatherMode
+        weather={weatherMode}
+        onWeatherChange={setWeatherMode}
+        isDarkMode={isDarkMode}
+      />
 
       {/* Constellation Mode */}
       {isConstellationMode && (
