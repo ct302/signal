@@ -2516,19 +2516,24 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
     await generateStoryForStage(session.currentStage, session.keywords, previousStory);
   }, [session, storyHistory]);
 
-  // Real-time keyword detection as user types
+  // Real-time keyword detection as user types (debounced to prevent max update depth errors)
   useEffect(() => {
     if (!session || session.currentStage === 1) {
       setDetectedKeywords([]);
       return;
     }
 
-    const visibleKeywords = session.currentStage === 2
-      ? session.keywords.slice(0, 6)
-      : session.keywords;
+    // Debounce keyword detection to avoid rapid state updates causing infinite loops
+    const timer = setTimeout(() => {
+      const visibleKeywords = session.currentStage === 2
+        ? session.keywords.slice(0, 6)
+        : session.keywords;
 
-    const detected = detectKeywordsInText(userInput, visibleKeywords);
-    setDetectedKeywords(detected);
+      const detected = detectKeywordsInText(userInput, visibleKeywords);
+      setDetectedKeywords(detected);
+    }, 150); // 150ms debounce - fast enough to feel responsive, slow enough to batch updates
+
+    return () => clearTimeout(timer);
   }, [userInput, session]);
 
   // Handle submit
