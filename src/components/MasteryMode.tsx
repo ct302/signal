@@ -533,15 +533,15 @@ const StoryCard: React.FC<{
 
         if (matchedKeyword) {
           // Keyword with hover functionality - cursor-help indicates definition available
+          // Use consistent RED coloring for ALL keywords (same as parenthetical keywords)
           return (
             <span
               key={key}
               className={`
-                cursor-help rounded transition-all duration-200
-                ${heatmapClass || (isDarkMode
-                  ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}
-                ${colorModeClass}
+                cursor-help rounded transition-all duration-200 font-semibold px-0.5
+                ${isDarkMode
+                  ? 'text-red-400 hover:text-red-300 hover:bg-red-500/20'
+                  : 'text-red-600 hover:text-red-700 hover:bg-red-100'}
               `}
               style={styles}
               onMouseEnter={(e) => {

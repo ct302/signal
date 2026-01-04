@@ -1269,6 +1269,22 @@ For each concept mapping, generate TWO sets of definitions:
 1. A 3-word definition - tied to the story
 2. A 6-word definition - tied to the story
 
+⚠️ UNIQUENESS REQUIREMENT - CRITICAL:
+- Each keyword MUST have a UNIQUE definition - NO DUPLICATES ALLOWED
+- NO two keywords can share the same techDefinition3, techDefinition6, analogyDefinition3, or analogyDefinition6
+- Each concept is DIFFERENT - their definitions must reflect their DISTINCT meanings
+- Example of WRONG (duplicate definitions):
+  - "vector": "Magnitude and direction defining position"
+  - "vector space": "Magnitude and direction defining position" ❌ SAME = BAD
+- Example of RIGHT (unique definitions):
+  - "vector": "Arrow showing direction magnitude"
+  - "vector space": "Collection of all possible vectors" ✅ DIFFERENT = GOOD
+
+SEMANTIC DISTINCTION:
+- "vector" vs "vector space" are DIFFERENT concepts - define them differently
+- "matrix" vs "transformation" are DIFFERENT concepts - define them differently
+- Think about what makes EACH concept unique before writing its definition
+
 CRITICAL RULES:
 - Each definition must be EXACTLY the word count specified (3 or 6 words)
 - Technical definitions: Core essence in technical terms
@@ -1276,6 +1292,7 @@ CRITICAL RULES:
 - Analogy definitions must feel like they're describing the story, not a textbook
 - Use NAMES, not generic roles (say "Brady" not "the quarterback")
 - Be concise - every word must count
+- VERIFY: Before returning, check that NO definitions are duplicated across keywords
 
 Return ONLY this JSON (no markdown):
 {
@@ -1298,7 +1315,7 @@ Return ONLY this JSON (no markdown):
     const result = safeJsonParse(text);
 
     if (result?.keywords && Array.isArray(result.keywords)) {
-      return result.keywords.map((k: any, idx: number) => ({
+      const keywords = result.keywords.map((k: any, idx: number) => ({
         id: k.id ?? idx,
         term: k.term || topConcepts[idx]?.tech_term || '',
         analogyTerm: k.analogyTerm || topConcepts[idx]?.analogy_term || '',
@@ -1308,6 +1325,27 @@ Return ONLY this JSON (no markdown):
         analogyDefinition6: k.analogyDefinition6 || '',
         importance: k.importance ?? topConcepts[idx]?.importance ?? 0.5
       }));
+
+      // Post-process: ensure no duplicate definitions
+      // Track seen definitions and modify duplicates
+      const seenDefs = new Set<string>();
+      return keywords.map((kw, idx) => {
+        const modified = { ...kw };
+
+        // Check and fix techDefinition6 duplicates
+        if (seenDefs.has(modified.techDefinition6.toLowerCase())) {
+          modified.techDefinition6 = `${modified.term}: ${modified.techDefinition6.split(' ').slice(0, 4).join(' ')}...`;
+        }
+        seenDefs.add(modified.techDefinition6.toLowerCase());
+
+        // Check and fix analogyDefinition6 duplicates
+        if (seenDefs.has(modified.analogyDefinition6.toLowerCase())) {
+          modified.analogyDefinition6 = `${modified.analogyTerm}: ${modified.analogyDefinition6.split(' ').slice(0, 4).join(' ')}...`;
+        }
+        seenDefs.add(modified.analogyDefinition6.toLowerCase());
+
+        return modified;
+      });
     }
 
     // Fallback: generate basic keywords from concept map
@@ -1437,25 +1475,33 @@ export const evaluateMasteryResponse = async (
     1: `STAGE 1 EVALUATION (Pure Intuition - STRENGTH-BASED PASSING):
 The user had NO keywords available. They are explaining "${topic}" purely through ${domain} vocabulary.
 
-PASSING CRITERIA (if they hit 2+ of these, they PASS):
+THIS IS THE PURE INTUITION STAGE - NO TECHNICAL TERMS EXPECTED OR WANTED.
+
+PASSING CRITERIA (if they hit 2+ of these, they PASS with 70+):
 ✓ Used ${domain} vocabulary naturally (not technical jargon)
 ✓ Captured directional correctness (understood the general idea)
 ✓ Told a coherent narrative/story
 ✓ Made meaningful analogical connections
 ✓ Demonstrated intuitive grasp of the concept's essence
 
-CRITICAL RULES FOR STAGE 1:
-- DO NOT penalize for missing technical concepts like "components", "basis", "transformation rules", etc.
-- DO NOT expect technical vocabulary - that's for Stage 2 and 3
-- This stage tests: "Do they GET IT intuitively through analogy?"
-- If they explain it naturally using ${domain} terms and show understanding, they PASS
-- Score 70+ if they demonstrate 2-3 strengths in narrative/analogical explanation
-- Actually PENALIZE heavy use of technical jargon (defeats the purpose of Stage 1)
+⚠️ CRITICAL - WHAT NOT TO DO:
+- DO NOT list technical terms in "missedConcepts" - Stage 1 forbids technical jargon
+- DO NOT penalize for not mentioning "vector addition", "transformation", "components", etc.
+- DO NOT expect ANY technical vocabulary whatsoever
+- "missedConcepts" should ONLY contain narrative/storytelling gaps, NOT technical concepts
+- If they used technical jargon, that's actually BAD for Stage 1 (defeats the purpose)
 
 WHAT SUCCESS LOOKS LIKE:
 - A student who explains tensors as "Tom Brady adjusting to defensive shifts" = PASS
 - A student who uses domain metaphors to capture transformation/change = PASS
-- A student who shows directional understanding without technical terms = PASS`,
+- A student who shows directional understanding without technical terms = PASS
+- Any coherent ${domain} narrative that captures the essence = PASS
+
+"missedConcepts" SHOULD ONLY INCLUDE things like:
+- "Could have added more vivid ${domain} details"
+- "Narrative lacked a clear beginning/middle/end"
+- "Could strengthen the analogy connection"
+NEVER include technical terms like "vector", "matrix", "derivative", etc.`,
 
     2: `STAGE 2 EVALUATION (Guided Recall - 3 of 6 keywords):
 The user had these 6 keywords available: ${keywordTerms.slice(0, 6).join(', ')}
@@ -1486,11 +1532,14 @@ USER'S EXPLANATION:
 "${userResponse}"
 
 EVALUATION CRITERIA:
-${stage === 1 ? `FOR STAGE 1 (strength-based):
+${stage === 1 ? `FOR STAGE 1 (strength-based - NO TECHNICAL EXPECTATIONS):
 1. Count their STRENGTHS (narrative quality, domain vocabulary, analogical thinking, directional correctness)
 2. If they have 2+ strengths, score 70+ and PASS them
-3. DO NOT fail them for missing technical concepts - that's not what Stage 1 tests
-4. PENALIZE if they used too much technical jargon (wrong approach for Stage 1)` : `FOR STAGE ${stage}:
+3. DO NOT fail them for missing technical concepts - Stage 1 FORBIDS technical jargon
+4. PENALIZE if they used too much technical jargon (wrong approach for Stage 1)
+5. "missedConcepts" must be EMPTY or contain only NARRATIVE gaps (not technical terms)
+   - WRONG: ["vector addition", "resultant force", "components"]
+   - RIGHT: ["could add more vivid imagery", "narrative needed clearer arc"] or []` : `FOR STAGE ${stage}:
 1. Did they capture the core concept correctly?
 2. Did they use at least ${requiredKeywords} keywords naturally?
 3. Is their explanation coherent and demonstrates real understanding?
