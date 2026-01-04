@@ -142,11 +142,12 @@ interface ApiCallOptions {
   jsonMode?: boolean;
   webSearch?: boolean; // Enable OpenRouter web search plugin
   searchPrompt?: string; // Custom prompt for how to integrate web search results
+  maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
 }
 
 // Build request body based on provider
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
-  const { jsonMode = false, webSearch = false, searchPrompt } = options;
+  const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3 } = options;
 
   switch (config.provider) {
     case 'google':
@@ -181,15 +182,15 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
       };
 
       // Add web search plugin when enabled (uses OpenRouter's built-in web search)
-      // Pricing: $4 per 1000 results, with max_results: 3 = ~$0.012 per request
+      // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request (Mastery Mode)
       if (webSearch) {
-        const webPlugin: Record<string, any> = { id: 'web', max_results: 3 };
+        const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
         // Add custom search_prompt if provided - guides how results are integrated
         if (searchPrompt) {
           webPlugin.search_prompt = searchPrompt;
         }
         body.plugins = [webPlugin];
-        console.log('[OpenRouter] Web search enabled with max_results: 3' + (searchPrompt ? ', custom search_prompt' : ''));
+        console.log(`[OpenRouter] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
       }
 
       return body;
@@ -1386,8 +1387,6 @@ export const regenerateContextualDefinitions = async (
   keywords: MasteryKeyword[],
   masteryStoryContent: string
 ): Promise<MasteryKeyword[]> => {
-  const shortDomain = getShortDomain(domain);
-
   const prompt = `You are updating keyword definitions to match a SPECIFIC story.
 
 THE MASTERY STORY (reference ONLY this story for definitions):
@@ -1666,7 +1665,8 @@ export const detectKeywordsInText = (
  * Stage 3: Same story structure with ALL 10 technical terms
  *
  * CRITICAL: Stories must be historically accurate with real teams, players, and moments
- * Web search is enabled via OpenRouter's native plugin for historical accuracy
+ * Web search is ALWAYS enabled for Mastery Mode to ground stories in factual sources
+ * This prevents hallucination and ensures causal logic is grounded in real events
  */
 export const generateMasteryStory = async (
   topic: string,
@@ -1675,26 +1675,25 @@ export const generateMasteryStory = async (
   keywords: MasteryKeyword[],
   previousStory?: string // For continuity in stages 2-3
 ): Promise<MasteryStory> => {
-  // Note: Web search is now handled by OpenRouter's native plugin
-  // Only enabled for granular domains that need specific historical data
-
-  // Check granularity for domain-specific context
-  // General domains use LLM knowledge, granular domains use web search
-  const { domainGranularity } = detectGranularitySignals(topic, domain);
-  const useWebSearch = domainGranularity.isGranular; // Only search for specific/granular domains
+  // Web search is ALWAYS enabled for Mastery Mode to prevent hallucination
+  // We fetch 8 sources to synthesize into factually accurate narratives
   const shortDomain = getShortDomain(domain);
 
-  if (useWebSearch) {
-    console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
-    console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
-  } else {
-    console.log(`[generateMasteryStory] General domain "${shortDomain}" - using LLM knowledge (no web search)`);
+  // Check if domain is granular (specific event) vs general
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const isGranularDomain = domainGranularity.isGranular;
+
+  // Always use web search for Mastery Mode - this ensures factual grounding
+  console.log(`[generateMasteryStory] Stage ${stage} - ALWAYS enabling web search for factual grounding`);
+  console.log(`[generateMasteryStory] Domain: "${shortDomain}" (granular: ${isGranularDomain})`);
+  if (isGranularDomain) {
+    console.log(`[generateMasteryStory] Granular signals: ${domainGranularity.signals.join(', ')}`);
   }
 
-  // Front-load domain context for web search (only for granular domains)
-  // General domains don't need web search - LLM has good general knowledge
-  const webSearchContext = domainGranularity.isGranular
-    ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
+  // Web search context - different prompts for granular (specific event) vs general domains
+  // Both get web search, but granular domains are more constrained to the exact event
+  const webSearchContext = isGranularDomain
+    ? `CRITICAL - WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
 
 SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
 Search queries to use:
@@ -1717,7 +1716,35 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 ---
 
 `
-    : ''; // No web search for general domains - use LLM knowledge
+    : `CRITICAL - WEB SEARCH FOR HISTORICAL ACCURACY:
+
+SEARCH FOR FAMOUS ${shortDomain} MOMENTS to ground your story in REAL history.
+Search queries to use:
+1. "famous ${shortDomain} moments history"
+2. "legendary ${shortDomain} stories iconic events"
+3. "${shortDomain} greatest moments all time"
+
+YOU MUST BASE YOUR STORY ON FACTS FROM THE SEARCH RESULTS:
+- Pick ONE specific, REAL event from the search results
+- Use ACTUAL names, dates, and outcomes from the search results
+- The story must be about something that ACTUALLY HAPPENED
+- ${shortDomain} fans should be able to verify the facts you mention
+
+REQUIRED FACTUAL ELEMENTS (from search results):
+- The specific event/game/moment (with date if available)
+- Full names of key individuals involved
+- What actually happened (outcome, score, achievement)
+- Why this moment was significant
+
+DO NOT FABRICATE:
+- Do NOT invent fictional scenarios or "typical" examples
+- Do NOT make up names or events
+- Do NOT guess at scores, dates, or outcomes
+- If you can't find specific facts, pick a different famous moment from the results
+
+---
+
+`;
 
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - THE BIG PICTURE (ZERO TECHNICAL JARGON):
@@ -1849,32 +1876,43 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
     // Build search prompt to guide how web results are used
-    // For granular domains, constrain to the specific event
-    // For general domains, use search to find famous moments to reference
-    const searchPromptText = domainGranularity.isGranular
-      ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
+    // We're getting 8 sources - synthesize them into accurate, verifiable narratives
+    const searchPromptText = isGranularDomain
+      ? `STRICT REQUIREMENT: Synthesize facts from these 8 web search results about "${domain}".
 
 The story MUST be about THIS SPECIFIC EVENT: "${domain}"
-- Extract the EXACT date, opponent/participants, score/outcome from search results
+- Cross-reference the search results to extract VERIFIED facts
+- Use the EXACT date, opponent/participants, score/outcome from search results
 - Extract SPECIFIC player/character names mentioned in search results
 - Extract KEY MOMENTS described in search results
 
-DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
-The story must be verifiable against the search results provided.`
-      : `USE THE WEB SEARCH RESULTS to ground your ${shortDomain} story in REAL history.
+SYNTHESIS RULES:
+- If multiple sources agree on a fact, use it confidently
+- If sources disagree, pick the most commonly cited version
+- NEVER fabricate details that don't appear in the search results
+- The story must be verifiable against the search results provided.`
+      : `SYNTHESIZE these 8 web search results to ground your ${shortDomain} story in REAL history.
 
-REQUIREMENTS:
-- Pick ONE famous moment or story from the search results
+SYNTHESIS REQUIREMENTS:
+- Review all search results to find a FAMOUS, VERIFIABLE moment from ${shortDomain}
+- Cross-reference facts across multiple sources for accuracy
 - Use REAL names of people mentioned in the results (with full names)
 - Reference ACTUAL events, dates, scores, or statistics from the results
 - The ${shortDomain} fan reading this should recognize the story
+
+FACT-CHECKING RULES:
+- Only use facts that appear in at least one search result
+- When sources provide specific numbers (scores, dates, stats), use those EXACT numbers
+- Do NOT round, approximate, or "improve" any facts from the sources
+- If a detail isn't in the search results, leave it out rather than guessing
 
 Your story must read like a ${shortDomain} documentary featuring REAL people and REAL events.
 Do NOT write generic scenarios - use the SPECIFIC historical content from search results.`;
 
     const storyContent = await callApi(prompt, {
-      webSearch: useWebSearch,
-      searchPrompt: searchPromptText
+      webSearch: true, // ALWAYS enable web search for Mastery Mode
+      searchPrompt: searchPromptText,
+      maxResults: 8 // Fetch 8 sources for comprehensive factual grounding
     });
 
     // Clean up the response
