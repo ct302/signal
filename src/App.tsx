@@ -260,7 +260,6 @@ export default function App() {
   const [isImmersive, setIsImmersive] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showControls, setShowControls] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const [showSynthesis, setShowSynthesis] = useState(false);
   const [isMouseInside, setIsMouseInside] = useState(false);
   const [showCondensedView, setShowCondensedView] = useState(false); // Actual visibility of condensed overlay
@@ -540,7 +539,6 @@ export default function App() {
         real_world: stripMathSymbols(cleanText(fixUnicode(context.real_world || context.realWorld || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(context.narrative || "")))
       });
-      setShowContext(false); // Collapsed by default - user clicks to expand
     }
 
     if (synthesis) {
@@ -621,7 +619,6 @@ export default function App() {
     setIsLoading(true);
     setApiError(null); // Clear any previous error
     setLastSubmittedTopic(confirmedTopic); // Set before API call so retry works on failure
-    setShowContext(false); // Keep collapsed until user clicks to expand
     setShowFollowUp(false);
     setTutorResponse(null);
     setContextData(null);
@@ -1556,7 +1553,6 @@ export default function App() {
     setShowHistory(false);
     setHasStarted(true);
     setIsViewingFromHistory(true); // Lock search bar when viewing saved content
-    setShowContext(false); // Keep collapsed - user clicks to expand
   };
 
   // Return to home - clears history view mode and resets for new search
@@ -1665,7 +1661,6 @@ export default function App() {
     setIsHovering(false);
     setIsScrolling(false);
     setIsTransitioning(false);
-    setShowContext(false);
     setShowSynthesis(false);
 
     // Topic State
@@ -2355,16 +2350,6 @@ export default function App() {
           {/* Content */}
           {!isLoading && hasStarted && processedWords.length > 0 && (
             <div className="space-y-4">
-              {/* Context Card */}
-              {contextData && (
-                <ContextCard
-                  contextData={contextData}
-                  showContext={showContext}
-                  setShowContext={setShowContext}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-
               {/* Main Content Card */}
               <div
                 className={`rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
@@ -2839,6 +2824,14 @@ export default function App() {
                 </div>
                 )}
               </div>
+
+              {/* Insight Takeaway */}
+              {contextData && (
+                <ContextCard
+                  contextData={contextData}
+                  isDarkMode={isDarkMode}
+                />
+              )}
 
               {/* Follow-up Section */}
               {showFollowUp && (
