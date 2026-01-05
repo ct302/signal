@@ -976,7 +976,19 @@ export const fetchDefinition = async (term: string, context: string, level: numb
     5: {
       name: "ELI5 (Explain like I'm 5)",
       words: "80-100 words",
-      style: "STRICT CONSTRAINT: DO NOT use LaTeX. DO NOT use technical jargon. DO NOT use math notation ($...$). Use ONLY simple English analogies and 5-year-old appropriate language. Use fun comparisons, relatable examples, and playful language. Make it memorable!"
+      style: `STRICT RULES FOR ELI5:
+- NO technical terms AT ALL. If you write "modulus", "congruent", "algorithm", "cryptography" - you've failed.
+- NO math notation or LaTeX
+- Use everyday language a non-expert would actually say
+- Be creative! Don't default to "imagine you're a child with toys"
+- Just explain it SIMPLY and CLEARLY
+
+GOOD ELI5 examples:
+- "Modular arithmetic" → "It's clock math. After 12 comes 1 again, not 13. Numbers wrap around."
+- "Neural network" → "A guessing machine that gets better by being told when it's wrong."
+- "Encryption" → "Scrambling a message so only the right person can unscramble it."
+
+Make it click instantly. No textbook voice.`
     },
     50: {
       name: "Standard (General Audience)",
