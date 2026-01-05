@@ -5,11 +5,9 @@ export type WeatherType = 'none' | 'sunny' | 'rain' | 'rainforest' | 'snow' | 't
 
 interface WeatherModeProps {
   weather: WeatherType;
-  onWeatherChange: (weather: WeatherType) => void;
-  isDarkMode: boolean;
 }
 
-const WEATHER_OPTIONS: { type: WeatherType; icon: React.ReactNode; label: string; emoji: string }[] = [
+export const WEATHER_OPTIONS: { type: WeatherType; icon: React.ReactNode; label: string; emoji: string }[] = [
   { type: 'none', icon: <X size={16} />, label: 'Off', emoji: '✕' },
   { type: 'sunny', icon: <Sun size={16} />, label: 'Beach', emoji: '🏖️' },
   { type: 'rain', icon: <CloudRain size={16} />, label: 'Rain', emoji: '🌧️' },
@@ -572,13 +570,9 @@ const AuroraScene: React.FC = () => {
 // MAIN EXPORT
 // ============================================
 
-export const WeatherMode: React.FC<WeatherModeProps> = ({ weather, onWeatherChange, isDarkMode }) => {
-  return (
-    <>
-      <WeatherEffects weather={weather} />
-      <WeatherSelector weather={weather} onWeatherChange={onWeatherChange} isDarkMode={isDarkMode} />
-    </>
-  );
+export const WeatherMode: React.FC<WeatherModeProps> = ({ weather }) => {
+  // Only render effects - selector is now in App.tsx floating actions
+  return <WeatherEffects weather={weather} />;
 };
 
 export default WeatherMode;

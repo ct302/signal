@@ -103,7 +103,8 @@ import {
   MasteryMode,
   MasterySessionCache,
   WeatherMode,
-  WeatherType
+  WeatherType,
+  WEATHER_OPTIONS
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -327,6 +328,7 @@ export default function App() {
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
   const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
+  const [showWeatherSelector, setShowWeatherSelector] = useState(false);
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -3212,17 +3214,61 @@ export default function App() {
         >
           <Coffee size={20} />
         </button>
-        <button
-          onClick={() => setWeatherMode(weatherMode === 'none' ? 'sunny' : 'none')}
-          className={`p-3 rounded-full shadow-lg border transition-colors ${
-            weatherMode !== 'none'
-              ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
-              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
-          }`}
-          title="Weather Mode (2)"
-        >
-          <Cloud size={20} />
-        </button>
+        {/* Weather Mode Button with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWeatherSelector(!showWeatherSelector)}
+            className={`p-3 rounded-full shadow-lg border transition-colors ${
+              weatherMode !== 'none'
+                ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
+                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
+            }`}
+            title="Weather Mode (2)"
+          >
+            <Cloud size={20} />
+          </button>
+          {/* Weather Selector Dropdown */}
+          {showWeatherSelector && (
+            <>
+              {/* Backdrop to close */}
+              <div
+                className="fixed inset-0 z-[-1]"
+                onClick={() => setShowWeatherSelector(false)}
+              />
+              {/* Dropdown Menu */}
+              <div className={`
+                absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
+                ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
+                backdrop-blur-md
+              `}>
+                <div className="p-2 space-y-1">
+                  {WEATHER_OPTIONS.map((option) => (
+                    <button
+                      key={option.type}
+                      onClick={() => {
+                        setWeatherMode(option.type);
+                        setShowWeatherSelector(false);
+                      }}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                        transition-all
+                        ${weatherMode === option.type
+                          ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
+                          : isDarkMode
+                            ? 'text-neutral-300 hover:bg-neutral-700'
+                            : 'text-neutral-700 hover:bg-neutral-100'
+                        }
+                      `}
+                    >
+                      <span className="text-lg">{option.emoji}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         {hasStarted && (
           <button
             onClick={resetAll}
@@ -3627,8 +3673,6 @@ export default function App() {
       {/* Weather Mode */}
       <WeatherMode
         weather={weatherMode}
-        onWeatherChange={setWeatherMode}
-        isDarkMode={isDarkMode}
       />
 
       {/* Constellation Mode */}
