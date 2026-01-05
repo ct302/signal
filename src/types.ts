@@ -139,7 +139,7 @@ export interface ProximityResult {
 }
 
 // Provider Configuration Types
-export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter';
+export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter' | 'groq';
 
 export interface ProviderConfig {
   provider: ProviderType;
@@ -163,7 +163,8 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
     'xiaomi/mimo-v2-flash:free',
     'google/gemini-2.0-flash-exp:free',
     'meta-llama/llama-3.3-70b-instruct:free'
-  ]
+  ],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
 };
 
 // ============================================

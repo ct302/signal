@@ -16,6 +16,7 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: 'Google (Gemini)',
   openai: 'OpenAI (GPT)',
   anthropic: 'Anthropic (Claude)',
+  groq: 'Groq',
   ollama: 'Ollama (Local)',
   openrouter: 'OpenRouter'
 };
@@ -190,7 +191,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
             <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
               Provider
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map(provider => (
                 <button
                   key={provider}

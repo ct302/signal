@@ -139,6 +139,8 @@ const buildApiUrl = (config: ProviderConfig): string => {
       return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
     case 'openrouter':
       return 'https://openrouter.ai/api/v1/chat/completions';
+    case 'groq':
+      return 'https://api.groq.com/openai/v1/chat/completions';
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -163,6 +165,7 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
         ...(jsonMode && { generationConfig: { responseMimeType: "application/json" } })
       };
     case 'openai':
+    case 'groq':
       return {
         model: config.model,
         messages: [{ role: 'user', content: prompt }],
@@ -213,6 +216,7 @@ const buildHeaders = (config: ProviderConfig): Record<string, string> => {
 
   switch (config.provider) {
     case 'openai':
+    case 'groq':
       headers['Authorization'] = `Bearer ${config.apiKey}`;
       break;
     case 'anthropic':
@@ -235,6 +239,7 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
     case 'google':
       return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     case 'openai':
+    case 'groq':
       return data.choices?.[0]?.message?.content || '';
     case 'anthropic':
       return data.content?.[0]?.text || '';
@@ -1049,10 +1054,12 @@ CRITICAL RULES:
 3. Rephrase the question from a different angle
 4. Reword all answer options but keep the same correct answer meaning
 5. Shuffle the correct answer position
-6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
+6. Use LaTeX ($...$) ONLY for mathematical symbols - NOT for prose text!
+   - CORRECT: "The value is $x = 5$"
+   - WRONG: "$The value is x = 5$"
 
 Return ONLY this JSON:
-{"question": "your question about ${topic}", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
+{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
   } else {
     // Normal mode: Generate new question with difficulty
     const difficultyPrompt = getDifficultyPrompt(difficulty);
@@ -1070,13 +1077,15 @@ CRITICAL RULES:
 3. Ask questions that someone who understands ${topic} could answer
 4. Wrong answers should be plausible but clearly wrong to someone who knows the material
 5. The question must make logical sense and have one clearly correct answer
-6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
+6. Use LaTeX ($...$) ONLY for mathematical symbols and equations - NOT for prose text!
+   - CORRECT: "The resulting equation is $x = 10$"
+   - WRONG: "$The resulting equation is x = 10$" (entire text in LaTeX breaks rendering)
 
 GOOD question example: "What is the derivative of $f(x) = x^2$?"
 BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
 
 Return ONLY this JSON:
-{"question": "your question", "options": ["$option1$", "$option2$", "$option3$", "$option4$"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
+{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
   }
 
   try {
