@@ -1995,8 +1995,8 @@ export default function App() {
     const isClickableMode = viewMode !== 'morph';
     let style: React.CSSProperties = {
       display: 'inline-block',
-      // Smooth morph transitions with cubic bezier easing
-      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      // Only apply morph transitions in morph mode - not in story/tech/nfl modes
+      transition: viewMode === 'morph' ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
       // Make important words look clickable only in locked modes
       cursor: isImportant && isClickableMode ? 'pointer' : 'default',
     };

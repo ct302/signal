@@ -243,37 +243,33 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                     </span>
                   </div>
 
-                  {/* Bridge Line with Label */}
-                  <div className="flex-1 flex items-center justify-center px-4 relative">
-                    {/* Animated line */}
+                  {/* Bridge Line with Label - Single continuous line */}
+                  <div className="flex-1 flex items-center justify-center relative min-w-[120px]">
+                    {/* Single connecting line - properly contained */}
                     <div
-                      className="absolute inset-x-0 h-0.5 top-1/2 -translate-y-1/2"
+                      className="absolute left-0 right-0 h-px top-1/2 -translate-y-1/2"
                       style={{
                         background: isActive
-                          ? `linear-gradient(90deg, ${data.color}, ${data.color}80, ${data.color})`
-                          : 'linear-gradient(90deg, rgba(251, 191, 36, 0.3), rgba(96, 165, 250, 0.3))'
+                          ? data.color
+                          : 'linear-gradient(90deg, rgba(251, 191, 36, 0.4), rgba(96, 165, 250, 0.4))'
                       }}
                     />
 
                     {/* Animated dot on hover */}
                     {isHovered && (
                       <div
-                        className="absolute w-3 h-3 rounded-full animate-bridge-flow"
-                        style={{ backgroundColor: data.color }}
+                        className="absolute w-2 h-2 rounded-full animate-bridge-flow z-10"
+                        style={{ backgroundColor: data.color, boxShadow: `0 0 8px ${data.color}` }}
                       />
                     )}
 
-                    {/* Relationship Label */}
+                    {/* Relationship Label - sits on top of line */}
                     <span
-                      className={`relative z-10 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 ${
+                      className={`relative z-10 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 border ${
                         isActive
-                          ? 'bg-neutral-800 text-white'
-                          : 'bg-neutral-800/80 text-amber-200/80'
+                          ? 'bg-neutral-900 text-white border-neutral-600'
+                          : 'bg-neutral-900 text-neutral-400 border-neutral-700'
                       }`}
-                      style={{
-                        borderColor: isActive ? data.color : 'transparent',
-                        borderWidth: isActive ? 1 : 0
-                      }}
                     >
                       {data.relationshipLabel}
                     </span>
