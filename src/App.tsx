@@ -1211,6 +1211,10 @@ export default function App() {
               setShowCondensedView(false);
               setIsFirstPrinciplesMode(false);
             }
+            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
+            if (viewMode === 'morph') {
+              setViewMode('nfl');
+            }
           }
           setIsNarrativeMode(!isNarrativeMode);
           break;
@@ -2396,6 +2400,10 @@ export default function App() {
                             if (isFirstPrinciplesMode) {
                               setShowCondensedView(false);
                               setIsFirstPrinciplesMode(false);
+                            }
+                            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
+                            if (viewMode === 'morph') {
+                              setViewMode('nfl');
                             }
                           }
                           setIsNarrativeMode(!isNarrativeMode);
