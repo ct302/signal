@@ -480,6 +480,41 @@ const getShortDomain = (domain: string): string => {
 };
 
 /**
+ * Detect if a topic is STEM-related (should allow mathematical notation)
+ * Non-STEM topics should use plain English only - no LaTeX, no Greek letters, no math symbols
+ */
+const isSTEMTopic = (topic: string): boolean => {
+  const topicLower = topic.toLowerCase();
+
+  // STEM keywords that warrant mathematical notation
+  const stemKeywords = [
+    // Math
+    'math', 'calculus', 'algebra', 'geometry', 'trigonometry', 'statistics', 'probability',
+    'derivative', 'integral', 'equation', 'matrix', 'vector', 'tensor', 'polynomial',
+    'logarithm', 'exponential', 'function', 'theorem', 'proof', 'set theory', 'topology',
+    // Physics
+    'physics', 'quantum', 'relativity', 'thermodynamics', 'mechanics', 'electromagnetism',
+    'optics', 'wave', 'particle', 'force', 'energy', 'momentum', 'gravity', 'entropy',
+    // Computer Science
+    'algorithm', 'data structure', 'complexity', 'sorting', 'graph theory', 'automata',
+    'compiler', 'neural network', 'machine learning', 'deep learning', 'backpropagation',
+    'gradient descent', 'optimization', 'regression', 'classification', 'clustering',
+    // Engineering
+    'engineering', 'circuit', 'signal processing', 'control system', 'fourier',
+    'laplace', 'differential equation', 'linear system',
+    // Chemistry
+    'chemistry', 'chemical', 'molecular', 'atomic', 'reaction', 'bond', 'electron',
+    'orbital', 'periodic', 'stoichiometry',
+    // Biology (quantitative)
+    'genetics', 'genomics', 'bioinformatics', 'population dynamics', 'epidemiology',
+    // Economics (quantitative)
+    'econometrics', 'game theory', 'optimization', 'utility function', 'equilibrium'
+  ];
+
+  return stemKeywords.some(keyword => topicLower.includes(keyword));
+};
+
+/**
  * Enrich domain on selection - called once when user selects their expertise domain
  * Returns cached enrichment data to be reused for all subsequent generations
  * Note: Actual web data is now fetched by OpenRouter's native web search plugin
@@ -591,6 +626,10 @@ export const generateAnalogy = async (
   const shortDomain = getShortDomain(domain);
   const complexityInstructions = getComplexityPrompt(complexity, shortDomain);
 
+  // Check if this is a STEM topic that warrants mathematical notation
+  const topicIsSTEM = isSTEMTopic(topic);
+  console.log(`[generateAnalogy] Topic "${topic}" is ${topicIsSTEM ? 'STEM' : 'non-STEM'} - ${topicIsSTEM ? 'allowing' : 'disabling'} LaTeX`);
+
   // Check granularity separately for domain and topic
   // Web search is triggered by DOMAIN granularity - specific events need real historical data
   // General domains (NFL, Cooking, Chess) don't need web search - LLM has good general knowledge
@@ -636,6 +675,11 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 `
     : ''; // No web search for general domains - use LLM knowledge
 
+  // LaTeX instruction depends on whether topic is STEM-related
+  const latexInstruction = topicIsSTEM
+    ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧.';
+
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
 TOPIC SCOPING - CRITICAL INSTRUCTION:
@@ -658,7 +702,7 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. Include mathematical notation in LaTeX ($...$) where appropriate. This section is for the TECHNICAL side only - give real substance, not generic word salad.",
+  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. ${latexInstruction} This section is for the TECHNICAL side only - give real substance, not generic word salad.",
   "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
   "segments": [
     {
@@ -711,7 +755,7 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
-LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
+${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
 ALLOWED LaTeX (use these ONLY):
 - Variables and subscripts: $x$, $T_{ij}$, $v^k$
 - Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$
@@ -725,15 +769,31 @@ FORBIDDEN (DO NOT USE):
 - \\\\tilde, \\\\hat, \\\\bar as standalone words (wrong: "a \\\\tilde of x")
 - Complex nested environments
 - Any LaTeX command used as an English word
+- NEVER use \\\\in to mean "in" (write the word "in")
+- NEVER use \\\\to to mean "to" (write the word "to")
 
 EXAMPLES:
 - WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"
 - WRONG: "apply the \\\\tilde transformation"
+- WRONG: "x is \\\\in the set" (use "x is in the set")
 - RIGHT: "A tensor is an array of numbers"
 - RIGHT: "the transformation $\\\\tilde{T}_{ij}$" (command inside $ delimiters)
 - RIGHT: "the metric tensor $g_{\\\\mu\\\\nu}$"
 
-Keep LaTeX simple. When in doubt, use plain English.
+Keep LaTeX simple. When in doubt, use plain English.` : `CRITICAL - NO MATHEMATICAL SYMBOLS (This is NOT a STEM topic):
+Since "${topic}" is not a mathematical/scientific topic, use ONLY plain English:
+- NO LaTeX: No $...$ blocks, no \\\\frac, \\\\sum, \\\\int, etc.
+- NO Greek letters: No α, β, γ, δ, Σ, etc.
+- NO set notation: No ∈, ∪, ∩, ⊂, etc. (write "in", "and", "or" instead)
+- NO arrows: No →, ←, ⟶ (write "to", "from", "leads to" instead)
+- NO subscripts/superscripts: No x₁, x², etc.
+
+EXAMPLES FOR NON-STEM TOPICS:
+- WRONG: "The note ∈ the chord" → RIGHT: "The note in the chord"
+- WRONG: "Voice leading → resolution" → RIGHT: "Voice leading leads to resolution"
+- WRONG: "The ∑ of intervals" → RIGHT: "The sum of intervals"
+
+Write as if for a general audience magazine - clear, readable English only.`}
 
 ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
 The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
