@@ -2501,8 +2501,8 @@ export default function App() {
                         <span className="hidden sm:inline">Bullets</span>
                       </button>
                     )}
-                    {/* First Principles Mode - Only in Tech Lock when condensed data available */}
-                    {hasStarted && viewMode === 'tech' && condensedData && (
+                    {/* First Principles Mode - Available in Tech and Morph modes when condensed data available */}
+                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
                       <button
                         onClick={toggleFirstPrinciplesMode}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
