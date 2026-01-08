@@ -1987,6 +1987,64 @@ export default function App() {
     return sentences.filter(s => s.some(w => !w.isSpace)); // Filter empty sentences
   };
 
+  // Extract unique math symbols from content for glossary
+  const extractSymbolsFromContent = useCallback((words: ProcessedWord[]): Array<{ symbol: string; name: string; meaning: string }> => {
+    const foundSymbols = new Set<string>();
+    const result: Array<{ symbol: string; name: string; meaning: string }> = [];
+
+    // Symbols to look for in content
+    const symbolMap: Record<string, { name: string; meaning: string }> = {
+      'Σ': { name: 'Sigma', meaning: 'Summation or standard deviation' },
+      'σ': { name: 'sigma', meaning: 'Standard deviation or small sigma' },
+      '∈': { name: 'Element of', meaning: '"belongs to" or "is in"' },
+      '∉': { name: 'Not element of', meaning: '"does not belong to"' },
+      '⊂': { name: 'Subset', meaning: 'Is contained within' },
+      '⊃': { name: 'Superset', meaning: 'Contains' },
+      '∪': { name: 'Union', meaning: 'Combined set of all elements' },
+      '∩': { name: 'Intersection', meaning: 'Common elements only' },
+      '∀': { name: 'For all', meaning: 'Applies to every element' },
+      '∃': { name: 'Exists', meaning: 'At least one exists' },
+      '∞': { name: 'Infinity', meaning: 'Without bound or limit' },
+      '∂': { name: 'Partial', meaning: 'Partial derivative' },
+      '∇': { name: 'Nabla/Del', meaning: 'Gradient operator' },
+      '∫': { name: 'Integral', meaning: 'Area under curve / continuous sum' },
+      'α': { name: 'Alpha', meaning: 'First parameter or learning rate' },
+      'β': { name: 'Beta', meaning: 'Second parameter or coefficient' },
+      'γ': { name: 'Gamma', meaning: 'Third parameter or discount factor' },
+      'δ': { name: 'Delta', meaning: 'Small change or difference' },
+      'Δ': { name: 'Delta', meaning: 'Change in value' },
+      'ε': { name: 'Epsilon', meaning: 'Very small quantity or error' },
+      'θ': { name: 'Theta', meaning: 'Angle or model parameters' },
+      'λ': { name: 'Lambda', meaning: 'Eigenvalue or rate parameter' },
+      'μ': { name: 'Mu', meaning: 'Mean (average) value' },
+      'π': { name: 'Pi', meaning: 'Circle ratio ≈ 3.14159' },
+      'φ': { name: 'Phi', meaning: 'Golden ratio or feature transform' },
+      'ψ': { name: 'Psi', meaning: 'Wave function or auxiliary variable' },
+      'ω': { name: 'Omega', meaning: 'Angular frequency' },
+      'Ω': { name: 'Omega', meaning: 'Sample space or ohm' },
+      'ρ': { name: 'Rho', meaning: 'Correlation coefficient or density' },
+      'τ': { name: 'Tau', meaning: 'Time constant' },
+      '≈': { name: 'Approximately', meaning: 'Roughly equal to' },
+      '≠': { name: 'Not equal', meaning: 'Different from' },
+      '≤': { name: 'Less or equal', meaning: 'At most' },
+      '≥': { name: 'Greater or equal', meaning: 'At least' },
+      '→': { name: 'Arrow', meaning: 'Maps to or approaches' },
+      '⟹': { name: 'Implies', meaning: 'Therefore or leads to' },
+      '⟺': { name: 'If and only if', meaning: 'Equivalent statements' },
+    };
+
+    // Scan all words for symbols
+    const fullText = words.map(w => w.text).join('');
+    for (const [symbol, info] of Object.entries(symbolMap)) {
+      if (fullText.includes(symbol) && !foundSymbols.has(symbol)) {
+        foundSymbols.add(symbol);
+        result.push({ symbol, ...info });
+      }
+    }
+
+    return result;
+  }, []);
+
   const renderWord = (item: ProcessedWord, index: number) => {
     const wordId = `word-${index}`;
     if (item.isSpace) return <span key={index}>{item.text}</span>;
@@ -2761,6 +2819,43 @@ export default function App() {
                           </span>
                         </li>
                       ))}
+
+                      {/* Symbol Glossary - shows detected math symbols with explanations */}
+                      {(() => {
+                        const detectedSymbols = extractSymbolsFromContent(processedWords);
+                        if (detectedSymbols.length === 0) return null;
+                        return (
+                          <div className={`mt-6 pt-4 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                            <div className={`flex items-center gap-2 mb-3 text-xs font-semibold uppercase tracking-wider ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                              <BookOpen size={14} />
+                              <span>Symbol Guide</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {detectedSymbols.map(({ symbol, name, meaning }) => (
+                                <div
+                                  key={symbol}
+                                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm ${
+                                    isDarkMode
+                                      ? 'bg-neutral-800 border border-neutral-700'
+                                      : 'bg-neutral-100 border border-neutral-200'
+                                  }`}
+                                  title={meaning}
+                                >
+                                  <span className={`font-mono text-base ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                    {symbol}
+                                  </span>
+                                  <span className={`${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    {name}
+                                  </span>
+                                  <span className={`hidden sm:inline ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                    — {meaning}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </ul>
                   ) : (
                     <p

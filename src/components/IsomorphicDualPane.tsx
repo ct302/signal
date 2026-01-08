@@ -144,6 +144,8 @@ const cleanLabel = (text: string): string => {
     .replace(/\^{([^}]+)}/g, '^$1')
     .replace(/_{([^}]+)}/g, '_$1')
     .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
+    // Handle backslash followed by actual Unicode Greek letters (e.g., \Σ -> Σ)
+    .replace(/\\([Σσαβγδεθλμπφψωρτηκχ∞∈∀∃∇∂∫≈≠≤≥])/g, '$1')
     .replace(/\\[a-zA-Z]+/g, (match) => {
       const commands: { [key: string]: string } = {
         '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',

@@ -40,6 +40,8 @@ const cleanLabel = (text: string): string => {
     .replace(/\^{([^}]+)}/g, '^$1')
     .replace(/_{([^}]+)}/g, '_$1')
     .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
+    // Handle backslash followed by actual Unicode Greek letters (e.g., \Σ -> Σ)
+    .replace(/\\([Σσαβγδεθλμπφψωρτηκχ∞∈∀∃∇∂∫≈≠≤≥])/g, '$1')
     .replace(/\\[a-zA-Z]+/g, (match) => {
       const commands: { [key: string]: string } = {
         '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',
@@ -233,12 +235,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       isActive ? 'scale-105' : 'hover:scale-102'
                     }`}
                     style={{
-                      backgroundColor: isActive ? data.color + '30' : 'rgba(251, 191, 36, 0.1)',
-                      border: `2px solid ${isActive ? data.color : 'rgba(251, 191, 36, 0.3)'}`,
-                      boxShadow: isActive ? `0 4px 20px ${data.color}40` : undefined
+                      backgroundColor: isActive ? data.color + '35' : 'rgba(251, 191, 36, 0.15)',
+                      border: `2px solid ${isActive ? data.color : 'rgba(251, 191, 36, 0.5)'}`,
+                      boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`text-amber-200 font-semibold text-base ${isActive ? 'text-white' : ''}`}>
+                    <span className={`font-semibold text-base ${isActive ? 'text-white' : 'text-amber-100'}`}>
                       {cleanLabel(data.concept.analogy_term)}
                     </span>
                   </div>
@@ -281,12 +283,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       isActive ? 'scale-105' : 'hover:scale-102'
                     }`}
                     style={{
-                      backgroundColor: isActive ? data.color + '30' : 'rgba(96, 165, 250, 0.1)',
-                      border: `2px solid ${isActive ? data.color : 'rgba(96, 165, 250, 0.3)'}`,
-                      boxShadow: isActive ? `0 4px 20px ${data.color}40` : undefined
+                      backgroundColor: isActive ? data.color + '35' : 'rgba(96, 165, 250, 0.15)',
+                      border: `2px solid ${isActive ? data.color : 'rgba(96, 165, 250, 0.5)'}`,
+                      boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`text-blue-200 font-semibold text-base ${isActive ? 'text-white' : ''}`}>
+                    <span className={`font-semibold text-base ${isActive ? 'text-white' : 'text-blue-100'}`}>
                       {cleanLabel(data.concept.tech_term)}
                     </span>
                   </div>
@@ -324,10 +326,10 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             {/* Concept Comparison */}
             <div className="p-6 space-y-6">
               {/* Expertise Term */}
-              <div className="p-4 rounded-xl bg-amber-900/20 border border-amber-800/50">
+              <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="text-amber-400" size={16} />
-                  <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">
+                  <span className="text-amber-200 text-xs font-bold uppercase tracking-wider">
                     What You Know
                   </span>
                 </div>
@@ -348,10 +350,10 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               </div>
 
               {/* Learning Term */}
-              <div className="p-4 rounded-xl bg-blue-900/20 border border-blue-800/50">
+              <div className="p-4 rounded-xl bg-blue-900/30 border border-blue-700/60">
                 <div className="flex items-center gap-2 mb-2">
                   <BookOpen className="text-blue-400" size={16} />
-                  <span className="text-blue-300 text-xs font-bold uppercase tracking-wider">
+                  <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">
                     What You're Learning
                   </span>
                 </div>
