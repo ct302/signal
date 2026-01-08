@@ -290,16 +290,6 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       {cleanLabel(data.concept.tech_term)}
                     </span>
                   </div>
-
-                  {/* Importance Indicator (subtle bar below) */}
-                  <div
-                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-0.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${data.importance * 60 + 20}%`,
-                      backgroundColor: isActive ? data.color : 'rgba(255,255,255,0.1)',
-                      opacity: isActive ? 1 : 0.5
-                    }}
-                  />
                 </div>
               );
             })}
