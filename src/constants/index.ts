@@ -216,3 +216,101 @@ export const STORAGE_KEYS = {
 // Limits
 export const MAX_HISTORY_ITEMS = 50;
 export const MAX_TUTOR_HISTORY = 20;
+
+// Symbol Glossary for mathematical notation - shared across components
+export interface SymbolGlossaryEntry {
+  symbol: string;
+  name: string;
+  meaning: string;
+  latex: string[];
+}
+
+export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
+  // Greek letters - uppercase
+  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', latex: ['\\Sigma', '\\sum'] },
+  { symbol: 'Δ', name: 'Delta', meaning: 'Change in value', latex: ['\\Delta'] },
+  { symbol: 'Ω', name: 'Omega', meaning: 'Worst-case complexity or ohm', latex: ['\\Omega'] },
+  { symbol: 'Θ', name: 'Theta', meaning: 'Tight bound complexity', latex: ['\\Theta'] },
+  { symbol: 'Π', name: 'Pi (capital)', meaning: 'Product of sequence', latex: ['\\Pi', '\\prod'] },
+  { symbol: 'Φ', name: 'Phi (capital)', meaning: 'Golden ratio or empty set', latex: ['\\Phi'] },
+  { symbol: 'Ψ', name: 'Psi (capital)', meaning: 'Wave function', latex: ['\\Psi'] },
+  { symbol: 'Γ', name: 'Gamma (capital)', meaning: 'Gamma function', latex: ['\\Gamma'] },
+  { symbol: 'Λ', name: 'Lambda (capital)', meaning: 'Diagonal matrix', latex: ['\\Lambda'] },
+
+  // Greek letters - lowercase
+  { symbol: 'σ', name: 'sigma', meaning: 'Standard deviation', latex: ['\\sigma'] },
+  { symbol: 'α', name: 'Alpha', meaning: 'First parameter or learning rate', latex: ['\\alpha'] },
+  { symbol: 'β', name: 'Beta', meaning: 'Second parameter', latex: ['\\beta'] },
+  { symbol: 'γ', name: 'Gamma', meaning: 'Third parameter', latex: ['\\gamma'] },
+  { symbol: 'δ', name: 'Delta (small)', meaning: 'Small change', latex: ['\\delta'] },
+  { symbol: 'ε', name: 'Epsilon', meaning: 'Very small quantity', latex: ['\\epsilon', '\\varepsilon'] },
+  { symbol: 'θ', name: 'Theta', meaning: 'Angle or parameters', latex: ['\\theta'] },
+  { symbol: 'λ', name: 'Lambda', meaning: 'Eigenvalue or rate', latex: ['\\lambda'] },
+  { symbol: 'μ', name: 'Mu', meaning: 'Mean (average)', latex: ['\\mu'] },
+  { symbol: 'π', name: 'Pi', meaning: '≈ 3.14159', latex: ['\\pi'] },
+  { symbol: 'φ', name: 'Phi', meaning: 'Golden ratio', latex: ['\\phi', '\\varphi'] },
+  { symbol: 'ψ', name: 'Psi', meaning: 'Wave function', latex: ['\\psi'] },
+  { symbol: 'ω', name: 'Omega (small)', meaning: 'Angular frequency or best-case', latex: ['\\omega'] },
+  { symbol: 'ρ', name: 'Rho', meaning: 'Correlation or density', latex: ['\\rho'] },
+  { symbol: 'τ', name: 'Tau', meaning: 'Time constant', latex: ['\\tau'] },
+  { symbol: 'η', name: 'Eta', meaning: 'Learning rate or efficiency', latex: ['\\eta'] },
+  { symbol: 'κ', name: 'Kappa', meaning: 'Curvature or condition number', latex: ['\\kappa'] },
+  { symbol: 'ν', name: 'Nu', meaning: 'Degrees of freedom', latex: ['\\nu'] },
+  { symbol: 'χ', name: 'Chi', meaning: 'Chi-squared distribution', latex: ['\\chi'] },
+
+  // Set theory & logic
+  { symbol: '∈', name: 'Element of', meaning: '"belongs to" or "is in"', latex: ['\\in'] },
+  { symbol: '∉', name: 'Not in', meaning: '"does not belong to"', latex: ['\\notin'] },
+  { symbol: '⊂', name: 'Subset', meaning: 'Is contained within', latex: ['\\subset'] },
+  { symbol: '⊆', name: 'Subset or equal', meaning: 'Contained or equal to', latex: ['\\subseteq'] },
+  { symbol: '∪', name: 'Union', meaning: 'Combined set', latex: ['\\cup'] },
+  { symbol: '∩', name: 'Intersection', meaning: 'Common elements', latex: ['\\cap'] },
+  { symbol: '∀', name: 'For all', meaning: 'Applies to every element', latex: ['\\forall'] },
+  { symbol: '∃', name: 'Exists', meaning: 'At least one exists', latex: ['\\exists'] },
+  { symbol: '∅', name: 'Empty set', meaning: 'Set with no elements', latex: ['\\emptyset', '\\varnothing'] },
+  { symbol: '∧', name: 'And', meaning: 'Logical AND', latex: ['\\land', '\\wedge'] },
+  { symbol: '∨', name: 'Or', meaning: 'Logical OR', latex: ['\\lor', '\\vee'] },
+  { symbol: '¬', name: 'Not', meaning: 'Logical negation', latex: ['\\neg', '\\lnot'] },
+
+  // Calculus & analysis
+  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', latex: ['\\infty'] },
+  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', latex: ['\\partial'] },
+  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', latex: ['\\nabla'] },
+  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', latex: ['\\int'] },
+  { symbol: '∑', name: 'Sum', meaning: 'Summation', latex: ['\\sum'] },
+  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', latex: ['\\prod'] },
+  { symbol: '′', name: 'Prime', meaning: 'Derivative or related variable', latex: ["'", '\\prime'] },
+
+  // Comparisons & relations
+  { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', latex: ['\\approx'] },
+  { symbol: '≠', name: 'Not equal', meaning: 'Different from', latex: ['\\neq', '\\ne'] },
+  { symbol: '≤', name: 'Less or equal', meaning: 'At most', latex: ['\\leq', '\\le'] },
+  { symbol: '≥', name: 'Greater or equal', meaning: 'At least', latex: ['\\geq', '\\ge'] },
+  { symbol: '≪', name: 'Much less', meaning: 'Significantly smaller', latex: ['\\ll'] },
+  { symbol: '≫', name: 'Much greater', meaning: 'Significantly larger', latex: ['\\gg'] },
+  { symbol: '∝', name: 'Proportional', meaning: 'Scales with', latex: ['\\propto'] },
+  { symbol: '≡', name: 'Identical', meaning: 'Exactly equal or defined as', latex: ['\\equiv'] },
+
+  // Arrows & implications
+  { symbol: '→', name: 'Arrow', meaning: 'Maps to or approaches', latex: ['\\to', '\\rightarrow'] },
+  { symbol: '←', name: 'Left arrow', meaning: 'From or assigned from', latex: ['\\leftarrow', '\\gets'] },
+  { symbol: '↔', name: 'Bidirectional', meaning: 'If and only if', latex: ['\\leftrightarrow'] },
+  { symbol: '⟹', name: 'Implies', meaning: 'Therefore', latex: ['\\implies', '\\Rightarrow'] },
+  { symbol: '⟺', name: 'Iff', meaning: 'If and only if', latex: ['\\iff', '\\Leftrightarrow'] },
+
+  // Arithmetic & operations
+  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', latex: ['\\sqrt'] },
+  { symbol: '×', name: 'Times', meaning: 'Multiplication', latex: ['\\times'] },
+  { symbol: '÷', name: 'Division', meaning: 'Division', latex: ['\\div'] },
+  { symbol: '±', name: 'Plus-minus', meaning: 'Positive or negative', latex: ['\\pm'] },
+  { symbol: '·', name: 'Dot', meaning: 'Multiplication or dot product', latex: ['\\cdot'] },
+  { symbol: '∘', name: 'Compose', meaning: 'Function composition', latex: ['\\circ'] },
+  { symbol: '⊕', name: 'XOR', meaning: 'Exclusive or / direct sum', latex: ['\\oplus'] },
+  { symbol: '⊗', name: 'Tensor', meaning: 'Tensor product', latex: ['\\otimes'] },
+
+  // Big O notation specific
+  { symbol: 'O', name: 'Big O', meaning: 'Upper bound (worst-case growth)', latex: ['O', '\\mathcal{O}'] },
+  { symbol: 'o', name: 'Little o', meaning: 'Strictly smaller growth', latex: ['o'] },
+  { symbol: 'n', name: 'n', meaning: 'Input size (number of elements)', latex: ['n'] },
+  { symbol: 'log', name: 'Logarithm', meaning: 'Inverse of exponentiation', latex: ['\\log'] },
+];

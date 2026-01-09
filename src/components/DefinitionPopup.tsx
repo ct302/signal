@@ -1,51 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
-
-// Symbol glossary map for definitions - includes Unicode symbol and LaTeX commands
-const SYMBOL_GLOSSARY: Array<{ symbol: string; name: string; meaning: string; latex: string[] }> = [
-  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', latex: ['\\Sigma', '\\sum'] },
-  { symbol: 'σ', name: 'sigma', meaning: 'Standard deviation', latex: ['\\sigma'] },
-  { symbol: '∈', name: 'Element of', meaning: '"belongs to" or "is in"', latex: ['\\in'] },
-  { symbol: '∉', name: 'Not in', meaning: '"does not belong to"', latex: ['\\notin'] },
-  { symbol: '⊂', name: 'Subset', meaning: 'Is contained within', latex: ['\\subset'] },
-  { symbol: '∪', name: 'Union', meaning: 'Combined set', latex: ['\\cup'] },
-  { symbol: '∩', name: 'Intersection', meaning: 'Common elements', latex: ['\\cap'] },
-  { symbol: '∀', name: 'For all', meaning: 'Applies to every element', latex: ['\\forall'] },
-  { symbol: '∃', name: 'Exists', meaning: 'At least one exists', latex: ['\\exists'] },
-  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', latex: ['\\infty'] },
-  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', latex: ['\\partial'] },
-  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', latex: ['\\nabla'] },
-  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', latex: ['\\int'] },
-  { symbol: 'α', name: 'Alpha', meaning: 'First parameter', latex: ['\\alpha'] },
-  { symbol: 'β', name: 'Beta', meaning: 'Second parameter', latex: ['\\beta'] },
-  { symbol: 'γ', name: 'Gamma', meaning: 'Third parameter', latex: ['\\gamma'] },
-  { symbol: 'δ', name: 'Delta (small)', meaning: 'Small change', latex: ['\\delta'] },
-  { symbol: 'Δ', name: 'Delta', meaning: 'Change in value', latex: ['\\Delta'] },
-  { symbol: 'ε', name: 'Epsilon', meaning: 'Very small quantity', latex: ['\\epsilon', '\\varepsilon'] },
-  { symbol: 'θ', name: 'Theta', meaning: 'Angle or parameters', latex: ['\\theta'] },
-  { symbol: 'λ', name: 'Lambda', meaning: 'Eigenvalue or rate', latex: ['\\lambda'] },
-  { symbol: 'μ', name: 'Mu', meaning: 'Mean (average)', latex: ['\\mu'] },
-  { symbol: 'π', name: 'Pi', meaning: '≈ 3.14159', latex: ['\\pi'] },
-  { symbol: 'φ', name: 'Phi', meaning: 'Golden ratio', latex: ['\\phi', '\\varphi'] },
-  { symbol: 'ψ', name: 'Psi', meaning: 'Wave function', latex: ['\\psi'] },
-  { symbol: 'ω', name: 'Omega (small)', meaning: 'Angular frequency', latex: ['\\omega'] },
-  { symbol: 'Ω', name: 'Omega', meaning: 'Ohm or sample space', latex: ['\\Omega'] },
-  { symbol: 'ρ', name: 'Rho', meaning: 'Correlation or density', latex: ['\\rho'] },
-  { symbol: 'τ', name: 'Tau', meaning: 'Time constant', latex: ['\\tau'] },
-  { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', latex: ['\\approx'] },
-  { symbol: '≠', name: 'Not equal', meaning: 'Different from', latex: ['\\neq', '\\ne'] },
-  { symbol: '≤', name: 'Less or equal', meaning: 'At most', latex: ['\\leq', '\\le'] },
-  { symbol: '≥', name: 'Greater or equal', meaning: 'At least', latex: ['\\geq', '\\ge'] },
-  { symbol: '→', name: 'Arrow', meaning: 'Maps to or approaches', latex: ['\\to', '\\rightarrow'] },
-  { symbol: '⟹', name: 'Implies', meaning: 'Therefore', latex: ['\\implies', '\\Rightarrow'] },
-  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', latex: ['\\sqrt'] },
-  { symbol: '×', name: 'Times', meaning: 'Multiplication', latex: ['\\times'] },
-  { symbol: '÷', name: 'Division', meaning: 'Division', latex: ['\\div'] },
-  { symbol: '±', name: 'Plus-minus', meaning: 'Positive or negative', latex: ['\\pm'] },
-  { symbol: '∑', name: 'Sum', meaning: 'Summation', latex: ['\\sum'] },
-  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', latex: ['\\prod'] },
-];
+import { SYMBOL_GLOSSARY } from '../constants';
 
 interface DefinitionPopupProps {
   selectedTerm: string;

@@ -23,6 +23,7 @@ interface ConstellationModeProps {
   onClose: () => void;
   domainName?: string;
   topicName?: string;
+  renderRichText?: (text: string, colorClass?: string) => React.ReactNode;
 }
 
 // Color palette for concepts
@@ -105,7 +106,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   isDarkMode,
   onClose,
   domainName = 'Your Expertise',
-  topicName = 'New Topic'
+  topicName = 'New Topic',
+  renderRichText
 }) => {
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
@@ -457,9 +459,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   </button>
                   {showCausalMechanics && (
                     <div className="p-4 bg-neutral-900/50 border-t border-neutral-700">
-                      <p className="text-neutral-300 text-sm leading-relaxed">
-                        {selectedConceptData.concept.causal_explanation}
-                      </p>
+                      <div className="text-neutral-300 text-sm leading-relaxed">
+                        {renderRichText
+                          ? renderRichText(selectedConceptData.concept.causal_explanation || '', 'text-neutral-300')
+                          : selectedConceptData.concept.causal_explanation
+                        }
+                      </div>
                     </div>
                   )}
                 </div>

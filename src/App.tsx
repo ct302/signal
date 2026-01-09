@@ -67,7 +67,8 @@ import {
   CONCEPT_COLORS,
   CONCEPT_BG_COLORS,
   MAX_TUTOR_HISTORY,
-  QUICK_START_DOMAINS
+  QUICK_START_DOMAINS,
+  SYMBOL_GLOSSARY
 } from './constants';
 
 // Utils
@@ -329,6 +330,7 @@ export default function App() {
   const [showStudyControls, setShowStudyControls] = useState(true);
   const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
   const [showWeatherSelector, setShowWeatherSelector] = useState(false);
+  const [showSymbolGlossary, setShowSymbolGlossary] = useState(false);
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -3376,6 +3378,20 @@ export default function App() {
             <Eraser size={20} />
           </button>
         )}
+        {/* Symbol Glossary Button - only show when there's STEM content */}
+        {hasStarted && segments.length > 0 && (
+          <button
+            onClick={() => setShowSymbolGlossary(true)}
+            className={`p-3 rounded-full shadow-lg border transition-colors ${
+              showSymbolGlossary
+                ? 'bg-blue-500 border-blue-600 text-white ring-2 ring-blue-400/50'
+                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-blue-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-blue-500')
+            }`}
+            title="Symbol Guide (∑)"
+          >
+            <span className="text-base font-bold">∑</span>
+          </button>
+        )}
         <button
           ref={controlsButtonRef}
           onClick={() => setShowControls(!showControls)}
@@ -3483,6 +3499,121 @@ export default function App() {
                   <span>This Menu</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Symbol Glossary Modal */}
+      {showSymbolGlossary && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSymbolGlossary(false)}>
+          <div
+            className={`relative w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`sticky top-0 px-6 py-4 border-b ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">∑</span>
+                  <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                    Symbol Guide
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setShowSymbolGlossary(false)}
+                  className={`p-1.5 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                Mathematical notation explained in plain English
+              </p>
+            </div>
+
+            {/* Symbol Grid */}
+            <div className="overflow-y-auto max-h-[60vh] p-4">
+              {(() => {
+                // Detect which symbols are in the current content
+                const currentText = segments.map(s => isAnalogyVisualMode ? s.analogy : s.tech).join(' ');
+                const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
+                  // Check Unicode symbol
+                  if (currentText.includes(entry.symbol)) return true;
+                  // Check LaTeX commands
+                  return entry.latex.some(cmd => currentText.includes(cmd));
+                });
+
+                if (detectedSymbols.length === 0) {
+                  return (
+                    <div className={`text-center py-8 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                      <span className="text-4xl mb-3 block">📐</span>
+                      <p>No mathematical symbols detected in the current content.</p>
+                    </div>
+                  );
+                }
+
+                // Group symbols by category
+                const greekUpper = detectedSymbols.filter(s => /^[ΣΔΩΘΠΦΨΓΛ]$/.test(s.symbol));
+                const greekLower = detectedSymbols.filter(s => /^[σαβγδεθλμπφψωρτηκνχ]$/.test(s.symbol));
+                const setLogic = detectedSymbols.filter(s => /^[∈∉⊂⊆∪∩∀∃∅∧∨¬]$/.test(s.symbol));
+                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol));
+                const relations = detectedSymbols.filter(s => /^[≈≠≤≥≪≫∝≡]$/.test(s.symbol));
+                const arrows = detectedSymbols.filter(s => /^[→←↔⟹⟺]$/.test(s.symbol));
+                const operations = detectedSymbols.filter(s => /^[√×÷±·∘⊕⊗]$/.test(s.symbol));
+                const other = detectedSymbols.filter(s =>
+                  !greekUpper.includes(s) && !greekLower.includes(s) &&
+                  !setLogic.includes(s) && !calculus.includes(s) &&
+                  !relations.includes(s) && !arrows.includes(s) && !operations.includes(s)
+                );
+
+                const renderCategory = (title: string, symbols: typeof detectedSymbols) => {
+                  if (symbols.length === 0) return null;
+                  return (
+                    <div key={title} className="mb-4">
+                      <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                        {title}
+                      </h3>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {symbols.map(({ symbol, name, meaning }) => (
+                          <div
+                            key={symbol}
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                          >
+                            <span className={`text-xl font-mono w-8 text-center ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                              {symbol}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                {name}
+                              </span>
+                              <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                — {meaning}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    <div className={`text-sm mb-4 px-1 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                      Found <span className="font-bold">{detectedSymbols.length}</span> symbols in current content
+                    </div>
+                    {renderCategory('Greek Letters (Upper)', greekUpper)}
+                    {renderCategory('Greek Letters (Lower)', greekLower)}
+                    {renderCategory('Set Theory & Logic', setLogic)}
+                    {renderCategory('Calculus & Analysis', calculus)}
+                    {renderCategory('Comparisons', relations)}
+                    {renderCategory('Arrows', arrows)}
+                    {renderCategory('Operations', operations)}
+                    {renderCategory('Other', other)}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -3783,6 +3914,7 @@ export default function App() {
           onClose={() => setIsConstellationMode(false)}
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
+          renderRichText={renderRichText}
         />
       )}
 
