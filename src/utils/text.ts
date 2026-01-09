@@ -294,7 +294,8 @@ export const stripMathSymbols = (text: string): string => {
   result = result.replace(/±/g, ' plus or minus ');
   result = result.replace(/∓/g, ' minus or plus ');
   result = result.replace(/∞/g, 'endlessly');
-  result = result.replace(/√/g, '');
+  result = result.replace(/√/g, 'square root of ');
+  result = result.replace(/□/g, 'square ');
   result = result.replace(/∝/g, ' proportional to ');
   result = result.replace(/⊗/g, ' combined with ');
   result = result.replace(/⊕/g, ' combined with ');
@@ -652,6 +653,16 @@ export const sanitizeLatex = (text: string): string => {
   // Convert to word "triangle" when followed by spaces (not in math expressions)
   result = result.replace(/[△▲▵]\s+(?=[a-z])/gi, 'triangle ');
 
+  // Fix \square used as the word "square" (common LLM mistake)
+  // \square renders as □ (geometric square symbol) but LLM often means "square" as in "square roots"
+  // Pattern: "\square roots" or "□ roots" should be "square roots"
+  result = result.replace(/\\square\s+(?=roots?|root\b)/gi, 'square ');
+  result = result.replace(/□\s+(?=roots?|root\b)/gi, 'square ');
+  // Also handle standalone □ followed by common words (indicating prose context)
+  result = result.replace(/□\s+(?=of|the|a|an|is|are|in|to|for|and|or)\b/gi, 'square ');
+  // Handle \square not followed by math-related content - convert to word "square"
+  result = result.replace(/\\square(?=\s+[a-z])/gi, 'square');
+
   // Fix \in used as the word "in" outside of math context
   // \in renders as ∈ (element of) symbol, but in prose should be the word "in"
   // Only convert when followed by a space and lowercase word (not valid math like \int)
@@ -685,7 +696,7 @@ export const sanitizeLatex = (text: string): string => {
     }
 
     // Accent commands used incorrectly as standalone words
-    const accentCommands = ['tilde', 'hat', 'bar', 'vec', 'dot', 'ddot', 'overline', 'underline'];
+    const accentCommands = ['tilde', 'hat', 'bar', 'vec', 'dot', 'ddot', 'overline', 'underline', 'check', 'acute', 'grave', 'breve', 'ring'];
     for (const cmd of accentCommands) {
       // Match \command NOT followed by { (proper usage)
       cleaned = cleaned.replace(new RegExp(`\\\\${cmd}(?![{])`, 'g'), cmd);

@@ -19,11 +19,32 @@ export interface ConceptMapItem {
   analogy_term: string;
   six_word_definition?: string; // Exactly 6 words defining the tech_term (domain-agnostic)
   narrative_mapping?: string; // 2-3 sentence vivid mini-story bridging tech to analogy (domain-specific)
+  causal_explanation?: string; // First-principles explanation of WHY the mapping works structurally
 }
 
 export interface ImportanceMapItem {
   term: string;
   importance: number;
+}
+
+export interface AttentionMapItem {
+  word: string;
+  weight: number;
+  entityId?: number; // For multi-word entities, all words share the same entityId
+}
+
+export interface AttentionMap {
+  tech: AttentionMapItem[];
+  analogy: AttentionMapItem[];
+}
+
+// Expanded lookup for individual words within multi-word entities
+export interface EntityWordLookup {
+  [word: string]: {
+    weight: number;
+    entityId: number;
+    fullEntity: string; // The complete multi-word phrase
+  };
 }
 
 export interface ProcessedWord {
@@ -33,6 +54,7 @@ export interface ProcessedWord {
   isLatex?: boolean;
   segmentIndex?: number;
   conceptIndex?: number;
+  entityId?: number; // For consistent coloring of multi-word entities
 }
 
 export interface Position {
@@ -118,7 +140,7 @@ export interface ProximityResult {
 }
 
 // Provider Configuration Types
-export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter';
+export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter' | 'groq';
 
 export interface ProviderConfig {
   provider: ProviderType;
@@ -142,7 +164,8 @@ export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
     'xiaomi/mimo-v2-flash:free',
     'google/gemini-2.0-flash-exp:free',
     'meta-llama/llama-3.3-70b-instruct:free'
-  ]
+  ],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
 };
 
 // ============================================

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
+import { SYMBOL_GLOSSARY } from '../constants';
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -60,6 +61,38 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   renderRichText
 }) => {
   const [textScale, setTextScale] = useState(1);
+  const [showGlossary, setShowGlossary] = useState(false);
+
+  // Detect symbols in the definition text - checks both Unicode and LaTeX commands
+  const detectedSymbols = useMemo(() => {
+    if (!defText) return [];
+    const found: Array<{ symbol: string; name: string; meaning: string }> = [];
+    const seen = new Set<string>();
+
+    for (const entry of SYMBOL_GLOSSARY) {
+      if (seen.has(entry.symbol)) continue;
+
+      // Check if Unicode symbol is present
+      let isFound = defText.includes(entry.symbol);
+
+      // Check if any LaTeX command variant is present
+      if (!isFound) {
+        for (const latexCmd of entry.latex) {
+          if (defText.includes(latexCmd)) {
+            isFound = true;
+            break;
+          }
+        }
+      }
+
+      if (isFound) {
+        seen.add(entry.symbol);
+        found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
+      }
+    }
+    return found;
+  }, [defText]);
+
   const style: React.CSSProperties = isMobile
     ? {
         top: 'auto',
@@ -145,6 +178,35 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         {onWordClick && !isLoadingDef && (
           <div className="text-[9px] text-neutral-600 mt-1 text-center">
             Click any word for a nested definition
+          </div>
+        )}
+
+        {/* Symbol Glossary - shows when math symbols detected */}
+        {!isLoadingDef && detectedSymbols.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-neutral-800">
+            <button
+              onClick={() => setShowGlossary(!showGlossary)}
+              className="flex items-center gap-2 text-[10px] text-blue-400 hover:text-blue-300 transition-colors w-full"
+            >
+              <BookOpen size={12} />
+              <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
+              <span className="text-neutral-600">({detectedSymbols.length})</span>
+              {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
+            </button>
+            {showGlossary && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {detectedSymbols.map(({ symbol, name, meaning }) => (
+                  <div
+                    key={symbol}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-[10px]"
+                    title={meaning}
+                  >
+                    <span className="text-blue-300 font-mono text-xs">{symbol}</span>
+                    <span className="text-neutral-400">{name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

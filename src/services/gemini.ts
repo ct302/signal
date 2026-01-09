@@ -1,4 +1,4 @@
-import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DEFAULT_GEMINI_API_KEY, DEFAULT_OPENROUTER_API_KEY, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
+import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
 import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
 import { stripMathSymbols } from '../utils/text';
 import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
@@ -98,25 +98,32 @@ const getProviderConfig = (): ProviderConfig => {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      // Use stored API key if present, otherwise fall back to defaults
-      if (parsed.provider === 'google' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_GEMINI_API_KEY;
-      }
-      if (parsed.provider === 'openrouter' && !parsed.apiKey) {
-        parsed.apiKey = DEFAULT_OPENROUTER_API_KEY;
-      }
       return parsed;
     } catch {
       // Fall through to default
     }
   }
-  // Default to OpenRouter with Xiaomi MiMo v2 Flash (free tier)
+  // Default config without API key - user must provide their own
   return {
     provider: 'openrouter',
-    apiKey: DEFAULT_OPENROUTER_API_KEY,
+    apiKey: '',
     model: 'xiaomi/mimo-v2-flash:free',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
+};
+
+// Validate that API key is present (throws user-friendly error if missing)
+const validateApiKey = (config: ProviderConfig): void => {
+  if (config.provider !== 'ollama' && !config.apiKey) {
+    throw new Error(
+      `No API key configured. Please open Settings (gear icon) and enter your ${
+        config.provider === 'google' ? 'Google Gemini' :
+        config.provider === 'openrouter' ? 'OpenRouter' :
+        config.provider === 'openai' ? 'OpenAI' :
+        config.provider === 'anthropic' ? 'Anthropic' : ''
+      } API key.`
+    );
+  }
 };
 
 // Build API URL based on provider
@@ -132,6 +139,8 @@ const buildApiUrl = (config: ProviderConfig): string => {
       return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
     case 'openrouter':
       return 'https://openrouter.ai/api/v1/chat/completions';
+    case 'groq':
+      return 'https://api.groq.com/openai/v1/chat/completions';
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -142,11 +151,12 @@ interface ApiCallOptions {
   jsonMode?: boolean;
   webSearch?: boolean; // Enable OpenRouter web search plugin
   searchPrompt?: string; // Custom prompt for how to integrate web search results
+  maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
 }
 
 // Build request body based on provider
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
-  const { jsonMode = false, webSearch = false, searchPrompt } = options;
+  const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3 } = options;
 
   switch (config.provider) {
     case 'google':
@@ -155,6 +165,7 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
         ...(jsonMode && { generationConfig: { responseMimeType: "application/json" } })
       };
     case 'openai':
+    case 'groq':
       return {
         model: config.model,
         messages: [{ role: 'user', content: prompt }],
@@ -181,15 +192,15 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
       };
 
       // Add web search plugin when enabled (uses OpenRouter's built-in web search)
-      // Pricing: $4 per 1000 results, with max_results: 3 = ~$0.012 per request
+      // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request (Mastery Mode)
       if (webSearch) {
-        const webPlugin: Record<string, any> = { id: 'web', max_results: 3 };
+        const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
         // Add custom search_prompt if provided - guides how results are integrated
         if (searchPrompt) {
           webPlugin.search_prompt = searchPrompt;
         }
         body.plugins = [webPlugin];
-        console.log('[OpenRouter] Web search enabled with max_results: 3' + (searchPrompt ? ', custom search_prompt' : ''));
+        console.log(`[OpenRouter] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
       }
 
       return body;
@@ -205,6 +216,7 @@ const buildHeaders = (config: ProviderConfig): Record<string, string> => {
 
   switch (config.provider) {
     case 'openai':
+    case 'groq':
       headers['Authorization'] = `Bearer ${config.apiKey}`;
       break;
     case 'anthropic':
@@ -227,6 +239,7 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
     case 'google':
       return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     case 'openai':
+    case 'groq':
       return data.choices?.[0]?.message?.content || '';
     case 'anthropic':
       return data.content?.[0]?.text || '';
@@ -243,9 +256,8 @@ const extractResponseText = (data: any, config: ProviderConfig): string => {
 const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<string> => {
   const baseConfig = getProviderConfig();
 
-  if (!baseConfig.apiKey && baseConfig.provider !== 'ollama') {
-    throw new Error(`No API key configured for ${baseConfig.provider}. Please add your API key in Settings.`);
-  }
+  // Validate API key is present (throws user-friendly error if missing)
+  validateApiKey(baseConfig);
 
   // For OpenRouter, use circuit breaker to select available model
   const effectiveModel = baseConfig.provider === 'openrouter'
@@ -468,6 +480,41 @@ const getShortDomain = (domain: string): string => {
 };
 
 /**
+ * Detect if a topic is STEM-related (should allow mathematical notation)
+ * Non-STEM topics should use plain English only - no LaTeX, no Greek letters, no math symbols
+ */
+const isSTEMTopic = (topic: string): boolean => {
+  const topicLower = topic.toLowerCase();
+
+  // STEM keywords that warrant mathematical notation
+  const stemKeywords = [
+    // Math
+    'math', 'calculus', 'algebra', 'geometry', 'trigonometry', 'statistics', 'probability',
+    'derivative', 'integral', 'equation', 'matrix', 'vector', 'tensor', 'polynomial',
+    'logarithm', 'exponential', 'function', 'theorem', 'proof', 'set theory', 'topology',
+    // Physics
+    'physics', 'quantum', 'relativity', 'thermodynamics', 'mechanics', 'electromagnetism',
+    'optics', 'wave', 'particle', 'force', 'energy', 'momentum', 'gravity', 'entropy',
+    // Computer Science
+    'algorithm', 'data structure', 'complexity', 'sorting', 'graph theory', 'automata',
+    'compiler', 'neural network', 'machine learning', 'deep learning', 'backpropagation',
+    'gradient descent', 'optimization', 'regression', 'classification', 'clustering',
+    // Engineering
+    'engineering', 'circuit', 'signal processing', 'control system', 'fourier',
+    'laplace', 'differential equation', 'linear system',
+    // Chemistry
+    'chemistry', 'chemical', 'molecular', 'atomic', 'reaction', 'bond', 'electron',
+    'orbital', 'periodic', 'stoichiometry',
+    // Biology (quantitative)
+    'genetics', 'genomics', 'bioinformatics', 'population dynamics', 'epidemiology',
+    // Economics (quantitative)
+    'econometrics', 'game theory', 'optimization', 'utility function', 'equilibrium'
+  ];
+
+  return stemKeywords.some(keyword => topicLower.includes(keyword));
+};
+
+/**
  * Enrich domain on selection - called once when user selects their expertise domain
  * Returns cached enrichment data to be reused for all subsequent generations
  * Note: Actual web data is now fetched by OpenRouter's native web search plugin
@@ -579,6 +626,10 @@ export const generateAnalogy = async (
   const shortDomain = getShortDomain(domain);
   const complexityInstructions = getComplexityPrompt(complexity, shortDomain);
 
+  // Check if this is a STEM topic that warrants mathematical notation
+  const topicIsSTEM = isSTEMTopic(topic);
+  console.log(`[generateAnalogy] Topic "${topic}" is ${topicIsSTEM ? 'STEM' : 'non-STEM'} - ${topicIsSTEM ? 'allowing' : 'disabling'} LaTeX`);
+
   // Check granularity separately for domain and topic
   // Web search is triggered by DOMAIN granularity - specific events need real historical data
   // General domains (NFL, Cooking, Chess) don't need web search - LLM has good general knowledge
@@ -624,6 +675,11 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 `
     : ''; // No web search for general domains - use LLM knowledge
 
+  // LaTeX instruction depends on whether topic is STEM-related
+  const latexInstruction = topicIsSTEM
+    ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧.';
+
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
 TOPIC SCOPING - CRITICAL INSTRUCTION:
@@ -646,7 +702,7 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. Include mathematical notation in LaTeX ($...$) where appropriate. This section is for the TECHNICAL side only - give real substance, not generic word salad.",
+  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. ${latexInstruction} This section is for the TECHNICAL side only - give real substance, not generic word salad.",
   "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
   "segments": [
     {
@@ -661,12 +717,21 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "tech_term": "technical term from tech text",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
       "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
-      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations."
+      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
+      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar)."
     }
   ],
   "importance_map": [
     {"term": "key term", "importance": 0.0-1.0}
   ],
+  "attention_map": {
+    "tech": [
+      {"word": "each significant word from technical_explanation", "weight": 0.0-1.0}
+    ],
+    "analogy": [
+      {"word": "each significant word from analogy_explanation", "weight": 0.0-1.0}
+    ]
+  },
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
@@ -691,7 +756,7 @@ REQUIRED JSON STRUCTURE (strict compliance):
   }
 }
 
-LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
+${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
 ALLOWED LaTeX (use these ONLY):
 - Variables and subscripts: $x$, $T_{ij}$, $v^k$
 - Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$
@@ -705,15 +770,31 @@ FORBIDDEN (DO NOT USE):
 - \\\\tilde, \\\\hat, \\\\bar as standalone words (wrong: "a \\\\tilde of x")
 - Complex nested environments
 - Any LaTeX command used as an English word
+- NEVER use \\\\in to mean "in" (write the word "in")
+- NEVER use \\\\to to mean "to" (write the word "to")
 
 EXAMPLES:
 - WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"
 - WRONG: "apply the \\\\tilde transformation"
+- WRONG: "x is \\\\in the set" (use "x is in the set")
 - RIGHT: "A tensor is an array of numbers"
 - RIGHT: "the transformation $\\\\tilde{T}_{ij}$" (command inside $ delimiters)
 - RIGHT: "the metric tensor $g_{\\\\mu\\\\nu}$"
 
-Keep LaTeX simple. When in doubt, use plain English.
+Keep LaTeX simple. When in doubt, use plain English.` : `CRITICAL - NO MATHEMATICAL SYMBOLS (This is NOT a STEM topic):
+Since "${topic}" is not a mathematical/scientific topic, use ONLY plain English:
+- NO LaTeX: No $...$ blocks, no \\\\frac, \\\\sum, \\\\int, etc.
+- NO Greek letters: No α, β, γ, δ, Σ, etc.
+- NO set notation: No ∈, ∪, ∩, ⊂, etc. (write "in", "and", "or" instead)
+- NO arrows: No →, ←, ⟶ (write "to", "from", "leads to" instead)
+- NO subscripts/superscripts: No x₁, x², etc.
+
+EXAMPLES FOR NON-STEM TOPICS:
+- WRONG: "The note ∈ the chord" → RIGHT: "The note in the chord"
+- WRONG: "Voice leading → resolution" → RIGHT: "Voice leading leads to resolution"
+- WRONG: "The ∑ of intervals" → RIGHT: "The sum of intervals"
+
+Write as if for a general audience magazine - clear, readable English only.`}
 
 ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
 The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
@@ -808,6 +889,7 @@ SPECIFIC DETAILS REQUIRED:
 
 CONCEPT_MAP RULES:
 The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
+IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive coverage (Mastery Mode requires 10).
 - tech_term: appears in technical_explanation
 - analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
 - six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
@@ -817,6 +899,9 @@ The concept_map creates a vocabulary mapping between technical terms and ${short
 - narrative_mapping: A 2-3 sentence VIVID MINI-STORY showing HOW these concepts connect through a SPECIFIC ${shortDomain} scenario. NOT generic templates - use real ${shortDomain} vocabulary, names, situations. The reader should think "Oh, THAT'S what it means!" Examples:
   - Bad: "defensive assignments is like tensor components because they both track multiple things"
   - Good: "When Monte Kiffin designed the Tampa 2, each defender's gap responsibility was a component in his defensive tensor—change one assignment, and the entire coverage matrix shifts."
+- causal_explanation: First-principles reasoning for WHY this analogy works at a deep structural level. Not just "they're similar" but the underlying mechanics that make them genuinely isomorphic. What shared patterns, constraints, or dynamics do both concepts obey? Examples:
+  - Bad: "Both involve tracking multiple things"
+  - Good: "Both systems must satisfy a conservation constraint - in tensors, component transformations preserve magnitude; in zone defense, assignment shifts must preserve total coverage. The math of 'nothing leaks through' is identical."
 
 CONDENSED VIEW RULES:
 The "condensed" object provides a stripped-down, first-principles view of the concept:
@@ -829,12 +914,45 @@ The "condensed" object provides a stripped-down, first-principles view of the co
   - If you removed any bullet, understanding would be incomplete
   - Order them from most fundamental to most nuanced
 
+ATTENTION_MAP RULES (CRITICAL FOR VISUAL HIGHLIGHTING):
+The attention_map provides word-level importance weights for the attention-based highlighting system.
+This simulates transformer attention - showing which words carry semantic weight vs. which are just connectors.
+
+WEIGHT GUIDELINES:
+- 1.0: Core concept terms, key technical vocabulary, central ideas (e.g., "derivative", "quarterback", "algorithm")
+- 0.8-0.9: Important supporting terms, action verbs central to meaning (e.g., "calculates", "intercepted", "transforms")
+- 0.6-0.7: Descriptive words that add meaning (e.g., "instantaneous", "crucial", "complex")
+- 0.4-0.5: Common verbs and adjectives (e.g., "shows", "different", "important")
+- 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
+- 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
+
+MULTI-WORD ENTITY RULE (CRITICAL):
+Keep multi-word entities as SINGLE entries - they are ONE semantic unit:
+- Full names: "Tom Brady" (not separate "Tom" and "Brady")
+- Compound terms: "running back", "offensive line", "gradient descent"
+- Technical phrases: "covariant derivative", "Taylor series", "neural network"
+- Place names: "Gillette Stadium", "New England"
+- Team names: "New England Patriots" or just "Patriots"
+Examples:
+  {"word": "Tom Brady", "weight": 0.9}
+  {"word": "gradient descent", "weight": 1.0}
+  {"word": "Super Bowl", "weight": 0.85}
+
+REQUIREMENTS:
+- Include EVERY content word from both explanations (not just key terms)
+- For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
+- Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
+- Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
+- Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
 3. importance_map should include ALL significant terms (15-25 items)
-4. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
-5. Return ONLY valid JSON, no markdown code blocks`;
+4. attention_map must cover ALL content words (50-100+ per explanation)
+5. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
+6. Return ONLY valid JSON, no markdown code blocks`;
 
   // Build search prompt to guide how web results are used
   // For granular domains, constrain to the specific event
@@ -922,7 +1040,19 @@ export const fetchDefinition = async (term: string, context: string, level: numb
     5: {
       name: "ELI5 (Explain like I'm 5)",
       words: "80-100 words",
-      style: "STRICT CONSTRAINT: DO NOT use LaTeX. DO NOT use technical jargon. DO NOT use math notation ($...$). Use ONLY simple English analogies and 5-year-old appropriate language. Use fun comparisons, relatable examples, and playful language. Make it memorable!"
+      style: `STRICT RULES FOR ELI5:
+- NO technical terms AT ALL. If you write "modulus", "congruent", "algorithm", "cryptography" - you've failed.
+- NO math notation or LaTeX
+- Use everyday language a non-expert would actually say
+- Be creative! Don't default to "imagine you're a child with toys"
+- Just explain it SIMPLY and CLEARLY
+
+GOOD ELI5 examples:
+- "Modular arithmetic" → "It's clock math. After 12 comes 1 again, not 13. Numbers wrap around."
+- "Neural network" → "A guessing machine that gets better by being told when it's wrong."
+- "Encryption" → "Scrambling a message so only the right person can unscramble it."
+
+Make it click instantly. No textbook voice.`
     },
     50: {
       name: "Standard (General Audience)",
@@ -1000,10 +1130,12 @@ CRITICAL RULES:
 3. Rephrase the question from a different angle
 4. Reword all answer options but keep the same correct answer meaning
 5. Shuffle the correct answer position
-6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
+6. Use LaTeX ($...$) ONLY for mathematical symbols - NOT for prose text!
+   - CORRECT: "The value is $x = 5$"
+   - WRONG: "$The value is x = 5$"
 
 Return ONLY this JSON:
-{"question": "your question about ${topic}", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
+{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
   } else {
     // Normal mode: Generate new question with difficulty
     const difficultyPrompt = getDifficultyPrompt(difficulty);
@@ -1021,13 +1153,15 @@ CRITICAL RULES:
 3. Ask questions that someone who understands ${topic} could answer
 4. Wrong answers should be plausible but clearly wrong to someone who knows the material
 5. The question must make logical sense and have one clearly correct answer
-6. Use LaTeX ($...$) for ALL mathematical notation in questions, options, and explanations
+6. Use LaTeX ($...$) ONLY for mathematical symbols and equations - NOT for prose text!
+   - CORRECT: "The resulting equation is $x = 10$"
+   - WRONG: "$The resulting equation is x = 10$" (entire text in LaTeX breaks rendering)
 
 GOOD question example: "What is the derivative of $f(x) = x^2$?"
 BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
 
 Return ONLY this JSON:
-{"question": "your question", "options": ["$option1$", "$option2$", "$option3$", "$option4$"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
+{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
   }
 
   try {
@@ -1227,6 +1361,22 @@ For each concept mapping, generate TWO sets of definitions:
 1. A 3-word definition - tied to the story
 2. A 6-word definition - tied to the story
 
+⚠️ UNIQUENESS REQUIREMENT - CRITICAL:
+- Each keyword MUST have a UNIQUE definition - NO DUPLICATES ALLOWED
+- NO two keywords can share the same techDefinition3, techDefinition6, analogyDefinition3, or analogyDefinition6
+- Each concept is DIFFERENT - their definitions must reflect their DISTINCT meanings
+- Example of WRONG (duplicate definitions):
+  - "vector": "Magnitude and direction defining position"
+  - "vector space": "Magnitude and direction defining position" ❌ SAME = BAD
+- Example of RIGHT (unique definitions):
+  - "vector": "Arrow showing direction magnitude"
+  - "vector space": "Collection of all possible vectors" ✅ DIFFERENT = GOOD
+
+SEMANTIC DISTINCTION:
+- "vector" vs "vector space" are DIFFERENT concepts - define them differently
+- "matrix" vs "transformation" are DIFFERENT concepts - define them differently
+- Think about what makes EACH concept unique before writing its definition
+
 CRITICAL RULES:
 - Each definition must be EXACTLY the word count specified (3 or 6 words)
 - Technical definitions: Core essence in technical terms
@@ -1234,6 +1384,7 @@ CRITICAL RULES:
 - Analogy definitions must feel like they're describing the story, not a textbook
 - Use NAMES, not generic roles (say "Brady" not "the quarterback")
 - Be concise - every word must count
+- VERIFY: Before returning, check that NO definitions are duplicated across keywords
 
 Return ONLY this JSON (no markdown):
 {
@@ -1256,7 +1407,7 @@ Return ONLY this JSON (no markdown):
     const result = safeJsonParse(text);
 
     if (result?.keywords && Array.isArray(result.keywords)) {
-      return result.keywords.map((k: any, idx: number) => ({
+      const keywords = result.keywords.map((k: any, idx: number) => ({
         id: k.id ?? idx,
         term: k.term || topConcepts[idx]?.tech_term || '',
         analogyTerm: k.analogyTerm || topConcepts[idx]?.analogy_term || '',
@@ -1266,6 +1417,27 @@ Return ONLY this JSON (no markdown):
         analogyDefinition6: k.analogyDefinition6 || '',
         importance: k.importance ?? topConcepts[idx]?.importance ?? 0.5
       }));
+
+      // Post-process: ensure no duplicate definitions
+      // Track seen definitions and modify duplicates
+      const seenDefs = new Set<string>();
+      return keywords.map((kw: MasteryKeyword, _idx: number) => {
+        const modified = { ...kw };
+
+        // Check and fix techDefinition6 duplicates
+        if (seenDefs.has(modified.techDefinition6.toLowerCase())) {
+          modified.techDefinition6 = `${modified.term}: ${modified.techDefinition6.split(' ').slice(0, 4).join(' ')}...`;
+        }
+        seenDefs.add(modified.techDefinition6.toLowerCase());
+
+        // Check and fix analogyDefinition6 duplicates
+        if (seenDefs.has(modified.analogyDefinition6.toLowerCase())) {
+          modified.analogyDefinition6 = `${modified.analogyTerm}: ${modified.analogyDefinition6.split(' ').slice(0, 4).join(' ')}...`;
+        }
+        seenDefs.add(modified.analogyDefinition6.toLowerCase());
+
+        return modified;
+      });
     }
 
     // Fallback: generate basic keywords from concept map
@@ -1306,8 +1478,6 @@ export const regenerateContextualDefinitions = async (
   keywords: MasteryKeyword[],
   masteryStoryContent: string
 ): Promise<MasteryKeyword[]> => {
-  const shortDomain = getShortDomain(domain);
-
   const prompt = `You are updating keyword definitions to match a SPECIFIC story.
 
 THE MASTERY STORY (reference ONLY this story for definitions):
@@ -1395,25 +1565,33 @@ export const evaluateMasteryResponse = async (
     1: `STAGE 1 EVALUATION (Pure Intuition - STRENGTH-BASED PASSING):
 The user had NO keywords available. They are explaining "${topic}" purely through ${domain} vocabulary.
 
-PASSING CRITERIA (if they hit 2+ of these, they PASS):
+THIS IS THE PURE INTUITION STAGE - NO TECHNICAL TERMS EXPECTED OR WANTED.
+
+PASSING CRITERIA (if they hit 2+ of these, they PASS with 70+):
 ✓ Used ${domain} vocabulary naturally (not technical jargon)
 ✓ Captured directional correctness (understood the general idea)
 ✓ Told a coherent narrative/story
 ✓ Made meaningful analogical connections
 ✓ Demonstrated intuitive grasp of the concept's essence
 
-CRITICAL RULES FOR STAGE 1:
-- DO NOT penalize for missing technical concepts like "components", "basis", "transformation rules", etc.
-- DO NOT expect technical vocabulary - that's for Stage 2 and 3
-- This stage tests: "Do they GET IT intuitively through analogy?"
-- If they explain it naturally using ${domain} terms and show understanding, they PASS
-- Score 70+ if they demonstrate 2-3 strengths in narrative/analogical explanation
-- Actually PENALIZE heavy use of technical jargon (defeats the purpose of Stage 1)
+⚠️ CRITICAL - WHAT NOT TO DO:
+- DO NOT list technical terms in "missedConcepts" - Stage 1 forbids technical jargon
+- DO NOT penalize for not mentioning "vector addition", "transformation", "components", etc.
+- DO NOT expect ANY technical vocabulary whatsoever
+- "missedConcepts" should ONLY contain narrative/storytelling gaps, NOT technical concepts
+- If they used technical jargon, that's actually BAD for Stage 1 (defeats the purpose)
 
 WHAT SUCCESS LOOKS LIKE:
 - A student who explains tensors as "Tom Brady adjusting to defensive shifts" = PASS
 - A student who uses domain metaphors to capture transformation/change = PASS
-- A student who shows directional understanding without technical terms = PASS`,
+- A student who shows directional understanding without technical terms = PASS
+- Any coherent ${domain} narrative that captures the essence = PASS
+
+"missedConcepts" SHOULD ONLY INCLUDE things like:
+- "Could have added more vivid ${domain} details"
+- "Narrative lacked a clear beginning/middle/end"
+- "Could strengthen the analogy connection"
+NEVER include technical terms like "vector", "matrix", "derivative", etc.`,
 
     2: `STAGE 2 EVALUATION (Guided Recall - 3 of 6 keywords):
 The user had these 6 keywords available: ${keywordTerms.slice(0, 6).join(', ')}
@@ -1444,11 +1622,14 @@ USER'S EXPLANATION:
 "${userResponse}"
 
 EVALUATION CRITERIA:
-${stage === 1 ? `FOR STAGE 1 (strength-based):
+${stage === 1 ? `FOR STAGE 1 (strength-based - NO TECHNICAL EXPECTATIONS):
 1. Count their STRENGTHS (narrative quality, domain vocabulary, analogical thinking, directional correctness)
 2. If they have 2+ strengths, score 70+ and PASS them
-3. DO NOT fail them for missing technical concepts - that's not what Stage 1 tests
-4. PENALIZE if they used too much technical jargon (wrong approach for Stage 1)` : `FOR STAGE ${stage}:
+3. DO NOT fail them for missing technical concepts - Stage 1 FORBIDS technical jargon
+4. PENALIZE if they used too much technical jargon (wrong approach for Stage 1)
+5. "missedConcepts" must be EMPTY or contain only NARRATIVE gaps (not technical terms)
+   - WRONG: ["vector addition", "resultant force", "components"]
+   - RIGHT: ["could add more vivid imagery", "narrative needed clearer arc"] or []` : `FOR STAGE ${stage}:
 1. Did they capture the core concept correctly?
 2. Did they use at least ${requiredKeywords} keywords naturally?
 3. Is their explanation coherent and demonstrates real understanding?
@@ -1575,7 +1756,8 @@ export const detectKeywordsInText = (
  * Stage 3: Same story structure with ALL 10 technical terms
  *
  * CRITICAL: Stories must be historically accurate with real teams, players, and moments
- * Web search is enabled via OpenRouter's native plugin for historical accuracy
+ * Web search is ALWAYS enabled for Mastery Mode to ground stories in factual sources
+ * This prevents hallucination and ensures causal logic is grounded in real events
  */
 export const generateMasteryStory = async (
   topic: string,
@@ -1584,26 +1766,25 @@ export const generateMasteryStory = async (
   keywords: MasteryKeyword[],
   previousStory?: string // For continuity in stages 2-3
 ): Promise<MasteryStory> => {
-  // Note: Web search is now handled by OpenRouter's native plugin
-  // Only enabled for granular domains that need specific historical data
-
-  // Check granularity for domain-specific context
-  // General domains use LLM knowledge, granular domains use web search
-  const { domainGranularity } = detectGranularitySignals(topic, domain);
-  const useWebSearch = domainGranularity.isGranular; // Only search for specific/granular domains
+  // Web search is ALWAYS enabled for Mastery Mode to prevent hallucination
+  // We fetch 8 sources to synthesize into factually accurate narratives
   const shortDomain = getShortDomain(domain);
 
-  if (useWebSearch) {
-    console.log(`[generateMasteryStory] Enabling web search for Stage ${stage} - domain: "${domain}"`);
-    console.log(`[generateMasteryStory] Domain granularity signals: ${domainGranularity.signals.join(', ')}`);
-  } else {
-    console.log(`[generateMasteryStory] General domain "${shortDomain}" - using LLM knowledge (no web search)`);
+  // Check if domain is granular (specific event) vs general
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const isGranularDomain = domainGranularity.isGranular;
+
+  // Always use web search for Mastery Mode - this ensures factual grounding
+  console.log(`[generateMasteryStory] Stage ${stage} - ALWAYS enabling web search for factual grounding`);
+  console.log(`[generateMasteryStory] Domain: "${shortDomain}" (granular: ${isGranularDomain})`);
+  if (isGranularDomain) {
+    console.log(`[generateMasteryStory] Granular signals: ${domainGranularity.signals.join(', ')}`);
   }
 
-  // Front-load domain context for web search (only for granular domains)
-  // General domains don't need web search - LLM has good general knowledge
-  const webSearchContext = domainGranularity.isGranular
-    ? `CRITICAL - WEB SEARCH REQUIRED FOR HISTORICAL ACCURACY:
+  // Web search context - different prompts for granular (specific event) vs general domains
+  // Both get web search, but granular domains are more constrained to the exact event
+  const webSearchContext = isGranularDomain
+    ? `CRITICAL - WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
 
 SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
 Search queries to use:
@@ -1626,7 +1807,35 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 ---
 
 `
-    : ''; // No web search for general domains - use LLM knowledge
+    : `CRITICAL - WEB SEARCH FOR HISTORICAL ACCURACY:
+
+SEARCH FOR FAMOUS ${shortDomain} MOMENTS to ground your story in REAL history.
+Search queries to use:
+1. "famous ${shortDomain} moments history"
+2. "legendary ${shortDomain} stories iconic events"
+3. "${shortDomain} greatest moments all time"
+
+YOU MUST BASE YOUR STORY ON FACTS FROM THE SEARCH RESULTS:
+- Pick ONE specific, REAL event from the search results
+- Use ACTUAL names, dates, and outcomes from the search results
+- The story must be about something that ACTUALLY HAPPENED
+- ${shortDomain} fans should be able to verify the facts you mention
+
+REQUIRED FACTUAL ELEMENTS (from search results):
+- The specific event/game/moment (with date if available)
+- Full names of key individuals involved
+- What actually happened (outcome, score, achievement)
+- Why this moment was significant
+
+DO NOT FABRICATE:
+- Do NOT invent fictional scenarios or "typical" examples
+- Do NOT make up names or events
+- Do NOT guess at scores, dates, or outcomes
+- If you can't find specific facts, pick a different famous moment from the results
+
+---
+
+`;
 
   const stageInstructions: Record<MasteryStage, string> = {
     1: `STAGE 1 - THE BIG PICTURE (ZERO TECHNICAL JARGON):
@@ -1668,13 +1877,22 @@ HISTORICAL ACCURACY REQUIREMENT (CRITICAL):
 - Feature at least 2-3 NAMED INDIVIDUALS that ${domain} enthusiasts would recognize`,
 
     2: `STAGE 2 - ZOOM INTO A SPECIFIC MOMENT (6 TECHNICAL TERMS):
-Take the SAME game/event from Stage 1 but ZOOM INTO A SPECIFIC PLAY/MOMENT within it.
 
-PREVIOUS STORY (this is the game/event to zoom into):
-${previousStory || '(Generate fresh story)'}
+⚠️ MANDATORY CONTINUITY - READ THE PREVIOUS STORY FIRST:
+---
+${previousStory || '(No previous story - generate fresh)'}
+---
 
-NARRATIVE SCOPE: Now focus on ONE SPECIFIC PLAY or MOMENT within that game.
-Example: If Stage 1 was about "Grizzlies vs Spurs series", Stage 2 might be:
+CRITICAL CONTINUITY REQUIREMENT:
+You are EXPANDING the story above - NOT creating a new one.
+- SAME setting/location as the previous story
+- SAME people/characters/entities as the previous story
+- SAME event/situation/scenario as the previous story
+You are zooming INTO a moment from what already exists.
+DO NOT switch to a different game, episode, scene, event, or scenario.
+
+NARRATIVE SCOPE: Focus on ONE SPECIFIC MOMENT within the story above.
+Example: If Stage 1 was about "Grizzlies vs Spurs series", Stage 2 zooms into:
 "In the 4th quarter of Game 3, Tim Duncan posted up Zach Randolph on the left block.
 As Duncan made his move, Tony Allen rotated from the weak side..."
 
@@ -1682,34 +1900,48 @@ TECHNICAL TERMS TO WEAVE IN (use their ${domain} equivalents, with technical ter
 ${keywords.slice(0, 6).map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME GAME/EVENT as Stage 1 - but now we're watching ONE specific play in slow motion
+- MUST continue the EXACT same scenario from the previous story
 - The terms should describe what's happening in THIS specific moment
 - Use format: "${domain} term (technical term)" when introducing each term
 - Roughly 150-200 words
-- MAINTAIN the same players/people from Stage 1 - now show them in action
+- MAINTAIN the same people/characters from Stage 1 - now show them in action
 - The reader should feel like they're watching a replay of one key moment`,
 
-    3: `STAGE 3 - DEEP DIVE INTO THE MECHANICS (ALL 10 TECHNICAL TERMS):
-Take the SAME specific moment from Stage 2 and go EVEN DEEPER into the mechanics.
+    3: `STAGE 3 - COMPREHENSIVE DEEP DIVE (ALL 10 TECHNICAL TERMS):
 
-PREVIOUS STORY (this is the moment to analyze deeper):
-${previousStory || '(Generate fresh story)'}
+⚠️⚠️ ABSOLUTE CONTINUITY REQUIREMENT - THIS IS THE STORY YOU MUST EXPAND:
+===================================================================
+${previousStory || '(No previous story - generate fresh)'}
+===================================================================
 
-NARRATIVE SCOPE: Now we're breaking down the MECHANICS of that play - the decisions, reactions, timing.
-Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 might be:
-"As Duncan received the entry pass, his body angle created a sealing position. Randolph's footwork
-(basis vectors) determined his defensive options. Tony Allen's rotation speed (rate of change)..."
+🚫 DO NOT CREATE A NEW STORY. You are DEEPENING the story above.
+🚫 DO NOT switch to a different game, match, episode, scene, recipe, performance, or event.
+🚫 DO NOT introduce new main characters/people who weren't in the previous story.
 
-ALL 10 TECHNICAL TERMS TO WEAVE IN:
+WHAT YOU MUST DO:
+✓ Continue with the EXACT SAME setting from the story above
+✓ Feature the EXACT SAME people/characters from the story above
+✓ Analyze the EXACT SAME moment in MORE DETAIL
+✓ Think of this as "director's commentary" on the scene above
+
+NARRATIVE SCOPE: This is a detailed breakdown of the SAME moment from Stage 2.
+Break down EVERY aspect: the setup, the execution, the reactions, the outcome, and the implications.
+Example: If Stage 2 was about "Duncan posting up Randolph", Stage 3 provides the complete picture:
+"The play began when Parker initiated the entry pass sequence. Duncan's positioning on the left block
+created a sealing angle (basis vectors) that forced Randolph into a reactive stance..."
+
+ALL 10 TECHNICAL TERMS - EVERY ONE MUST APPEAR:
 ${keywords.map(k => `- "${k.analogyTerm}" (${k.term})`).join('\n')}
 
 CRITICAL RULES:
-- SAME MOMENT as Stage 2 - but now examining the underlying mechanics in detail
-- Each term should illuminate WHY things happened the way they did
+- SAME MOMENT as Stage 2 - you are adding depth, NOT changing the story
+- MUST use ALL 10 technical terms - weave each one naturally into the narrative
+- Each term should illuminate WHY and HOW things happened
 - Use format: "${domain} term (technical term)" for all terms
-- Roughly 180-250 words for the fuller analysis
-- The reader should understand the MECHANICS behind the moment
-- Show how each element (term) contributed to the outcome`
+- LENGTH: 300-400 words - this is the comprehensive mastery version
+- The reader should understand the COMPLETE MECHANICS behind the moment
+- Show the interconnections between all elements (terms)
+- This is the "full replay analysis" that ties everything together`
   };
 
   const prompt = `${webSearchContext}You are creating a ${domain} narrative story to teach "${topic}" through analogy.
@@ -1735,32 +1967,43 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
 
   try {
     // Build search prompt to guide how web results are used
-    // For granular domains, constrain to the specific event
-    // For general domains, use search to find famous moments to reference
-    const searchPromptText = domainGranularity.isGranular
-      ? `STRICT REQUIREMENT: Use ONLY facts from these web search results about "${domain}".
+    // We're getting 8 sources - synthesize them into accurate, verifiable narratives
+    const searchPromptText = isGranularDomain
+      ? `STRICT REQUIREMENT: Synthesize facts from these 8 web search results about "${domain}".
 
 The story MUST be about THIS SPECIFIC EVENT: "${domain}"
-- Extract the EXACT date, opponent/participants, score/outcome from search results
+- Cross-reference the search results to extract VERIFIED facts
+- Use the EXACT date, opponent/participants, score/outcome from search results
 - Extract SPECIFIC player/character names mentioned in search results
 - Extract KEY MOMENTS described in search results
 
-DO NOT use your general knowledge - ONLY use facts explicitly stated in the search results.
-The story must be verifiable against the search results provided.`
-      : `USE THE WEB SEARCH RESULTS to ground your ${shortDomain} story in REAL history.
+SYNTHESIS RULES:
+- If multiple sources agree on a fact, use it confidently
+- If sources disagree, pick the most commonly cited version
+- NEVER fabricate details that don't appear in the search results
+- The story must be verifiable against the search results provided.`
+      : `SYNTHESIZE these 8 web search results to ground your ${shortDomain} story in REAL history.
 
-REQUIREMENTS:
-- Pick ONE famous moment or story from the search results
+SYNTHESIS REQUIREMENTS:
+- Review all search results to find a FAMOUS, VERIFIABLE moment from ${shortDomain}
+- Cross-reference facts across multiple sources for accuracy
 - Use REAL names of people mentioned in the results (with full names)
 - Reference ACTUAL events, dates, scores, or statistics from the results
 - The ${shortDomain} fan reading this should recognize the story
+
+FACT-CHECKING RULES:
+- Only use facts that appear in at least one search result
+- When sources provide specific numbers (scores, dates, stats), use those EXACT numbers
+- Do NOT round, approximate, or "improve" any facts from the sources
+- If a detail isn't in the search results, leave it out rather than guessing
 
 Your story must read like a ${shortDomain} documentary featuring REAL people and REAL events.
 Do NOT write generic scenarios - use the SPECIFIC historical content from search results.`;
 
     const storyContent = await callApi(prompt, {
-      webSearch: useWebSearch,
-      searchPrompt: searchPromptText
+      webSearch: true, // ALWAYS enable web search for Mastery Mode
+      searchPrompt: searchPromptText,
+      maxResults: 8 // Fetch 8 sources for comprehensive factual grounding
     });
 
     // Clean up the response

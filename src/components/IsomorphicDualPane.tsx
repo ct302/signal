@@ -67,6 +67,57 @@ const generateBridgeNarrative = (
   return narratives[index % narratives.length];
 };
 
+// Generate dynamic isomorphic insight with structural reason + transfer tip
+const generateIsomorphicInsight = (
+  techTerm: string,
+  analogyTerm: string,
+  domain: string,
+  importance: number,
+  index: number
+): { structural: string; transferTip: string } => {
+  // Structural insights - WHY the mapping works (varies by importance)
+  const highImportanceStructural = [
+    `Both filter noise to find signal—${analogyTerm} filters distractions in ${domain}, ${techTerm} filters data mathematically`,
+    `Same decision architecture: ${analogyTerm} weighs tradeoffs in ${domain} exactly like ${techTerm} weighs parameters`,
+    `Both are about pattern recognition under pressure—reading the field vs reading the data`,
+    `${analogyTerm} and ${techTerm} both answer: "What's the optimal move given incomplete information?"`,
+  ];
+
+  const mediumImportanceStructural = [
+    `Both organize complexity into manageable chunks—${analogyTerm} in ${domain}, ${techTerm} in code`,
+    `Same underlying logic: if X happens, respond with Y—whether on the field or in the algorithm`,
+    `Both concepts create structure from chaos by identifying what matters and what doesn't`,
+    `${analogyTerm} and ${techTerm} are both frameworks for systematic decision-making`,
+  ];
+
+  const lowImportanceStructural = [
+    `Both name the same intuition—${analogyTerm} is just the ${domain} word for ${techTerm}`,
+    `Same pattern, different context: what you call ${analogyTerm} in ${domain}, engineers call ${techTerm}`,
+    `The mental model is identical—only the vocabulary changes between domains`,
+    `${analogyTerm} gives you the intuition; ${techTerm} gives you the precision`,
+  ];
+
+  // Transfer tips - actionable memory hooks
+  const transferTips = [
+    `Next time ${techTerm} feels abstract, ask: "How would I explain this as ${analogyTerm}?"`,
+    `When you encounter ${techTerm} in the wild, picture it as ${analogyTerm}—same playbook`,
+    `Stuck on ${techTerm}? Reframe: "What would the ${domain} equivalent look like?"`,
+    `To remember ${techTerm}: it's just ${analogyTerm} wearing a lab coat`,
+    `Debug ${techTerm} problems by thinking: "If this were ${analogyTerm}, what would I check first?"`,
+    `Explain ${techTerm} to others using ${analogyTerm}—if they get that, they get this`,
+  ];
+
+  const structural = importance > 0.7
+    ? highImportanceStructural[index % highImportanceStructural.length]
+    : importance > 0.4
+      ? mediumImportanceStructural[index % mediumImportanceStructural.length]
+      : lowImportanceStructural[index % lowImportanceStructural.length];
+
+  const transferTip = transferTips[(index + Math.floor(importance * 10)) % transferTips.length];
+
+  return { structural, transferTip };
+};
+
 interface IsomorphicDualPaneProps {
   conceptMap: ConceptMapItem[];
   importanceMap: ImportanceMapItem[];
@@ -93,6 +144,8 @@ const cleanLabel = (text: string): string => {
     .replace(/\^{([^}]+)}/g, '^$1')
     .replace(/_{([^}]+)}/g, '_$1')
     .replace(/\\(boldsymbol|mathbf|mathbb|mathcal|mathrm|textbf|text)\{([^}]*)\}/g, '$2')
+    // Handle backslash followed by actual Unicode Greek letters (e.g., \Σ -> Σ)
+    .replace(/\\([Σσαβγδεθλμπφψωρτηκχ∞∈∀∃∇∂∫≈≠≤≥])/g, '$1')
     .replace(/\\[a-zA-Z]+/g, (match) => {
       const commands: { [key: string]: string } = {
         '\\Sigma': 'Σ', '\\sigma': 'σ', '\\alpha': 'α', '\\beta': 'β',
@@ -328,15 +381,28 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                             </p>
                           </div>
 
-                          {/* Why It Works - Condensed single insight */}
-                          <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
-                            <div className="flex items-start gap-2">
-                              <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
-                              <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                                Your intuition about <span className="font-medium" style={{ color }}>{analogyTerm}</span> IS the intuition for <span className="font-medium" style={{ color }}>{techTerm}</span>—same pattern, different vocabulary.
-                              </p>
-                            </div>
-                          </div>
+                          {/* Why It Works - Dynamic structural insight + transfer tip */}
+                          {(() => {
+                            const { structural, transferTip } = generateIsomorphicInsight(techTerm, analogyTerm, analogyDomain, importance, index);
+                            return (
+                              <div className={`p-4 rounded-xl space-y-3 ${isDarkMode ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+                                {/* Structural insight - WHY it works */}
+                                <div className="flex items-start gap-2">
+                                  <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
+                                  <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                                    {structural}
+                                  </p>
+                                </div>
+                                {/* Transfer tip - actionable memory hook */}
+                                <div className={`flex items-start gap-2 pt-2 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-100'}`}>
+                                  <Zap size={12} style={{ color }} className="mt-0.5 flex-shrink-0 opacity-70" />
+                                  <p className={`text-xs italic leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    {transferTip}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Equivalence Badge */}
                           <div className="text-center">

@@ -6,6 +6,7 @@ import {
   MoveHorizontal,
   Sparkles,
   BookOpenText,
+  Eraser,
   RotateCcw,
   Maximize2,
   Minimize2,
@@ -19,7 +20,7 @@ import {
   BookOpen,
   HelpCircle,
   X,
-  Snowflake,
+  Cloud,
   Coffee,
   Network,
   Columns,
@@ -41,6 +42,9 @@ import {
   Segment,
   ConceptMapItem,
   ImportanceMapItem,
+  AttentionMap,
+  AttentionMapItem,
+  EntityWordLookup,
   ProcessedWord,
   Position,
   ContextData,
@@ -63,7 +67,8 @@ import {
   CONCEPT_COLORS,
   CONCEPT_BG_COLORS,
   MAX_TUTOR_HISTORY,
-  QUICK_START_DOMAINS
+  QUICK_START_DOMAINS,
+  SYMBOL_GLOSSARY
 } from './constants';
 
 // Utils
@@ -98,7 +103,10 @@ import {
   IsomorphicDualPane,
   ProximityWarningModal,
   MasteryMode,
-  MasterySessionCache
+  MasterySessionCache,
+  WeatherMode,
+  WeatherType,
+  WEATHER_OPTIONS
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -234,6 +242,8 @@ export default function App() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [conceptMap, setConceptMap] = useState<ConceptMapItem[]>([]);
   const [importanceMap, setImportanceMap] = useState<ImportanceMapItem[]>([]);
+  const [attentionMap, setAttentionMap] = useState<AttentionMap | null>(null);
+  const [entityLookup, setEntityLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
@@ -252,7 +262,6 @@ export default function App() {
   const [isImmersive, setIsImmersive] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showControls, setShowControls] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const [showSynthesis, setShowSynthesis] = useState(false);
   const [isMouseInside, setIsMouseInside] = useState(false);
   const [showCondensedView, setShowCondensedView] = useState(false); // Actual visibility of condensed overlay
@@ -317,8 +326,11 @@ export default function App() {
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Ambiance Mode State
-  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study' | 'holiday'>('none');
+  const [ambianceMode, setAmbianceMode] = useState<'none' | 'study'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
+  const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
+  const [showWeatherSelector, setShowWeatherSelector] = useState(false);
+  const [showSymbolGlossary, setShowSymbolGlossary] = useState(false);
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -412,12 +424,16 @@ export default function App() {
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
         // Tech text: keep most math symbols but fix common prose-context issues
-        // 1. Fix ∈ when misused as prose "in" (followed by articles)
-        // 2. Fix △/▲ triangle symbols to word "triangle" in prose context
-        // 3. Fix stray "/" that should be "not" (from \not rendering or LLM output)
+        // Must aggressively fix symbols that shouldn't appear in readable prose
         tech: cleanText(fixUnicode(s.tech || s.technical || ""))
-          .replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1')
+          // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
+          .replace(/∈\s*(?=[a-z])/gi, 'in ')
+          // Fix △/▲ triangle symbols to word "triangle" in prose context
           .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
+          .replace(/(?<=\s|^)\/ust\b/gi, 'just')
+          .replace(/(?<=\s|^)\/ot\b/gi, 'not')
+          // Fix stray "/" between words that should be "not"
           .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
           .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
@@ -435,7 +451,8 @@ export default function App() {
           analogy_term: cleanText(c.analogy_term || c.analogyTerm || ""),
           // Load the new fields for rich concept isomorphism display
           six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
-          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || "")
+          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
+          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || "")
         }))
         .filter((c: { tech_term: string; analogy_term: string }) => {
           const techLower = c.tech_term.toLowerCase().trim();
@@ -456,6 +473,67 @@ export default function App() {
       })));
     }
 
+    // Extract attention_map for word-level importance weights
+    // Also create entity lookup for multi-word entity handling
+    const attentionMapData = findContext(data, ["attention_map", "attentionMap"]);
+    if (attentionMapData) {
+      const techAttention = Array.isArray(attentionMapData.tech) ? attentionMapData.tech : [];
+      const analogyAttention = Array.isArray(attentionMapData.analogy) ? attentionMapData.analogy : [];
+
+      // Helper to process attention items and create entity lookup
+      const processAttentionItems = (items: any[], startEntityId: number): {
+        processed: AttentionMapItem[];
+        lookup: EntityWordLookup;
+        nextEntityId: number;
+      } => {
+        const lookup: EntityWordLookup = {};
+        let entityId = startEntityId;
+
+        const processed = items.map((item: any) => {
+          const fullPhrase = cleanText(item.word || "").toLowerCase();
+          const weight = typeof item.weight === 'number' ? item.weight : 0.5;
+          const words = fullPhrase.split(/\s+/).filter(w => w.length > 0);
+          const currentEntityId = entityId++;
+
+          // Add each word in the phrase to the lookup
+          words.forEach(word => {
+            // Only add if not already in lookup, or if this entity has higher weight
+            if (!lookup[word] || lookup[word].weight < weight) {
+              lookup[word] = {
+                weight,
+                entityId: currentEntityId,
+                fullEntity: fullPhrase
+              };
+            }
+          });
+
+          return {
+            word: fullPhrase,
+            weight,
+            entityId: currentEntityId
+          };
+        });
+
+        return { processed, lookup, nextEntityId: entityId };
+      };
+
+      const techResult = processAttentionItems(techAttention, 0);
+      const analogyResult = processAttentionItems(analogyAttention, techResult.nextEntityId);
+
+      setAttentionMap({
+        tech: techResult.processed,
+        analogy: analogyResult.processed
+      });
+
+      setEntityLookup({
+        tech: techResult.lookup,
+        analogy: analogyResult.lookup
+      });
+    } else {
+      setAttentionMap(null);
+      setEntityLookup(null);
+    }
+
     if (context) {
       setContextData({
         header: cleanText(fixUnicode(context.header || topicName)),
@@ -465,7 +543,6 @@ export default function App() {
         real_world: stripMathSymbols(cleanText(fixUnicode(context.real_world || context.realWorld || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(context.narrative || "")))
       });
-      setShowContext(false); // Collapsed by default - user clicks to expand
     }
 
     if (synthesis) {
@@ -546,7 +623,6 @@ export default function App() {
     setIsLoading(true);
     setApiError(null); // Clear any previous error
     setLastSubmittedTopic(confirmedTopic); // Set before API call so retry works on failure
-    setShowContext(false); // Keep collapsed until user clicks to expand
     setShowFollowUp(false);
     setTutorResponse(null);
     setContextData(null);
@@ -706,24 +782,62 @@ export default function App() {
     triggerDomainEnrichment(finalDomain);
   };
 
-  const calculateIntelligentWeight = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): number => {
+  // Returns both weight and entityId for consistent multi-word entity coloring
+  const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; entityId: number | undefined } => {
     const cleanedWord = cleanText(word).toLowerCase();
-    if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) return 0.1;
+
+    // Priority 1: Check entity lookup for multi-word entity support
+    if (entityLookup) {
+      const lookup = isAnalogy ? entityLookup.analogy : entityLookup.tech;
+      if (lookup[cleanedWord]) {
+        return {
+          weight: lookup[cleanedWord].weight,
+          entityId: lookup[cleanedWord].entityId
+        };
+      }
+    }
+
+    // Priority 2: Check LLM-provided attention weights (single words)
+    if (attentionMap) {
+      const attentionList = isAnalogy ? attentionMap.analogy : attentionMap.tech;
+      const attentionEntry = attentionList.find(item =>
+        item.word === cleanedWord ||
+        item.word.includes(cleanedWord) ||
+        cleanedWord.includes(item.word)
+      );
+      if (attentionEntry) {
+        return { weight: attentionEntry.weight, entityId: attentionEntry.entityId };
+      }
+    }
+
+    // Fallback: Use heuristics if no attention map or word not found
+    if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) {
+      return { weight: 0.1, entityId: undefined };
+    }
 
     const terms = isAnalogy
       ? map.map(c => cleanText(c.analogy_term).toLowerCase())
       : map.map(c => cleanText(c.tech_term).toLowerCase());
 
-    if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) return 1.0;
+    if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) {
+      return { weight: 1.0, entityId: undefined };
+    }
 
     const importanceEntry = impMap.find(m =>
       cleanText(m.term).toLowerCase().includes(cleanedWord) ||
       cleanedWord.includes(cleanText(m.term).toLowerCase())
     );
-    if (importanceEntry) return importanceEntry.importance;
+    if (importanceEntry) {
+      return { weight: importanceEntry.importance, entityId: undefined };
+    }
 
-    if (cleanedWord.length > 6) return 0.55;
-    return 0.3;
+    if (cleanedWord.length > 6) return { weight: 0.55, entityId: undefined };
+    return { weight: 0.3, entityId: undefined };
+  };
+
+  // Backward-compatible wrapper that just returns weight
+  const calculateIntelligentWeight = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): number => {
+    return getWordAttention(word, map, impMap, isAnalogy).weight;
   };
 
   const getConceptId = (word: string, map: ConceptMapItem[]): number => {
@@ -1101,6 +1215,10 @@ export default function App() {
               setShowCondensedView(false);
               setIsFirstPrinciplesMode(false);
             }
+            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
+            if (viewMode === 'morph') {
+              setViewMode('nfl');
+            }
           }
           setIsNarrativeMode(!isNarrativeMode);
           break;
@@ -1162,8 +1280,10 @@ export default function App() {
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
           break;
         case '2':
-          // Holiday mode
-          setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday');
+          // Weather mode toggle (cycles through: none -> sunny -> rain -> snow -> none)
+          const weatherCycle: WeatherType[] = ['none', 'sunny', 'rain', 'snow'];
+          const currentIndex = weatherCycle.indexOf(weatherMode);
+          setWeatherMode(weatherCycle[(currentIndex + 1) % weatherCycle.length]);
           break;
       }
     };
@@ -1441,7 +1561,6 @@ export default function App() {
     setShowHistory(false);
     setHasStarted(true);
     setIsViewingFromHistory(true); // Lock search bar when viewing saved content
-    setShowContext(false); // Keep collapsed - user clicks to expand
   };
 
   // Return to home - clears history view mode and resets for new search
@@ -1536,6 +1655,8 @@ export default function App() {
     setSegments([]);
     setConceptMap([]);
     setImportanceMap([]);
+    setAttentionMap(null);
+    setEntityLookup(null);
     setProcessedWords([]);
     setContextData(null);
     setCondensedData(null);
@@ -1548,7 +1669,6 @@ export default function App() {
     setIsHovering(false);
     setIsScrolling(false);
     setIsTransitioning(false);
-    setShowContext(false);
     setShowSynthesis(false);
 
     // Topic State
@@ -1753,18 +1873,26 @@ export default function App() {
                 if (/^\s+$/.test(word)) return <span key={`${i}-${j}`}>{word}</span>;
 
                 const activeMap = customMap || conceptMap;
-                const weight = calculateIntelligentWeight(word, activeMap, importanceMap, false);
+                // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
+                const { weight, entityId } = getWordAttention(word, activeMap, importanceMap, false);
                 // Invert threshold: low slider = high bar, high slider = low bar
+                // At 100% (threshold >= 0.99), ALL words should be fully visible
                 const effectiveThreshold = 1.1 - currentThreshold;
-                const isImportant = weight >= effectiveThreshold;
+                const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
 
                 let colorClassName = "";
                 if (isColorMode && isImportant) {
-                  const conceptId = getConceptId(word, activeMap);
-                  if (conceptId !== -1) {
-                    colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
-                  } else if (weight > 0.6) {
-                    colorClassName = "text-neutral-500";
+                  // Priority 1: Use entityId for consistent multi-word entity coloring
+                  if (entityId !== undefined) {
+                    colorClassName = CONCEPT_COLORS[entityId % CONCEPT_COLORS.length];
+                  } else {
+                    // Fallback: Use conceptId from concept map
+                    const conceptId = getConceptId(word, activeMap);
+                    if (conceptId !== -1) {
+                      colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
+                    } else if (weight > 0.6) {
+                      colorClassName = "text-neutral-500";
+                    }
                   }
                 }
 
@@ -1863,19 +1991,78 @@ export default function App() {
     return sentences.filter(s => s.some(w => !w.isSpace)); // Filter empty sentences
   };
 
+  // Extract unique math symbols from content for glossary
+  const extractSymbolsFromContent = useCallback((words: ProcessedWord[]): Array<{ symbol: string; name: string; meaning: string }> => {
+    const foundSymbols = new Set<string>();
+    const result: Array<{ symbol: string; name: string; meaning: string }> = [];
+
+    // Symbols to look for in content
+    const symbolMap: Record<string, { name: string; meaning: string }> = {
+      'Σ': { name: 'Sigma', meaning: 'Summation or standard deviation' },
+      'σ': { name: 'sigma', meaning: 'Standard deviation or small sigma' },
+      '∈': { name: 'Element of', meaning: '"belongs to" or "is in"' },
+      '∉': { name: 'Not element of', meaning: '"does not belong to"' },
+      '⊂': { name: 'Subset', meaning: 'Is contained within' },
+      '⊃': { name: 'Superset', meaning: 'Contains' },
+      '∪': { name: 'Union', meaning: 'Combined set of all elements' },
+      '∩': { name: 'Intersection', meaning: 'Common elements only' },
+      '∀': { name: 'For all', meaning: 'Applies to every element' },
+      '∃': { name: 'Exists', meaning: 'At least one exists' },
+      '∞': { name: 'Infinity', meaning: 'Without bound or limit' },
+      '∂': { name: 'Partial', meaning: 'Partial derivative' },
+      '∇': { name: 'Nabla/Del', meaning: 'Gradient operator' },
+      '∫': { name: 'Integral', meaning: 'Area under curve / continuous sum' },
+      'α': { name: 'Alpha', meaning: 'First parameter or learning rate' },
+      'β': { name: 'Beta', meaning: 'Second parameter or coefficient' },
+      'γ': { name: 'Gamma', meaning: 'Third parameter or discount factor' },
+      'δ': { name: 'Delta', meaning: 'Small change or difference' },
+      'Δ': { name: 'Delta', meaning: 'Change in value' },
+      'ε': { name: 'Epsilon', meaning: 'Very small quantity or error' },
+      'θ': { name: 'Theta', meaning: 'Angle or model parameters' },
+      'λ': { name: 'Lambda', meaning: 'Eigenvalue or rate parameter' },
+      'μ': { name: 'Mu', meaning: 'Mean (average) value' },
+      'π': { name: 'Pi', meaning: 'Circle ratio ≈ 3.14159' },
+      'φ': { name: 'Phi', meaning: 'Golden ratio or feature transform' },
+      'ψ': { name: 'Psi', meaning: 'Wave function or auxiliary variable' },
+      'ω': { name: 'Omega', meaning: 'Angular frequency' },
+      'Ω': { name: 'Omega', meaning: 'Sample space or ohm' },
+      'ρ': { name: 'Rho', meaning: 'Correlation coefficient or density' },
+      'τ': { name: 'Tau', meaning: 'Time constant' },
+      '≈': { name: 'Approximately', meaning: 'Roughly equal to' },
+      '≠': { name: 'Not equal', meaning: 'Different from' },
+      '≤': { name: 'Less or equal', meaning: 'At most' },
+      '≥': { name: 'Greater or equal', meaning: 'At least' },
+      '→': { name: 'Arrow', meaning: 'Maps to or approaches' },
+      '⟹': { name: 'Implies', meaning: 'Therefore or leads to' },
+      '⟺': { name: 'If and only if', meaning: 'Equivalent statements' },
+    };
+
+    // Scan all words for symbols
+    const fullText = words.map(w => w.text).join('');
+    for (const [symbol, info] of Object.entries(symbolMap)) {
+      if (fullText.includes(symbol) && !foundSymbols.has(symbol)) {
+        foundSymbols.add(symbol);
+        result.push({ symbol, ...info });
+      }
+    }
+
+    return result;
+  }, []);
+
   const renderWord = (item: ProcessedWord, index: number) => {
     const wordId = `word-${index}`;
     if (item.isSpace) return <span key={index}>{item.text}</span>;
 
     // Invert threshold: low slider = high bar (show less), high slider = low bar (show all)
+    // At 100% (threshold >= 0.99), ALL words should be fully visible and bold
     const effectiveThreshold = 1.1 - threshold;
-    const isImportant = item.weight >= effectiveThreshold;
+    const isImportant = threshold >= 0.99 || item.weight >= effectiveThreshold;
     // Only show clickable cursor in locked modes (not morph mode)
     const isClickableMode = viewMode !== 'morph';
     let style: React.CSSProperties = {
       display: 'inline-block',
-      // Smooth morph transitions with cubic bezier easing
-      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      // Only apply morph transitions in morph mode - not in story/tech/nfl modes
+      transition: viewMode === 'morph' ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
       // Make important words look clickable only in locked modes
       cursor: isImportant && isClickableMode ? 'pointer' : 'default',
     };
@@ -2024,16 +2211,24 @@ export default function App() {
             }
             // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
             const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
-            const weight = calculateIntelligentWeight(word, conceptMap, importanceMap, useAnalogyTerms);
-            let cIdx = getConceptId(word, conceptMap);
-            const mappedId = getConceptId(word, conceptMap);
-            if (mappedId !== -1) {
-              cIdx = mappedId;
-            } else if (weight > 0.6) {
-              fallbackCounter++;
-              cIdx = fallbackCounter;
+            // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
+            const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
+
+            // Determine conceptIndex: prioritize entityId, then conceptMap, then fallback
+            let cIdx: number | undefined;
+            if (entityId !== undefined) {
+              // Use entityId for consistent multi-word entity coloring
+              cIdx = entityId;
+            } else {
+              const mappedId = getConceptId(word, conceptMap);
+              if (mappedId !== -1) {
+                cIdx = mappedId;
+              } else if (weight > 0.6) {
+                fallbackCounter++;
+                cIdx = fallbackCounter;
+              }
             }
-            allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex, conceptIndex: cIdx });
+            allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex, conceptIndex: cIdx, entityId });
           });
         }
       });
@@ -2221,16 +2416,6 @@ export default function App() {
           {/* Content */}
           {!isLoading && hasStarted && processedWords.length > 0 && (
             <div className="space-y-4">
-              {/* Context Card */}
-              {contextData && (
-                <ContextCard
-                  contextData={contextData}
-                  showContext={showContext}
-                  setShowContext={setShowContext}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-
               {/* Main Content Card */}
               <div
                 className={`rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
@@ -2278,6 +2463,10 @@ export default function App() {
                               setShowCondensedView(false);
                               setIsFirstPrinciplesMode(false);
                             }
+                            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
+                            if (viewMode === 'morph') {
+                              setViewMode('nfl');
+                            }
                           }
                           setIsNarrativeMode(!isNarrativeMode);
                         }}
@@ -2316,8 +2505,8 @@ export default function App() {
                         <span className="hidden sm:inline">Bullets</span>
                       </button>
                     )}
-                    {/* First Principles Mode - Only in Tech Lock when condensed data available */}
-                    {hasStarted && viewMode === 'tech' && condensedData && (
+                    {/* First Principles Mode - Available in Tech and Morph modes when condensed data available */}
+                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
                       <button
                         onClick={toggleFirstPrinciplesMode}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -2366,27 +2555,6 @@ export default function App() {
                         <span className="hidden sm:inline">Graph</span>
                       </button>
                     )}
-                    {/* Regenerate Button - Dice to regenerate description and reset mastery */}
-                    {hasStarted && lastSubmittedTopic && (
-                      <button
-                        onClick={() => {
-                          // Reset mastery session cache (clears quiz progress)
-                          setMasterySessionCache(null);
-                          // Close mastery mode if open
-                          setIsMasteryMode(false);
-                          // Regenerate content for current topic
-                          fetchAnalogy(lastSubmittedTopic);
-                        }}
-                        disabled={isRegenerating || isLoading}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
-                        } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Regenerate description and reset mastery progress"
-                      >
-                        <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
-                        <span className="hidden sm:inline">Reroll</span>
-                      </button>
-                    )}
                     {/* Dual Pane Mode Button */}
                     {hasStarted && (
                       <button
@@ -2415,6 +2583,27 @@ export default function App() {
                       >
                         <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
                         <span className="hidden sm:inline">Mastery</span>
+                      </button>
+                    )}
+                    {/* Regenerate Button - Dice to regenerate description and reset mastery */}
+                    {hasStarted && lastSubmittedTopic && (
+                      <button
+                        onClick={() => {
+                          // Reset mastery session cache (clears quiz progress)
+                          setMasterySessionCache(null);
+                          // Close mastery mode if open
+                          setIsMasteryMode(false);
+                          // Regenerate content for current topic
+                          fetchAnalogy(lastSubmittedTopic);
+                        }}
+                        disabled={isRegenerating || isLoading}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
+                        } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="Regenerate description and reset mastery progress"
+                      >
+                        <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                        <span className="hidden sm:inline">Reroll</span>
                       </button>
                     )}
                     {/* Mastery History Button - Shows gold medals for mastered topics */}
@@ -2634,6 +2823,43 @@ export default function App() {
                           </span>
                         </li>
                       ))}
+
+                      {/* Symbol Glossary - shows detected math symbols with explanations */}
+                      {(() => {
+                        const detectedSymbols = extractSymbolsFromContent(processedWords);
+                        if (detectedSymbols.length === 0) return null;
+                        return (
+                          <div className={`mt-6 pt-4 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                            <div className={`flex items-center gap-2 mb-3 text-xs font-semibold uppercase tracking-wider ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                              <BookOpen size={14} />
+                              <span>Symbol Guide</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {detectedSymbols.map(({ symbol, name, meaning }) => (
+                                <div
+                                  key={symbol}
+                                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm ${
+                                    isDarkMode
+                                      ? 'bg-neutral-800 border border-neutral-700'
+                                      : 'bg-neutral-100 border border-neutral-200'
+                                  }`}
+                                  title={meaning}
+                                >
+                                  <span className={`font-mono text-base ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                    {symbol}
+                                  </span>
+                                  <span className={`${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    {name}
+                                  </span>
+                                  <span className={`hidden sm:inline ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                    — {meaning}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </ul>
                   ) : (
                     <p
@@ -2705,6 +2931,14 @@ export default function App() {
                 </div>
                 )}
               </div>
+
+              {/* Insight Takeaway */}
+              {contextData && (
+                <ContextCard
+                  contextData={contextData}
+                  isDarkMode={isDarkMode}
+                />
+              )}
 
               {/* Follow-up Section */}
               {showFollowUp && (
@@ -3080,24 +3314,82 @@ export default function App() {
         >
           <Coffee size={20} />
         </button>
-        <button
-          onClick={() => setAmbianceMode(ambianceMode === 'holiday' ? 'none' : 'holiday')}
-          className={`p-3 rounded-full shadow-lg border transition-colors ${
-            ambianceMode === 'holiday'
-              ? 'bg-red-500 border-red-600 text-white'
-              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500')
-          }`}
-          title="Holiday Mode (2)"
-        >
-          <Snowflake size={20} />
-        </button>
+        {/* Weather Mode Button with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWeatherSelector(!showWeatherSelector)}
+            className={`p-3 rounded-full shadow-lg border transition-colors ${
+              weatherMode !== 'none'
+                ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
+                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
+            }`}
+            title="Weather Mode (2)"
+          >
+            <Cloud size={20} />
+          </button>
+          {/* Weather Selector Dropdown */}
+          {showWeatherSelector && (
+            <>
+              {/* Backdrop to close - covers entire screen */}
+              <div
+                className="fixed inset-0 z-[99]"
+                onClick={() => setShowWeatherSelector(false)}
+              />
+              {/* Dropdown Menu */}
+              <div className={`
+                absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
+                ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
+                backdrop-blur-md
+              `}>
+                <div className="p-2 space-y-1">
+                  {WEATHER_OPTIONS.map((option) => (
+                    <button
+                      key={option.type}
+                      onClick={() => {
+                        setWeatherMode(option.type);
+                        setShowWeatherSelector(false);
+                      }}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                        transition-all
+                        ${weatherMode === option.type
+                          ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
+                          : isDarkMode
+                            ? 'text-neutral-300 hover:bg-neutral-700'
+                            : 'text-neutral-700 hover:bg-neutral-100'
+                        }
+                      `}
+                    >
+                      <span className="text-lg">{option.emoji}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         {hasStarted && (
           <button
             onClick={resetAll}
             className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500'}`}
             title="Clear Text"
           >
-            <RotateCcw size={20} />
+            <Eraser size={20} />
+          </button>
+        )}
+        {/* Symbol Glossary Button - only show when there's STEM content */}
+        {hasStarted && segments.length > 0 && (
+          <button
+            onClick={() => setShowSymbolGlossary(true)}
+            className={`p-3 rounded-full shadow-lg border transition-colors ${
+              showSymbolGlossary
+                ? 'bg-blue-500 border-blue-600 text-white ring-2 ring-blue-400/50'
+                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-blue-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-blue-500')
+            }`}
+            title="Symbol Guide (∑)"
+          >
+            <span className="text-base font-bold">∑</span>
           </button>
         )}
         <button
@@ -3189,7 +3481,7 @@ export default function App() {
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
-                  <span>Holiday Mode</span>
+                  <span>Weather Mode</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
@@ -3207,6 +3499,131 @@ export default function App() {
                   <span>This Menu</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Symbol Glossary Modal */}
+      {showSymbolGlossary && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSymbolGlossary(false)}>
+          <div
+            className={`relative w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`sticky top-0 px-6 py-4 border-b ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">∑</span>
+                  <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                    Symbol Guide
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setShowSymbolGlossary(false)}
+                  className={`p-1.5 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                Mathematical notation explained in plain English
+              </p>
+            </div>
+
+            {/* Symbol Grid */}
+            <div className="overflow-y-auto max-h-[60vh] p-4">
+              {(() => {
+                // Detect which symbols are in the current content
+                const currentText = segments.map(s => isAnalogyVisualMode ? s.analogy : s.tech).join(' ');
+                const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
+                  // Check Unicode symbol
+                  if (currentText.includes(entry.symbol)) return true;
+                  // Check LaTeX commands (handle both escaped and unescaped backslashes)
+                  return entry.latex.some(cmd => {
+                    // Check direct match
+                    if (currentText.includes(cmd)) return true;
+                    // Check with single backslash (in case of different escaping)
+                    const unescaped = cmd.replace(/\\\\/g, '\\');
+                    if (currentText.includes(unescaped)) return true;
+                    // Check within $ delimiters (e.g., $\in$)
+                    if (currentText.includes('$' + cmd + '$')) return true;
+                    if (currentText.includes('$' + unescaped + '$')) return true;
+                    return false;
+                  });
+                });
+
+                if (detectedSymbols.length === 0) {
+                  return (
+                    <div className={`text-center py-8 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                      <span className="text-4xl mb-3 block">📐</span>
+                      <p>No mathematical symbols detected in the current content.</p>
+                    </div>
+                  );
+                }
+
+                // Group symbols by category
+                const greekUpper = detectedSymbols.filter(s => /^[ΣΔΩΘΠΦΨΓΛ]$/.test(s.symbol));
+                const greekLower = detectedSymbols.filter(s => /^[σαβγδεθλμπφψωρτηκνχ]$/.test(s.symbol));
+                const setLogic = detectedSymbols.filter(s => /^[∈∉⊂⊆∪∩∀∃∅∧∨¬]$/.test(s.symbol));
+                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol));
+                const relations = detectedSymbols.filter(s => /^[≈≠≤≥≪≫∝≡]$/.test(s.symbol));
+                const arrows = detectedSymbols.filter(s => /^[→←↔⟹⟺]$/.test(s.symbol));
+                const operations = detectedSymbols.filter(s => /^[√×÷±·∘⊕⊗]$/.test(s.symbol));
+                const other = detectedSymbols.filter(s =>
+                  !greekUpper.includes(s) && !greekLower.includes(s) &&
+                  !setLogic.includes(s) && !calculus.includes(s) &&
+                  !relations.includes(s) && !arrows.includes(s) && !operations.includes(s)
+                );
+
+                const renderCategory = (title: string, symbols: typeof detectedSymbols) => {
+                  if (symbols.length === 0) return null;
+                  return (
+                    <div key={title} className="mb-4">
+                      <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                        {title}
+                      </h3>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {symbols.map(({ symbol, name, meaning }) => (
+                          <div
+                            key={symbol}
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                          >
+                            <span className={`text-xl font-mono w-8 text-center ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                              {symbol}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                {name}
+                              </span>
+                              <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                — {meaning}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    <div className={`text-sm mb-4 px-1 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                      Found <span className="font-bold">{detectedSymbols.length}</span> symbols in current content
+                    </div>
+                    {renderCategory('Greek Letters (Upper)', greekUpper)}
+                    {renderCategory('Greek Letters (Lower)', greekLower)}
+                    {renderCategory('Set Theory & Logic', setLogic)}
+                    {renderCategory('Calculus & Analysis', calculus)}
+                    {renderCategory('Comparisons', relations)}
+                    {renderCategory('Arrows', arrows)}
+                    {renderCategory('Operations', operations)}
+                    {renderCategory('Other', other)}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -3492,69 +3909,10 @@ export default function App() {
         </>
       )}
 
-      {ambianceMode === 'holiday' && (
-        <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
-          {/* Base holiday tint - red and green */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.12) 0%, transparent 50%, rgba(22, 101, 52, 0.12) 100%)'
-            }}
-          />
-          {/* Snow particles - larger and more visible */}
-          <div className="absolute inset-0">
-            {Array.from({ length: 60 }).map((_, i) => (
-              <div
-                key={i}
-                className="absolute rounded-full animate-snowfall"
-                style={{
-                  left: `${(i * 1.7) % 100}%`,
-                  width: `${3 + (i % 4)}px`,
-                  height: `${3 + (i % 4)}px`,
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                  boxShadow: '0 0 4px rgba(255, 255, 255, 0.5)',
-                  animationDelay: `${(i * 0.15) % 10}s`,
-                  animationDuration: `${4 + (i % 6)}s`,
-                }}
-              />
-            ))}
-          </div>
-          {/* Twinkling Christmas lights along edges */}
-          <div className="absolute top-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={`light-top-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
-                style={{
-                  backgroundColor: i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#22c55e' : '#facc15'}`,
-                  animationDelay: `${i * 0.2}s`,
-                }}
-              />
-            ))}
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-2 flex justify-around">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={`light-bottom-${i}`}
-                className="w-2 h-2 rounded-full animate-twinkle"
-                style={{
-                  backgroundColor: i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15',
-                  boxShadow: `0 0 8px ${i % 3 === 0 ? '#22c55e' : i % 3 === 1 ? '#ef4444' : '#facc15'}`,
-                  animationDelay: `${i * 0.15 + 0.5}s`,
-                }}
-              />
-            ))}
-          </div>
-          {/* Holiday vignette */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(127, 29, 29, 0.15) 100%)'
-            }}
-          />
-        </div>
-      )}
+      {/* Weather Mode */}
+      <WeatherMode
+        weather={weatherMode}
+      />
 
       {/* Constellation Mode */}
       {isConstellationMode && (
@@ -3566,6 +3924,7 @@ export default function App() {
           onClose={() => setIsConstellationMode(false)}
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
+          renderRichText={renderRichText}
         />
       )}
 
