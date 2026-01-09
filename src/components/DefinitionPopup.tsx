@@ -2,45 +2,50 @@ import React, { useState, useMemo } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
 
-// Symbol glossary map for definitions
-const SYMBOL_GLOSSARY: Record<string, { name: string; meaning: string }> = {
-  'Σ': { name: 'Sigma', meaning: 'Summation or standard deviation' },
-  'σ': { name: 'sigma', meaning: 'Standard deviation' },
-  '∈': { name: 'Element of', meaning: '"belongs to" or "is in"' },
-  '∉': { name: 'Not in', meaning: '"does not belong to"' },
-  '⊂': { name: 'Subset', meaning: 'Is contained within' },
-  '∪': { name: 'Union', meaning: 'Combined set' },
-  '∩': { name: 'Intersection', meaning: 'Common elements' },
-  '∀': { name: 'For all', meaning: 'Applies to every element' },
-  '∃': { name: 'Exists', meaning: 'At least one exists' },
-  '∞': { name: 'Infinity', meaning: 'Without bound' },
-  '∂': { name: 'Partial', meaning: 'Partial derivative' },
-  '∇': { name: 'Nabla', meaning: 'Gradient operator' },
-  '∫': { name: 'Integral', meaning: 'Area under curve' },
-  'α': { name: 'Alpha', meaning: 'First parameter' },
-  'β': { name: 'Beta', meaning: 'Second parameter' },
-  'γ': { name: 'Gamma', meaning: 'Third parameter' },
-  'δ': { name: 'Delta (small)', meaning: 'Small change' },
-  'Δ': { name: 'Delta', meaning: 'Change in value' },
-  'ε': { name: 'Epsilon', meaning: 'Very small quantity' },
-  'θ': { name: 'Theta', meaning: 'Angle or parameters' },
-  'λ': { name: 'Lambda', meaning: 'Eigenvalue or rate' },
-  'μ': { name: 'Mu', meaning: 'Mean (average)' },
-  'π': { name: 'Pi', meaning: '≈ 3.14159' },
-  'φ': { name: 'Phi', meaning: 'Golden ratio' },
-  'ψ': { name: 'Psi', meaning: 'Wave function' },
-  'ω': { name: 'Omega (small)', meaning: 'Angular frequency' },
-  'Ω': { name: 'Omega', meaning: 'Ohm or sample space' },
-  'ρ': { name: 'Rho', meaning: 'Correlation or density' },
-  'τ': { name: 'Tau', meaning: 'Time constant' },
-  '≈': { name: 'Approximately', meaning: 'Roughly equal' },
-  '≠': { name: 'Not equal', meaning: 'Different from' },
-  '≤': { name: 'Less or equal', meaning: 'At most' },
-  '≥': { name: 'Greater or equal', meaning: 'At least' },
-  '→': { name: 'Arrow', meaning: 'Maps to or approaches' },
-  '⟹': { name: 'Implies', meaning: 'Therefore' },
-  '√': { name: 'Square root', meaning: 'Number that squares to input' },
-};
+// Symbol glossary map for definitions - includes Unicode symbol and LaTeX commands
+const SYMBOL_GLOSSARY: Array<{ symbol: string; name: string; meaning: string; latex: string[] }> = [
+  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', latex: ['\\Sigma', '\\sum'] },
+  { symbol: 'σ', name: 'sigma', meaning: 'Standard deviation', latex: ['\\sigma'] },
+  { symbol: '∈', name: 'Element of', meaning: '"belongs to" or "is in"', latex: ['\\in'] },
+  { symbol: '∉', name: 'Not in', meaning: '"does not belong to"', latex: ['\\notin'] },
+  { symbol: '⊂', name: 'Subset', meaning: 'Is contained within', latex: ['\\subset'] },
+  { symbol: '∪', name: 'Union', meaning: 'Combined set', latex: ['\\cup'] },
+  { symbol: '∩', name: 'Intersection', meaning: 'Common elements', latex: ['\\cap'] },
+  { symbol: '∀', name: 'For all', meaning: 'Applies to every element', latex: ['\\forall'] },
+  { symbol: '∃', name: 'Exists', meaning: 'At least one exists', latex: ['\\exists'] },
+  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', latex: ['\\infty'] },
+  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', latex: ['\\partial'] },
+  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', latex: ['\\nabla'] },
+  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', latex: ['\\int'] },
+  { symbol: 'α', name: 'Alpha', meaning: 'First parameter', latex: ['\\alpha'] },
+  { symbol: 'β', name: 'Beta', meaning: 'Second parameter', latex: ['\\beta'] },
+  { symbol: 'γ', name: 'Gamma', meaning: 'Third parameter', latex: ['\\gamma'] },
+  { symbol: 'δ', name: 'Delta (small)', meaning: 'Small change', latex: ['\\delta'] },
+  { symbol: 'Δ', name: 'Delta', meaning: 'Change in value', latex: ['\\Delta'] },
+  { symbol: 'ε', name: 'Epsilon', meaning: 'Very small quantity', latex: ['\\epsilon', '\\varepsilon'] },
+  { symbol: 'θ', name: 'Theta', meaning: 'Angle or parameters', latex: ['\\theta'] },
+  { symbol: 'λ', name: 'Lambda', meaning: 'Eigenvalue or rate', latex: ['\\lambda'] },
+  { symbol: 'μ', name: 'Mu', meaning: 'Mean (average)', latex: ['\\mu'] },
+  { symbol: 'π', name: 'Pi', meaning: '≈ 3.14159', latex: ['\\pi'] },
+  { symbol: 'φ', name: 'Phi', meaning: 'Golden ratio', latex: ['\\phi', '\\varphi'] },
+  { symbol: 'ψ', name: 'Psi', meaning: 'Wave function', latex: ['\\psi'] },
+  { symbol: 'ω', name: 'Omega (small)', meaning: 'Angular frequency', latex: ['\\omega'] },
+  { symbol: 'Ω', name: 'Omega', meaning: 'Ohm or sample space', latex: ['\\Omega'] },
+  { symbol: 'ρ', name: 'Rho', meaning: 'Correlation or density', latex: ['\\rho'] },
+  { symbol: 'τ', name: 'Tau', meaning: 'Time constant', latex: ['\\tau'] },
+  { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', latex: ['\\approx'] },
+  { symbol: '≠', name: 'Not equal', meaning: 'Different from', latex: ['\\neq', '\\ne'] },
+  { symbol: '≤', name: 'Less or equal', meaning: 'At most', latex: ['\\leq', '\\le'] },
+  { symbol: '≥', name: 'Greater or equal', meaning: 'At least', latex: ['\\geq', '\\ge'] },
+  { symbol: '→', name: 'Arrow', meaning: 'Maps to or approaches', latex: ['\\to', '\\rightarrow'] },
+  { symbol: '⟹', name: 'Implies', meaning: 'Therefore', latex: ['\\implies', '\\Rightarrow'] },
+  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', latex: ['\\sqrt'] },
+  { symbol: '×', name: 'Times', meaning: 'Multiplication', latex: ['\\times'] },
+  { symbol: '÷', name: 'Division', meaning: 'Division', latex: ['\\div'] },
+  { symbol: '±', name: 'Plus-minus', meaning: 'Positive or negative', latex: ['\\pm'] },
+  { symbol: '∑', name: 'Sum', meaning: 'Summation', latex: ['\\sum'] },
+  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', latex: ['\\prod'] },
+];
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -102,16 +107,31 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   const [textScale, setTextScale] = useState(1);
   const [showGlossary, setShowGlossary] = useState(false);
 
-  // Detect symbols in the definition text
+  // Detect symbols in the definition text - checks both Unicode and LaTeX commands
   const detectedSymbols = useMemo(() => {
     if (!defText) return [];
     const found: Array<{ symbol: string; name: string; meaning: string }> = [];
     const seen = new Set<string>();
 
-    for (const [symbol, info] of Object.entries(SYMBOL_GLOSSARY)) {
-      if (defText.includes(symbol) && !seen.has(symbol)) {
-        seen.add(symbol);
-        found.push({ symbol, ...info });
+    for (const entry of SYMBOL_GLOSSARY) {
+      if (seen.has(entry.symbol)) continue;
+
+      // Check if Unicode symbol is present
+      let isFound = defText.includes(entry.symbol);
+
+      // Check if any LaTeX command variant is present
+      if (!isFound) {
+        for (const latexCmd of entry.latex) {
+          if (defText.includes(latexCmd)) {
+            isFound = true;
+            break;
+          }
+        }
+      }
+
+      if (isFound) {
+        seen.add(entry.symbol);
+        found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
       }
     }
     return found;
