@@ -307,10 +307,4 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '∘', name: 'Compose', meaning: 'Function composition', latex: ['\\circ'] },
   { symbol: '⊕', name: 'XOR', meaning: 'Exclusive or / direct sum', latex: ['\\oplus'] },
   { symbol: '⊗', name: 'Tensor', meaning: 'Tensor product', latex: ['\\otimes'] },
-
-  // Big O notation specific
-  { symbol: 'O', name: 'Big O', meaning: 'Upper bound (worst-case growth)', latex: ['O', '\\mathcal{O}'] },
-  { symbol: 'o', name: 'Little o', meaning: 'Strictly smaller growth', latex: ['o'] },
-  { symbol: 'n', name: 'n', meaning: 'Input size (number of elements)', latex: ['n'] },
-  { symbol: 'log', name: 'Logarithm', meaning: 'Inverse of exponentiation', latex: ['\\log'] },
 ];
