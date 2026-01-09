@@ -3540,8 +3540,18 @@ export default function App() {
                 const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
                   // Check Unicode symbol
                   if (currentText.includes(entry.symbol)) return true;
-                  // Check LaTeX commands
-                  return entry.latex.some(cmd => currentText.includes(cmd));
+                  // Check LaTeX commands (handle both escaped and unescaped backslashes)
+                  return entry.latex.some(cmd => {
+                    // Check direct match
+                    if (currentText.includes(cmd)) return true;
+                    // Check with single backslash (in case of different escaping)
+                    const unescaped = cmd.replace(/\\\\/g, '\\');
+                    if (currentText.includes(unescaped)) return true;
+                    // Check within $ delimiters (e.g., $\in$)
+                    if (currentText.includes('$' + cmd + '$')) return true;
+                    if (currentText.includes('$' + unescaped + '$')) return true;
+                    return false;
+                  });
                 });
 
                 if (detectedSymbols.length === 0) {
