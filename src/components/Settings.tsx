@@ -158,7 +158,6 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
   return ReactDOM.createPortal(
     <div
       className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-      onClick={() => setIsOpen(false)}
     >
       {/* Modal */}
       <div
