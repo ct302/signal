@@ -1,10 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom } from 'lucide-react';
 
 interface ConceptMapItem {
   id: number;
   tech_term: string;
   analogy_term: string;
+  six_word_definition?: string;
+  narrative_mapping?: string;
+  causal_explanation?: string;
 }
 
 interface ImportanceMapItem {
@@ -107,6 +110,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Get importance for a concept
@@ -147,14 +152,20 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     ? conceptData.find(c => c.concept.id === selectedConcept)
     : null;
 
-  // Close on Escape
+  // Handle Escape key - minimize fullscreen first, then close
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (isFullScreen) {
+          setIsFullScreen(false);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, isFullScreen]);
 
   return (
     <div className="fixed inset-0 z-[80] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex flex-col">
@@ -188,7 +199,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Bridge Visualization */}
+        {/* Bridge Visualization - Hidden when fullscreen */}
+        {!isFullScreen && (
         <div
           ref={containerRef}
           className={`flex-1 p-8 overflow-y-auto ${showExplanation && selectedConceptData ? 'w-2/3' : 'w-full'} transition-all duration-500`}
@@ -297,20 +309,39 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             })}
           </div>
         </div>
+        )}
 
         {/* Explanation Panel */}
         {showExplanation && selectedConceptData && (
-          <div className="w-1/3 border-l border-neutral-700 bg-neutral-900/95 overflow-y-auto">
+          <div className={`${isFullScreen ? 'w-full' : 'w-1/3'} border-l border-neutral-700 bg-neutral-900/95 overflow-y-auto transition-all duration-300`}>
             {/* Panel Header */}
             <div className="sticky top-0 px-6 py-4 border-b border-neutral-700 bg-neutral-900">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-white font-bold text-lg">Deep Dive</h3>
-                <button
-                  onClick={() => setShowExplanation(false)}
-                  className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
-                >
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Maximize/Minimize Button */}
+                  <button
+                    onClick={() => setIsFullScreen(!isFullScreen)}
+                    className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
+                    title={isFullScreen ? 'Minimize' : 'Maximize'}
+                  >
+                    {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  </button>
+                  {/* Close Button */}
+                  <button
+                    onClick={() => {
+                      if (isFullScreen) {
+                        setIsFullScreen(false);
+                      } else {
+                        setShowExplanation(false);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg text-neutral-400 hover:bg-red-500/80 hover:text-white transition-colors"
+                    title={isFullScreen ? 'Back to split view' : 'Close panel'}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <div
@@ -324,7 +355,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             </div>
 
             {/* Concept Comparison */}
-            <div className="p-6 space-y-6">
+            <div className={`p-6 space-y-6 ${isFullScreen ? 'max-w-2xl mx-auto' : ''}`}>
               {/* Expertise Term */}
               <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
                 <div className="flex items-center gap-2 mb-2">
@@ -362,6 +393,15 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </p>
               </div>
 
+              {/* Six-Word Definition */}
+              {selectedConceptData.concept.six_word_definition && (
+                <div className="text-center py-3 px-4 rounded-lg bg-neutral-800/40 border border-neutral-700/50">
+                  <p className="text-neutral-200 text-sm italic">
+                    "{selectedConceptData.concept.six_word_definition}"
+                  </p>
+                </div>
+              )}
+
               {/* Importance Meter */}
               <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
                 <div className="flex items-center justify-between mb-2">
@@ -381,14 +421,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </div>
               </div>
 
-              {/* Why This Works */}
+              {/* Why This Works - Now uses AI-generated narrative_mapping */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
                 <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                   <Layers size={16} className="text-purple-400" />
                   Why This Works
                 </h4>
                 <p className="text-neutral-300 text-sm leading-relaxed">
-                  {generateDynamicExplanation(
+                  {selectedConceptData.concept.narrative_mapping || generateDynamicExplanation(
                     cleanLabel(selectedConceptData.concept.analogy_term),
                     cleanLabel(selectedConceptData.concept.tech_term),
                     domainName,
@@ -398,8 +438,38 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </p>
               </div>
 
+              {/* Causal Mechanics Accordion */}
+              {selectedConceptData.concept.causal_explanation && (
+                <div className="rounded-xl border border-neutral-700 overflow-hidden">
+                  <button
+                    onClick={() => setShowCausalMechanics(!showCausalMechanics)}
+                    className="w-full p-4 flex items-center justify-between bg-neutral-800/50 hover:bg-neutral-800/70 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Atom size={16} className="text-cyan-400" />
+                      <span className="text-white font-semibold">Causal Mechanics</span>
+                    </div>
+                    {showCausalMechanics ? (
+                      <ChevronUp size={18} className="text-neutral-400" />
+                    ) : (
+                      <ChevronDown size={18} className="text-neutral-400" />
+                    )}
+                  </button>
+                  {showCausalMechanics && (
+                    <div className="p-4 bg-neutral-900/50 border-t border-neutral-700">
+                      <p className="text-neutral-300 text-sm leading-relaxed">
+                        {selectedConceptData.concept.causal_explanation}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="text-center text-neutral-300 text-xs pt-4">
-                Click other concepts to explore more mappings
+                {isFullScreen
+                  ? 'Press minimize or ESC to return to split view'
+                  : 'Click other concepts to explore more mappings'
+                }
               </div>
             </div>
           </div>

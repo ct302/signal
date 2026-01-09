@@ -449,7 +449,8 @@ export default function App() {
           analogy_term: cleanText(c.analogy_term || c.analogyTerm || ""),
           // Load the new fields for rich concept isomorphism display
           six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
-          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || "")
+          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
+          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || "")
         }))
         .filter((c: { tech_term: string; analogy_term: string }) => {
           const techLower = c.tech_term.toLowerCase().trim();

@@ -19,6 +19,7 @@ export interface ConceptMapItem {
   analogy_term: string;
   six_word_definition?: string; // Exactly 6 words defining the tech_term (domain-agnostic)
   narrative_mapping?: string; // 2-3 sentence vivid mini-story bridging tech to analogy (domain-specific)
+  causal_explanation?: string; // First-principles explanation of WHY the mapping works structurally
 }
 
 export interface ImportanceMapItem {

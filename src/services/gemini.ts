@@ -717,7 +717,8 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "tech_term": "technical term from tech text",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
       "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
-      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations."
+      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
+      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar)."
     }
   ],
   "importance_map": [
@@ -898,6 +899,9 @@ IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive cover
 - narrative_mapping: A 2-3 sentence VIVID MINI-STORY showing HOW these concepts connect through a SPECIFIC ${shortDomain} scenario. NOT generic templates - use real ${shortDomain} vocabulary, names, situations. The reader should think "Oh, THAT'S what it means!" Examples:
   - Bad: "defensive assignments is like tensor components because they both track multiple things"
   - Good: "When Monte Kiffin designed the Tampa 2, each defender's gap responsibility was a component in his defensive tensor—change one assignment, and the entire coverage matrix shifts."
+- causal_explanation: First-principles reasoning for WHY this analogy works at a deep structural level. Not just "they're similar" but the underlying mechanics that make them genuinely isomorphic. What shared patterns, constraints, or dynamics do both concepts obey? Examples:
+  - Bad: "Both involve tracking multiple things"
+  - Good: "Both systems must satisfy a conservation constraint - in tensors, component transformations preserve magnitude; in zone defense, assignment shifts must preserve total coverage. The math of 'nothing leaks through' is identical."
 
 CONDENSED VIEW RULES:
 The "condensed" object provides a stripped-down, first-principles view of the concept:
