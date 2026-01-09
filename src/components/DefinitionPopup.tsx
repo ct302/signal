@@ -1,6 +1,46 @@
-import React, { useState } from 'react';
-import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
+
+// Symbol glossary map for definitions
+const SYMBOL_GLOSSARY: Record<string, { name: string; meaning: string }> = {
+  'Σ': { name: 'Sigma', meaning: 'Summation or standard deviation' },
+  'σ': { name: 'sigma', meaning: 'Standard deviation' },
+  '∈': { name: 'Element of', meaning: '"belongs to" or "is in"' },
+  '∉': { name: 'Not in', meaning: '"does not belong to"' },
+  '⊂': { name: 'Subset', meaning: 'Is contained within' },
+  '∪': { name: 'Union', meaning: 'Combined set' },
+  '∩': { name: 'Intersection', meaning: 'Common elements' },
+  '∀': { name: 'For all', meaning: 'Applies to every element' },
+  '∃': { name: 'Exists', meaning: 'At least one exists' },
+  '∞': { name: 'Infinity', meaning: 'Without bound' },
+  '∂': { name: 'Partial', meaning: 'Partial derivative' },
+  '∇': { name: 'Nabla', meaning: 'Gradient operator' },
+  '∫': { name: 'Integral', meaning: 'Area under curve' },
+  'α': { name: 'Alpha', meaning: 'First parameter' },
+  'β': { name: 'Beta', meaning: 'Second parameter' },
+  'γ': { name: 'Gamma', meaning: 'Third parameter' },
+  'δ': { name: 'Delta (small)', meaning: 'Small change' },
+  'Δ': { name: 'Delta', meaning: 'Change in value' },
+  'ε': { name: 'Epsilon', meaning: 'Very small quantity' },
+  'θ': { name: 'Theta', meaning: 'Angle or parameters' },
+  'λ': { name: 'Lambda', meaning: 'Eigenvalue or rate' },
+  'μ': { name: 'Mu', meaning: 'Mean (average)' },
+  'π': { name: 'Pi', meaning: '≈ 3.14159' },
+  'φ': { name: 'Phi', meaning: 'Golden ratio' },
+  'ψ': { name: 'Psi', meaning: 'Wave function' },
+  'ω': { name: 'Omega (small)', meaning: 'Angular frequency' },
+  'Ω': { name: 'Omega', meaning: 'Ohm or sample space' },
+  'ρ': { name: 'Rho', meaning: 'Correlation or density' },
+  'τ': { name: 'Tau', meaning: 'Time constant' },
+  '≈': { name: 'Approximately', meaning: 'Roughly equal' },
+  '≠': { name: 'Not equal', meaning: 'Different from' },
+  '≤': { name: 'Less or equal', meaning: 'At most' },
+  '≥': { name: 'Greater or equal', meaning: 'At least' },
+  '→': { name: 'Arrow', meaning: 'Maps to or approaches' },
+  '⟹': { name: 'Implies', meaning: 'Therefore' },
+  '√': { name: 'Square root', meaning: 'Number that squares to input' },
+};
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -60,6 +100,23 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   renderRichText
 }) => {
   const [textScale, setTextScale] = useState(1);
+  const [showGlossary, setShowGlossary] = useState(false);
+
+  // Detect symbols in the definition text
+  const detectedSymbols = useMemo(() => {
+    if (!defText) return [];
+    const found: Array<{ symbol: string; name: string; meaning: string }> = [];
+    const seen = new Set<string>();
+
+    for (const [symbol, info] of Object.entries(SYMBOL_GLOSSARY)) {
+      if (defText.includes(symbol) && !seen.has(symbol)) {
+        seen.add(symbol);
+        found.push({ symbol, ...info });
+      }
+    }
+    return found;
+  }, [defText]);
+
   const style: React.CSSProperties = isMobile
     ? {
         top: 'auto',
@@ -145,6 +202,35 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         {onWordClick && !isLoadingDef && (
           <div className="text-[9px] text-neutral-600 mt-1 text-center">
             Click any word for a nested definition
+          </div>
+        )}
+
+        {/* Symbol Glossary - shows when math symbols detected */}
+        {!isLoadingDef && detectedSymbols.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-neutral-800">
+            <button
+              onClick={() => setShowGlossary(!showGlossary)}
+              className="flex items-center gap-2 text-[10px] text-blue-400 hover:text-blue-300 transition-colors w-full"
+            >
+              <BookOpen size={12} />
+              <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
+              <span className="text-neutral-600">({detectedSymbols.length})</span>
+              {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
+            </button>
+            {showGlossary && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {detectedSymbols.map(({ symbol, name, meaning }) => (
+                  <div
+                    key={symbol}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-[10px]"
+                    title={meaning}
+                  >
+                    <span className="text-blue-300 font-mono text-xs">{symbol}</span>
+                    <span className="text-neutral-400">{name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

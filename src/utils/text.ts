@@ -696,7 +696,7 @@ export const sanitizeLatex = (text: string): string => {
     }
 
     // Accent commands used incorrectly as standalone words
-    const accentCommands = ['tilde', 'hat', 'bar', 'vec', 'dot', 'ddot', 'overline', 'underline'];
+    const accentCommands = ['tilde', 'hat', 'bar', 'vec', 'dot', 'ddot', 'overline', 'underline', 'check', 'acute', 'grave', 'breve', 'ring'];
     for (const cmd of accentCommands) {
       // Match \command NOT followed by { (proper usage)
       cleaned = cleaned.replace(new RegExp(`\\\\${cmd}(?![{])`, 'g'), cmd);

@@ -6,6 +6,7 @@ import {
   MoveHorizontal,
   Sparkles,
   BookOpenText,
+  Eraser,
   RotateCcw,
   Maximize2,
   Minimize2,
@@ -3326,9 +3327,9 @@ export default function App() {
           {/* Weather Selector Dropdown */}
           {showWeatherSelector && (
             <>
-              {/* Backdrop to close */}
+              {/* Backdrop to close - covers entire screen */}
               <div
-                className="fixed inset-0 z-[-1]"
+                className="fixed inset-0 z-[99]"
                 onClick={() => setShowWeatherSelector(false)}
               />
               {/* Dropdown Menu */}
@@ -3371,7 +3372,7 @@ export default function App() {
             className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500'}`}
             title="Clear Text"
           >
-            <RotateCcw size={20} />
+            <Eraser size={20} />
           </button>
         )}
         <button
