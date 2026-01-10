@@ -3538,7 +3538,14 @@ export default function App() {
                 // Detect which symbols are in the current content
                 const currentText = segments.map(s => isAnalogyVisualMode ? s.analogy : s.tech).join(' ');
                 const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
-                  // Check Unicode symbol
+                  // Single Latin letters (linear algebra) - only match in LaTeX context to avoid false positives
+                  const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
+                  if (isSingleLatinLetter) {
+                    // Check for $X$ pattern or within larger LaTeX expressions like $m \times n$
+                    const latexPattern = new RegExp(`\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$`);
+                    return latexPattern.test(currentText);
+                  }
+                  // Check Unicode symbol (for non-Latin symbols)
                   if (currentText.includes(entry.symbol)) return true;
                   // Check LaTeX commands (handle both escaped and unescaped backslashes)
                   return entry.latex.some(cmd => {
@@ -3571,10 +3578,12 @@ export default function App() {
                 const relations = detectedSymbols.filter(s => /^[≈≠≤≥≪≫∝≡]$/.test(s.symbol));
                 const arrows = detectedSymbols.filter(s => /^[→←↔⟹⟺]$/.test(s.symbol));
                 const operations = detectedSymbols.filter(s => /^[√×÷±·∘⊕⊗]$/.test(s.symbol));
+                const linearAlgebra = detectedSymbols.filter(s => /^[UVABXTmnkij]$/.test(s.symbol));
                 const other = detectedSymbols.filter(s =>
                   !greekUpper.includes(s) && !greekLower.includes(s) &&
                   !setLogic.includes(s) && !calculus.includes(s) &&
-                  !relations.includes(s) && !arrows.includes(s) && !operations.includes(s)
+                  !relations.includes(s) && !arrows.includes(s) && !operations.includes(s) &&
+                  !linearAlgebra.includes(s)
                 );
 
                 const renderCategory = (title: string, symbols: typeof detectedSymbols) => {
@@ -3613,6 +3622,7 @@ export default function App() {
                     <div className={`text-sm mb-4 px-1 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                       Found <span className="font-bold">{detectedSymbols.length}</span> symbols in current content
                     </div>
+                    {renderCategory('Linear Algebra', linearAlgebra)}
                     {renderCategory('Greek Letters (Upper)', greekUpper)}
                     {renderCategory('Greek Letters (Lower)', greekLower)}
                     {renderCategory('Set Theory & Logic', setLogic)}

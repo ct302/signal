@@ -307,4 +307,17 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '∘', name: 'Compose', meaning: 'Function composition', latex: ['\\circ'] },
   { symbol: '⊕', name: 'XOR', meaning: 'Exclusive or / direct sum', latex: ['\\oplus'] },
   { symbol: '⊗', name: 'Tensor', meaning: 'Tensor product', latex: ['\\otimes'] },
+
+  // Linear algebra - matrices and dimensions
+  { symbol: 'U', name: 'U matrix', meaning: 'Left singular vectors (orthogonal matrix)', latex: ['U'] },
+  { symbol: 'V', name: 'V matrix', meaning: 'Right singular vectors (orthogonal matrix)', latex: ['V'] },
+  { symbol: 'A', name: 'Matrix A', meaning: 'Generic matrix', latex: ['A'] },
+  { symbol: 'B', name: 'Matrix B', meaning: 'Generic matrix', latex: ['B'] },
+  { symbol: 'X', name: 'Matrix/Vector X', meaning: 'Unknown or input matrix/vector', latex: ['X'] },
+  { symbol: 'T', name: 'Transpose', meaning: 'Matrix transpose (Aᵀ)', latex: ['T', '^T', '^{T}'] },
+  { symbol: 'm', name: 'm', meaning: 'Row dimension (number of rows)', latex: ['m'] },
+  { symbol: 'n', name: 'n', meaning: 'Column dimension (number of columns)', latex: ['n'] },
+  { symbol: 'k', name: 'k', meaning: 'Rank or iteration index', latex: ['k'] },
+  { symbol: 'i', name: 'i', meaning: 'Row index', latex: ['i'] },
+  { symbol: 'j', name: 'j', meaning: 'Column index', latex: ['j'] },
 ];
