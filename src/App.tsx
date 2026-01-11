@@ -2418,7 +2418,7 @@ export default function App() {
             <div className="space-y-4">
               {/* Main Content Card */}
               <div
-                className={`rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
+                className={`relative z-10 rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
                   isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
                 } ${
                   viewMode === 'morph' && isHovering
