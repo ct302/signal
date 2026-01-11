@@ -2354,7 +2354,7 @@ export default function App() {
 
       {/* Main Content */}
       <main ref={scrollRef} className={`flex-1 overflow-y-auto transition-all duration-500 ${isImmersive ? 'pt-0' : 'pt-4'}`}>
-        <div className={`max-w-4xl mx-auto px-4 pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-8' : ''}`}>
+        <div className={`max-w-4xl mx-auto px-3 md:px-4 pb-20 md:pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-4 md:px-8' : ''}`}>
           {/* Loading State */}
           {isLoading && (
             <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
@@ -2449,7 +2449,7 @@ export default function App() {
                     </button>
                     {/* Show selecting indicator when morph is locked for selection */}
                     {morphLockedForSelection && viewMode === 'morph' && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
                         Selecting...
                       </span>
                     )}
@@ -2528,7 +2528,7 @@ export default function App() {
                             key={level}
                             onClick={() => handleComplexityChange(level)}
                             disabled={isRegenerating || isLoading}
-                            className={`px-2 py-1 text-[10px] font-bold transition-colors ${
+                            className={`px-2 py-2 min-h-touch text-xs font-bold transition-colors ${
                               mainComplexity === level
                                 ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
                                 : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
@@ -2642,8 +2642,8 @@ export default function App() {
                     )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
-                      <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
-                        <Loader2 size={10} className="animate-spin" />
+                      <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                        <Loader2 size={12} className="animate-spin" />
                         Regenerating...
                       </span>
                     )}
@@ -2694,7 +2694,7 @@ export default function App() {
                       <div className="space-y-4">
                         {/* WHAT Section */}
                         <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
-                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                          <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-1.5 ${
                             isDarkMode ? 'text-purple-400/80' : 'text-purple-500'
                           }`}>
                             <span>📐</span>
@@ -2710,7 +2710,7 @@ export default function App() {
 
                         {/* WHY Section */}
                         <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
-                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                          <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-1.5 ${
                             isDarkMode ? 'text-emerald-400/80' : 'text-emerald-500'
                           }`}>
                             <span>🎯</span>
@@ -2727,7 +2727,7 @@ export default function App() {
                         {/* First Principles Bullets - with heatmap importance colors */}
                         {condensedData.bullets.length > 0 && (
                           <div>
-                            <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-2 ${
+                            <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-2 ${
                               isDarkMode ? 'text-orange-400/80' : 'text-orange-500'
                             }`}>
                               <span>⚡</span>
@@ -2895,7 +2895,7 @@ export default function App() {
                       <BookOpen size={14} />
                       <span>Define</span>
                       {pendingSelection.split(/\s+/).length > 1 && (
-                        <span className="text-neutral-400 text-[10px]">
+                        <span className="text-neutral-400 text-xs">
                           ({pendingSelection.split(/\s+/).length} words)
                         </span>
                       )}
@@ -2908,8 +2908,8 @@ export default function App() {
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   {/* Selection hint - only show when not in morph mode */}
                   {viewMode !== 'morph' && (
-                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-[10px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      <BookOpen size={10} />
+                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                      <BookOpen size={12} />
                       <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
                     </div>
                   )}
@@ -3166,7 +3166,7 @@ export default function App() {
 
       {/* Controls Panel */}
       {showControls && (
-        <div ref={controlsPanelRef} className={`fixed bottom-20 right-6 z-50 rounded-xl shadow-xl p-4 space-y-3 w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+        <div ref={controlsPanelRef} className={`fixed bottom-20 right-3 md:right-6 z-50 rounded-xl shadow-xl p-3 md:p-4 space-y-3 w-48 md:w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
           <div className="flex justify-between items-center pb-2 border-b border-neutral-200">
             <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Attention Mode</span>
           </div>
@@ -3836,7 +3836,7 @@ export default function App() {
                                   className="w-5 h-5 rounded-full border border-neutral-600"
                                   style={{ backgroundColor: preset.color }}
                                 />
-                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                                <span className="text-xs text-neutral-400">{preset.label}</span>
                               </button>
                             ))}
                           </div>
@@ -3904,7 +3904,7 @@ export default function App() {
                                   className="w-5 h-5 rounded-full border border-neutral-600"
                                   style={{ backgroundColor: preset.color }}
                                 />
-                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                                <span className="text-xs text-neutral-400">{preset.label}</span>
                               </button>
                             ))}
                           </div>

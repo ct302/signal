@@ -1,6 +1,20 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom } from 'lucide-react';
 
+// Mobile detection hook
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+};
+
 interface ConceptMapItem {
   id: number;
   tech_term: string;
@@ -116,6 +130,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Mobile responsive
+  const isMobile = useIsMobile();
+
   // Get importance for a concept
   const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
     const techTerm = cleanLabel(concept.tech_term).toLowerCase();
@@ -172,61 +189,66 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   return (
     <div className="fixed inset-0 z-[80] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700 bg-neutral-900/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 md:gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Layers className="text-blue-400" size={24} />
-            <h2 className="text-white text-xl font-bold">Knowledge Bridge</h2>
+            <Layers className="text-blue-400" size={isMobile ? 20 : 24} />
+            <h2 className="text-white text-base md:text-xl font-bold">Knowledge Bridge</h2>
           </div>
-          <div className="flex items-center gap-2 text-neutral-400 text-sm">
-            <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium">
+          {/* Domain badges - hidden on small mobile, shown on larger screens */}
+          <div className="hidden xs:flex items-center gap-2 text-neutral-400 text-xs md:text-sm">
+            <span className="px-2 md:px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium truncate max-w-[100px] md:max-w-none">
               {domainName}
             </span>
-            <ArrowRight size={16} />
-            <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium">
+            <ArrowRight size={14} className="hidden md:block" />
+            <span className="px-2 md:px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium truncate max-w-[100px] md:max-w-none">
               {topicName}
             </span>
           </div>
-          <span className="text-neutral-300 text-sm ml-4">
+          <span className="hidden md:inline text-neutral-300 text-sm ml-4">
             {conceptMap.length} concept mappings
           </span>
         </div>
         <button
           onClick={onClose}
-          className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
+          className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
         >
           <X size={20} />
         </button>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Bridge Visualization - Hidden when fullscreen */}
-        {!isFullScreen && (
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        {/* Bridge Visualization - Hidden when fullscreen on desktop */}
+        {(!isFullScreen || isMobile) && (
         <div
           ref={containerRef}
-          className={`flex-1 p-8 overflow-y-auto ${showExplanation && selectedConceptData ? 'w-2/3' : 'w-full'} transition-all duration-500`}
+          className={`flex-1 p-4 md:p-8 overflow-y-auto ${
+            !isMobile && showExplanation && selectedConceptData ? 'md:w-2/3' : 'w-full'
+          } transition-all duration-500 ${
+            isMobile && showExplanation ? 'pb-[65vh]' : ''
+          }`}
         >
           {/* Column Headers */}
-          <div className="flex justify-between mb-8 px-4">
-            <div className="flex items-center gap-3">
-              <Sparkles className="text-amber-400" size={24} />
+          <div className="flex justify-between mb-4 md:mb-8 px-2 md:px-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <Sparkles className="text-amber-400" size={isMobile ? 18 : 24} />
               <div>
-                <h3 className="text-amber-300 font-bold text-lg">What You Know</h3>
-                <p className="text-amber-400/60 text-sm">{domainName}</p>
+                <h3 className="text-amber-300 font-bold text-sm md:text-lg">What You Know</h3>
+                <p className="text-amber-400/60 text-xs md:text-sm hidden xs:block">{domainName}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <div className="text-right">
-                <h3 className="text-blue-300 font-bold text-lg">What You're Learning</h3>
-                <p className="text-blue-400/60 text-sm">{topicName}</p>
+                <h3 className="text-blue-300 font-bold text-sm md:text-lg">What You're Learning</h3>
+                <p className="text-blue-400/60 text-xs md:text-sm hidden xs:block">{topicName}</p>
               </div>
-              <BookOpen className="text-blue-400" size={24} />
+              <BookOpen className="text-blue-400" size={isMobile ? 18 : 24} />
             </div>
           </div>
 
           {/* Concept Bridges */}
-          <div className="space-y-4">
+          <div className="space-y-3 md:space-y-4">
             {conceptData.map((data) => {
               const isSelected = selectedConcept === data.concept.id;
               const isHovered = hoveredConcept === data.concept.id;
@@ -239,14 +261,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   className={`relative flex items-center transition-all duration-300 ${
                     otherSelected && !isActive ? 'opacity-30' : 'opacity-100'
                   }`}
-                  onMouseEnter={() => setHoveredConcept(data.concept.id)}
-                  onMouseLeave={() => setHoveredConcept(null)}
+                  onMouseEnter={() => !isMobile && setHoveredConcept(data.concept.id)}
+                  onMouseLeave={() => !isMobile && setHoveredConcept(null)}
                   onClick={() => handleConceptClick(data.concept.id)}
                 >
                   {/* Left Pill (Analogy/Expertise) */}
                   <div
-                    className={`flex-shrink-0 px-5 py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[40%] ${
-                      isActive ? 'scale-105' : 'hover:scale-102'
+                    className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : 'rgba(251, 191, 36, 0.15)',
@@ -254,13 +276,13 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-base ${isActive ? 'text-white' : 'text-amber-100'}`}>
+                    <span className={`font-semibold text-sm md:text-base ${isActive ? 'text-white' : 'text-amber-100'}`}>
                       {cleanLabel(data.concept.analogy_term)}
                     </span>
                   </div>
 
                   {/* Bridge Line with Label - Single continuous line */}
-                  <div className="flex-1 flex items-center justify-center relative min-w-[120px]">
+                  <div className="flex-1 flex items-center justify-center relative min-w-[60px] md:min-w-[120px]">
                     {/* Single connecting line - properly contained */}
                     <div
                       className="absolute left-0 right-0 h-px top-1/2 -translate-y-1/2"
@@ -271,17 +293,17 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       }}
                     />
 
-                    {/* Animated dot on hover */}
-                    {isHovered && (
+                    {/* Animated dot on hover - desktop only */}
+                    {isHovered && !isMobile && (
                       <div
                         className="absolute w-2 h-2 rounded-full animate-bridge-flow z-10"
                         style={{ backgroundColor: data.color, boxShadow: `0 0 8px ${data.color}` }}
                       />
                     )}
 
-                    {/* Relationship Label - sits on top of line */}
+                    {/* Relationship Label - hidden on mobile, sits on top of line */}
                     <span
-                      className={`relative z-10 px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 border ${
+                      className={`relative z-10 px-2 md:px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 border hidden xs:inline ${
                         isActive
                           ? 'bg-neutral-900 text-white border-neutral-600'
                           : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -293,8 +315,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
                   {/* Right Pill (Tech/Learning) */}
                   <div
-                    className={`flex-shrink-0 px-5 py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[40%] ${
-                      isActive ? 'scale-105' : 'hover:scale-102'
+                    className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : 'rgba(96, 165, 250, 0.15)',
@@ -302,7 +324,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-base ${isActive ? 'text-white' : 'text-blue-100'}`}>
+                    <span className={`font-semibold text-sm md:text-base ${isActive ? 'text-white' : 'text-blue-100'}`}>
                       {cleanLabel(data.concept.tech_term)}
                     </span>
                   </div>
@@ -313,32 +335,47 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         </div>
         )}
 
-        {/* Explanation Panel */}
+        {/* Explanation Panel - Desktop: Side Panel | Mobile: Bottom Sheet */}
         {showExplanation && selectedConceptData && (
-          <div className={`${isFullScreen ? 'w-full' : 'w-1/3'} border-l border-neutral-700 bg-neutral-900/95 overflow-y-auto transition-all duration-300`}>
+          <div className={`
+            ${isMobile
+              ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90]'
+              : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
+            }
+            border-neutral-700 bg-neutral-900/95 overflow-hidden transition-all duration-300
+          `}>
+            {/* Mobile Drag Handle */}
+            {isMobile && (
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 bg-neutral-600 rounded-full" />
+              </div>
+            )}
+
             {/* Panel Header */}
-            <div className="sticky top-0 px-6 py-4 border-b border-neutral-700 bg-neutral-900">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-white font-bold text-lg">Deep Dive</h3>
+            <div className="sticky top-0 px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h3 className="text-white font-bold text-base md:text-lg">Deep Dive</h3>
                 <div className="flex items-center gap-2">
-                  {/* Maximize/Minimize Button */}
-                  <button
-                    onClick={() => setIsFullScreen(!isFullScreen)}
-                    className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
-                    title={isFullScreen ? 'Minimize' : 'Maximize'}
-                  >
-                    {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                  </button>
+                  {/* Maximize/Minimize Button - Desktop only */}
+                  {!isMobile && (
+                    <button
+                      onClick={() => setIsFullScreen(!isFullScreen)}
+                      className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
+                      title={isFullScreen ? 'Minimize' : 'Maximize'}
+                    >
+                      {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                    </button>
+                  )}
                   {/* Close Button */}
                   <button
                     onClick={() => {
-                      if (isFullScreen) {
+                      if (isFullScreen && !isMobile) {
                         setIsFullScreen(false);
                       } else {
                         setShowExplanation(false);
                       }
                     }}
-                    className="p-1.5 rounded-lg text-neutral-400 hover:bg-red-500/80 hover:text-white transition-colors"
+                    className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg text-neutral-400 hover:bg-red-500/80 hover:text-white transition-colors"
                     title={isFullScreen ? 'Back to split view' : 'Close panel'}
                   >
                     <X size={18} />
@@ -347,17 +384,19 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <div
-                  className="w-4 h-4 rounded-full"
+                  className="w-3 h-3 md:w-4 md:h-4 rounded-full"
                   style={{ backgroundColor: selectedConceptData.color }}
                 />
-                <span className="text-neutral-300 text-sm">
+                <span className="text-neutral-300 text-xs md:text-sm">
                   Mapping {selectedConceptData.index + 1} of {conceptMap.length}
                 </span>
               </div>
             </div>
 
-            {/* Concept Comparison */}
-            <div className={`p-6 space-y-6 ${isFullScreen ? 'max-w-2xl mx-auto' : ''}`}>
+            {/* Concept Comparison - Scrollable content area */}
+            <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
+              isMobile ? 'max-h-[calc(60vh-80px)]' : ''
+            } ${isFullScreen && !isMobile ? 'max-w-2xl mx-auto' : ''}`}>
               {/* Expertise Term */}
               <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
                 <div className="flex items-center gap-2 mb-2">
@@ -482,12 +521,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900/80">
+      <div className="px-4 md:px-6 py-3 border-t border-neutral-700 bg-neutral-900/80 pb-safe">
         <div className="flex items-center justify-between">
-          <span className="text-amber-200/70 text-sm">
-            Click any mapping to explore the connection in depth
+          <span className="text-amber-200/70 text-xs md:text-sm">
+            {isMobile ? 'Tap any mapping to explore' : 'Click any mapping to explore the connection in depth'}
           </span>
-          <span className="text-neutral-300 text-xs">
+          <span className="text-neutral-300 text-xs hidden md:inline">
             Press Esc to close
           </span>
         </div>

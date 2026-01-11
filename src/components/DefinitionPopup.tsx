@@ -135,21 +135,21 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             {/* Text Scale Controls */}
             <button
               onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.max(0.8, s - 0.1)); }}
-              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
               title="Decrease text size"
             >
-              <ZoomOut size={12} />
+              <ZoomOut size={14} />
             </button>
-            <span className="text-[10px] text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
+            <span className="text-xs text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
             <button
               onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.min(1.5, s + 0.1)); }}
-              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
               title="Increase text size"
             >
-              <ZoomIn size={12} />
+              <ZoomIn size={14} />
             </button>
-            <button onClick={onClose} className="hover:text-white ml-1">
-              <X size={14} />
+            <button onClick={onClose} className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white ml-1">
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -176,7 +176,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           )}
         </div>
         {onWordClick && !isLoadingDef && (
-          <div className="text-[9px] text-neutral-600 mt-1 text-center">
+          <div className="text-xs text-neutral-600 mt-1 text-center">
             Click any word for a nested definition
           </div>
         )}
@@ -186,7 +186,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           <div className="mt-2 pt-2 border-t border-neutral-800">
             <button
               onClick={() => setShowGlossary(!showGlossary)}
-              className="flex items-center gap-2 text-[10px] text-blue-400 hover:text-blue-300 transition-colors w-full"
+              className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors w-full"
             >
               <BookOpen size={12} />
               <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
@@ -198,7 +198,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                 {detectedSymbols.map(({ symbol, name, meaning }) => (
                   <div
                     key={symbol}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-[10px]"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-xs"
                     title={meaning}
                   >
                     <span className="text-blue-300 font-mono text-xs">{symbol}</span>
@@ -222,7 +222,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                   onEliClick(level);
                 }}
                 disabled={isLoadingDef}
-                className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
+                className={`flex-1 px-2 py-2 min-h-touch text-xs font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
                   defComplexity === level
                     ? 'bg-neutral-700 text-white'
                     : 'text-neutral-500 hover:text-neutral-300'

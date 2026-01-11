@@ -61,13 +61,13 @@ export const Header: React.FC<HeaderProps> = ({
         isImmersive ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       } ${isDarkMode ? 'bg-neutral-900/80 border-neutral-800' : 'bg-white/80 border-neutral-200'}`}
     >
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div className="max-w-4xl mx-auto px-3 md:px-4 py-3 flex items-center gap-2 md:gap-3">
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onDomainClick}
             onMouseEnter={() => setIsHoveringDomain(true)}
             onMouseLeave={() => setIsHoveringDomain(false)}
-            className={`flex items-center gap-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`flex items-center gap-2 py-2 min-h-touch rounded-full text-sm font-medium transition-all duration-200 ${
               isHoveringDomain ? 'px-3' : 'px-2'
             } ${
               isDarkMode
@@ -89,14 +89,14 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setShowHistory(!showHistory)}
             data-history-toggle
-            className={`p-2 rounded-full transition-colors relative ${
+            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors relative ${
               isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}
             title="History"
           >
             <History size={18} />
             {historyCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 {historyCount}
               </span>
             )}
@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-full transition-colors ${
+            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors ${
               isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}
             title="Toggle Theme"

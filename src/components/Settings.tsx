@@ -175,7 +175,7 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
           </h2>
           <button
             onClick={() => setIsOpen(false)}
-            className={`p-1 rounded-lg transition-colors ${
+            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg transition-colors ${
               isDarkMode ? 'hover:bg-neutral-700 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}
           >
@@ -190,12 +190,12 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
             <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
               Provider
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map(provider => (
                 <button
                   key={provider}
                   onClick={() => handleProviderChange(provider)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-3 min-h-touch rounded-lg text-sm font-medium transition-colors ${
                     config.provider === provider
                       ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white')
                       : (isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200')

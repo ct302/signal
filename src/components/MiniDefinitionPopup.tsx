@@ -99,21 +99,21 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
           {/* Text Scale Controls */}
           <button
             onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.max(0.8, s - 0.1)); }}
-            className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+            className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
             title="Decrease text size"
           >
-            <ZoomOut size={12} />
+            <ZoomOut size={14} />
           </button>
-          <span className="text-[10px] text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
+          <span className="text-xs text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
           <button
             onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.min(1.5, s + 0.1)); }}
-            className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+            className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
             title="Increase text size"
           >
-            <ZoomIn size={12} />
+            <ZoomIn size={14} />
           </button>
-          <button onClick={onClose} className="hover:text-white ml-1">
-            <X size={14} />
+          <button onClick={onClose} className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white ml-1">
+            <X size={16} />
           </button>
         </div>
       </div>
@@ -151,7 +151,7 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
                 onEliClick(level);
               }}
               disabled={isLoadingMiniDef}
-              className={`flex-1 px-2 py-1 text-[10px] font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
+              className={`flex-1 px-2 py-2 min-h-touch text-xs font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
                 miniDefComplexity === level
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-600 hover:text-neutral-400'

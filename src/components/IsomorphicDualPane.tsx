@@ -2,6 +2,22 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
 
+// Mobile detection hook
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+};
+
+type MobilePane = 'tech' | 'connection' | 'analogy';
+
 // Generate dynamic "Why This Works" bullet points based on actual concept characteristics
 const generateWhyBullets = (
   techTerm: string,
@@ -173,6 +189,17 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
 
+  // Mobile responsive state
+  const isMobile = useIsMobile();
+  const [mobileActivePane, setMobileActivePane] = useState<MobilePane>('tech');
+
+  // Auto-switch to connection tab when concept is selected on mobile
+  useEffect(() => {
+    if (isMobile && selectedConcept !== null) {
+      setMobileActivePane('connection');
+    }
+  }, [isMobile, selectedConcept]);
+
   // Get importance for a concept
   const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
     const techTerm = cleanLabel(concept.tech_term).toLowerCase();
@@ -230,29 +257,74 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   return (
     <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700 bg-neutral-900">
-        <div className="flex items-center gap-4">
-          <Columns className="text-blue-400" size={24} />
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900">
+        <div className="flex items-center gap-3 md:gap-4">
+          <Columns className="text-blue-400 hidden md:block" size={24} />
           <div>
-            <h2 className="text-white text-lg font-bold">Concept Isomorphism</h2>
-            <p className="text-neutral-400 text-sm">{conceptMap.length} mappings • Technical ↔ {analogyDomain}</p>
+            <h2 className="text-white text-base md:text-lg font-bold">Concept Isomorphism</h2>
+            <p className="text-neutral-400 text-xs md:text-sm">{conceptMap.length} mappings • Technical ↔ {analogyDomain}</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
+          className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
         >
           <X size={20} />
         </button>
       </div>
 
+      {/* Mobile Tab Navigation */}
+      {isMobile && (
+        <div className="flex border-b border-neutral-700 bg-neutral-900">
+          <button
+            onClick={() => setMobileActivePane('tech')}
+            className={`flex-1 py-3 text-sm font-medium min-h-touch transition-colors ${
+              mobileActivePane === 'tech'
+                ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/20'
+                : 'text-neutral-400 hover:text-neutral-300'
+            }`}
+          >
+            ⚡ Technical
+          </button>
+          <button
+            onClick={() => setMobileActivePane('connection')}
+            className={`flex-1 py-3 text-sm font-medium min-h-touch transition-colors ${
+              mobileActivePane === 'connection'
+                ? 'text-purple-400 border-b-2 border-purple-400 bg-purple-900/20'
+                : 'text-neutral-400 hover:text-neutral-300'
+            }`}
+          >
+            <Zap size={14} className="inline mr-1" />
+            Connection
+          </button>
+          <button
+            onClick={() => setMobileActivePane('analogy')}
+            className={`flex-1 py-3 text-sm font-medium min-h-touch transition-colors ${
+              mobileActivePane === 'analogy'
+                ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-900/20'
+                : 'text-neutral-400 hover:text-neutral-300'
+            }`}
+          >
+            🎯 {analogyDomain}
+          </button>
+        </div>
+      )}
+
       {/* Main Content */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        {/* Three Column Layout */}
+        {/* Desktop: Three Column Layout | Mobile: Single Pane */}
         <div className="h-full flex">
           {/* Left Column - Technical Terms */}
-          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-r transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-blue-50/30'}`}>
-            <div className="flex items-center gap-2 mb-6">
+          <div className={`
+            ${isMobile
+              ? (mobileActivePane === 'tech' ? 'w-full' : 'hidden')
+              : (selectedConcept !== null ? 'w-[30%]' : 'w-[35%]')
+            }
+            p-4 md:p-6 overflow-y-auto md:border-r transition-all duration-500
+            ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-blue-50/30'}
+          `}>
+            {/* Hide header on mobile since we have tabs */}
+            <div className="hidden md:flex items-center gap-2 mb-6">
               <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-blue-900/70 text-blue-200' : 'bg-blue-200 text-blue-800'}`}>
                 ⚡ Technical
               </div>
@@ -306,7 +378,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           </div>
 
           {/* Center Column - Connection Indicator (expands when concept selected) */}
-          <div className={`${selectedConcept !== null ? 'w-[40%]' : 'w-[30%]'} flex flex-col items-center transition-all duration-500 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/30' : 'bg-neutral-50'}`}>
+          <div className={`
+            ${isMobile
+              ? (mobileActivePane === 'connection' ? 'w-full' : 'hidden')
+              : (selectedConcept !== null ? 'w-[40%]' : 'w-[30%]')
+            }
+            flex flex-col items-center transition-all duration-500 overflow-y-auto
+            ${isDarkMode ? 'bg-neutral-900/30' : 'bg-neutral-50'}
+          `}>
             {activeConcept !== null ? (
               <div className={`${selectedConcept !== null ? 'p-6 w-full' : 'text-center px-4 py-8'}`}>
                 {(() => {
@@ -439,8 +518,16 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
           </div>
 
           {/* Right Column - Analogy Terms */}
-          <div className={`${selectedConcept !== null ? 'w-[30%]' : 'w-[35%]'} p-6 overflow-y-auto border-l transition-all duration-500 ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-amber-50/30'}`}>
-            <div className="flex items-center gap-2 mb-6">
+          <div className={`
+            ${isMobile
+              ? (mobileActivePane === 'analogy' ? 'w-full' : 'hidden')
+              : (selectedConcept !== null ? 'w-[30%]' : 'w-[35%]')
+            }
+            p-4 md:p-6 overflow-y-auto md:border-l transition-all duration-500
+            ${isDarkMode ? 'border-neutral-700 bg-neutral-900/50' : 'border-neutral-200 bg-amber-50/30'}
+          `}>
+            {/* Hide header on mobile since we have tabs */}
+            <div className="hidden md:flex items-center gap-2 mb-6">
               <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDarkMode ? 'bg-amber-900/70 text-amber-200' : 'bg-amber-200 text-amber-800'}`}>
                 🎯 {analogyDomain}
               </div>
@@ -496,12 +583,15 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-3 border-t border-neutral-700 bg-neutral-900">
+      <div className="px-4 md:px-6 py-3 border-t border-neutral-700 bg-neutral-900 pb-safe">
         <div className="flex items-center justify-between">
           <span className="text-blue-200/70 text-xs">
-            Click concepts to select • Hover to preview connections
+            {isMobile
+              ? 'Tap concepts • Switch tabs to explore'
+              : 'Click concepts to select • Hover to preview connections'
+            }
           </span>
-          <span className="text-neutral-300 text-xs">
+          <span className="text-neutral-300 text-xs hidden md:inline">
             Press P or Esc to close
           </span>
         </div>
