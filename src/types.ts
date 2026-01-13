@@ -79,6 +79,7 @@ export interface CondensedData {
   what: string;
   why: string;
   bullets: string[];
+  mnemonic?: string;  // Memorable phrase/acronym for the bullets
 }
 
 export interface TutorHistoryEntry {

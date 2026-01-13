@@ -550,7 +550,7 @@ export default function App() {
       setSynthesisCitation(stripMathSymbols(cleanText(fixUnicode(synthesis.citation || ""))));
     }
 
-    // Parse condensed view data (WHAT/WHY + bullet points)
+    // Parse condensed view data (WHAT/WHY + bullet points + mnemonic)
     const condensed = findContext(data, ["condensed"]);
     if (condensed) {
       setCondensedData({
@@ -558,7 +558,8 @@ export default function App() {
         why: stripMathSymbols(cleanText(fixUnicode(condensed.why || ""))),
         bullets: Array.isArray(condensed.bullets)
           ? condensed.bullets.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
-          : []
+          : [],
+        mnemonic: condensed.mnemonic ? stripMathSymbols(cleanText(fixUnicode(condensed.mnemonic))) : undefined
       });
     } else {
       setCondensedData(null);
@@ -1620,6 +1621,10 @@ export default function App() {
       // Transition INTO first principles (mutually exclusive with Story and Bullets)
       setIsNarrativeMode(false);
       setIsBulletMode(false);
+      // If in Morph mode, switch to Tech mode so Essence view renders
+      if (viewMode === 'morph') {
+        setViewMode('tech');
+      }
       setIsCondensedMorphing(true);
       condensedMorphTimerRef.current = setTimeout(() => {
         setShowCondensedView(true);
@@ -2789,6 +2794,24 @@ export default function App() {
                                 );
                               })}
                             </ul>
+                          </div>
+                        )}
+
+                        {/* Mnemonic Section - Memory Aid */}
+                        {condensedData.mnemonic && (
+                          <div className="mt-4 pt-4 border-t border-dashed border-neutral-700/50">
+                            <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-2 ${
+                              isDarkMode ? 'text-pink-400/80' : 'text-pink-500'
+                            }`}>
+                              <span>🧠</span>
+                              <span>Remember It</span>
+                            </div>
+                            <p
+                              className={`font-bold italic leading-snug ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                              style={{ fontSize: `${1.25 * textScale}rem` }}
+                            >
+                              "{condensedData.mnemonic}"
+                            </p>
                           </div>
                         )}
                       </div>

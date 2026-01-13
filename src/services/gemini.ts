@@ -752,7 +752,8 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "First-principle point 3 - core mechanism",
       "First-principle point 4 - key relationship",
       "First-principle point 5 - essential limitation or edge case"
-    ]
+    ],
+    "mnemonic": "A memorable acronym, phrase, or sentence using the first letters of each bullet to help remember them (e.g., 'RICE' for Rest, Ice, Compression, Elevation)"
   }
 }
 
