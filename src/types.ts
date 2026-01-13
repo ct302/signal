@@ -75,11 +75,16 @@ export interface ContextData {
   narrative: string;
 }
 
+export interface MnemonicData {
+  phrase: string;           // The memorable phrase/acronym (e.g., "EEDDR")
+  breakdown: string[];      // What each letter means (matching bullets order)
+}
+
 export interface CondensedData {
   what: string;
   why: string;
   bullets: string[];
-  mnemonic?: string;  // Memorable phrase/acronym for the bullets
+  mnemonic?: MnemonicData;  // Memorable phrase/acronym with breakdown
 }
 
 export interface TutorHistoryEntry {

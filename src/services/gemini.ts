@@ -753,7 +753,16 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "First-principle point 4 - key relationship",
       "First-principle point 5 - essential limitation or edge case"
     ],
-    "mnemonic": "A memorable acronym, phrase, or sentence using the first letters of each bullet to help remember them (e.g., 'RICE' for Rest, Ice, Compression, Elevation)"
+    "mnemonic": {
+      "phrase": "A catchy memorable phrase where each word starts with the first letter of each bullet point. Make it vivid, silly, or surprising - the weirder the better for memory! (e.g., 'Every Expert Dances Daily, Rejoicing' for EEDDR)",
+      "breakdown": [
+        "E = [First word of phrase] → [Key concept from bullet 1]",
+        "E = [Second word] → [Key concept from bullet 2]",
+        "D = [Third word] → [Key concept from bullet 3]",
+        "D = [Fourth word] → [Key concept from bullet 4]",
+        "R = [Fifth word] → [Key concept from bullet 5]"
+      ]
+    }
   }
 }
 

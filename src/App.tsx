@@ -553,13 +553,24 @@ export default function App() {
     // Parse condensed view data (WHAT/WHY + bullet points + mnemonic)
     const condensed = findContext(data, ["condensed"]);
     if (condensed) {
+      // Parse mnemonic object (phrase + breakdown array)
+      let mnemonicData = undefined;
+      if (condensed.mnemonic && typeof condensed.mnemonic === 'object') {
+        mnemonicData = {
+          phrase: stripMathSymbols(cleanText(fixUnicode(condensed.mnemonic.phrase || ""))),
+          breakdown: Array.isArray(condensed.mnemonic.breakdown)
+            ? condensed.mnemonic.breakdown.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
+            : []
+        };
+      }
+
       setCondensedData({
         what: stripMathSymbols(cleanText(fixUnicode(condensed.what || ""))),
         why: stripMathSymbols(cleanText(fixUnicode(condensed.why || ""))),
         bullets: Array.isArray(condensed.bullets)
           ? condensed.bullets.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
           : [],
-        mnemonic: condensed.mnemonic ? stripMathSymbols(cleanText(fixUnicode(condensed.mnemonic))) : undefined
+        mnemonic: mnemonicData
       });
     } else {
       setCondensedData(null);
@@ -2797,21 +2808,39 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Mnemonic Section - Memory Aid */}
-                        {condensedData.mnemonic && (
-                          <div className="mt-4 pt-4 border-t border-dashed border-neutral-700/50">
+                        {/* Mnemonic Section - Memory Aid with Breakdown */}
+                        {condensedData.mnemonic && condensedData.mnemonic.phrase && (
+                          <div className={`mt-4 pt-4 border-t border-dashed ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-300/50'}`}>
                             <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-2 ${
                               isDarkMode ? 'text-pink-400/80' : 'text-pink-500'
                             }`}>
                               <span>🧠</span>
                               <span>Remember It</span>
                             </div>
+                            {/* The mnemonic phrase */}
                             <p
-                              className={`font-bold italic leading-snug ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
-                              style={{ fontSize: `${1.25 * textScale}rem` }}
+                              className={`font-bold italic leading-snug mb-3 ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                              style={{ fontSize: `${1.15 * textScale}rem` }}
                             >
-                              "{condensedData.mnemonic}"
+                              "{condensedData.mnemonic.phrase}"
                             </p>
+                            {/* Letter breakdown */}
+                            {condensedData.mnemonic.breakdown && condensedData.mnemonic.breakdown.length > 0 && (
+                              <ul className="space-y-1">
+                                {condensedData.mnemonic.breakdown.map((item, i) => (
+                                  <li
+                                    key={i}
+                                    className={`text-sm flex items-start gap-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}
+                                    style={{ fontSize: `${0.85 * textScale}rem` }}
+                                  >
+                                    <span className={`font-mono font-bold flex-shrink-0 ${isDarkMode ? 'text-pink-400' : 'text-pink-600'}`}>
+                                      {item.charAt(0)}
+                                    </span>
+                                    <span>{item.substring(item.indexOf('=') + 1).trim()}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         )}
                       </div>
