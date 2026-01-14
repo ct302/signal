@@ -34,7 +34,9 @@ import {
   Dices,
   History,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Minus,
+  GripHorizontal
 } from 'lucide-react';
 
 // Types
@@ -331,6 +333,10 @@ export default function App() {
   const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
   const [showWeatherSelector, setShowWeatherSelector] = useState(false);
   const [showSymbolGlossary, setShowSymbolGlossary] = useState(false);
+  const [symbolGuidePos, setSymbolGuidePos] = useState({ x: 0, y: 0 });
+  const [isSymbolGuideMinimized, setIsSymbolGuideMinimized] = useState(false);
+  const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
+  const symbolGuideDragStart = useRef({ x: 0, y: 0 });
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -3556,35 +3562,69 @@ export default function App() {
         </div>
       )}
 
-      {/* Symbol Glossary Modal */}
+      {/* Symbol Glossary Modal - Draggable, No Blur */}
       {showSymbolGlossary && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSymbolGlossary(false)}>
+        <div
+          className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+          style={{
+            left: `calc(50% + ${symbolGuidePos.x}px)`,
+            top: `calc(50% + ${symbolGuidePos.y}px)`,
+            transform: 'translate(-50%, -50%)',
+            maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
+          }}
+        >
+          {/* Draggable Header */}
           <div
-            className={`relative w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
-            onClick={(e) => e.stopPropagation()}
+            className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
+            onMouseDown={(e) => {
+              setIsDraggingSymbolGuide(true);
+              symbolGuideDragStart.current = { x: e.clientX - symbolGuidePos.x, y: e.clientY - symbolGuidePos.y };
+            }}
+            onMouseMove={(e) => {
+              if (isDraggingSymbolGuide) {
+                setSymbolGuidePos({
+                  x: e.clientX - symbolGuideDragStart.current.x,
+                  y: e.clientY - symbolGuideDragStart.current.y
+                });
+              }
+            }}
+            onMouseUp={() => setIsDraggingSymbolGuide(false)}
+            onMouseLeave={() => setIsDraggingSymbolGuide(false)}
           >
-            {/* Header */}
-            <div className={`sticky top-0 px-6 py-4 border-b ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">∑</span>
-                  <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                    Symbol Guide
-                  </h2>
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GripHorizontal size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                <span className="text-xl">∑</span>
+                <h2 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  Symbol Guide
+                </h2>
+              </div>
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowSymbolGlossary(false)}
-                  className={`p-1.5 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  onClick={() => setIsSymbolGuideMinimized(!isSymbolGuideMinimized)}
+                  className={`p-1.5 rounded transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  title={isSymbolGuideMinimized ? 'Expand' : 'Minimize'}
                 >
-                  <X size={20} />
+                  {isSymbolGuideMinimized ? <Maximize2 size={14} /> : <Minus size={14} />}
+                </button>
+                <button
+                  onClick={() => { setShowSymbolGlossary(false); setSymbolGuidePos({ x: 0, y: 0 }); setIsSymbolGuideMinimized(false); }}
+                  className={`p-1.5 rounded transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  title="Close"
+                >
+                  <X size={14} />
                 </button>
               </div>
-              <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+            </div>
+            {!isSymbolGuideMinimized && (
+              <p className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                 Mathematical notation explained in plain English
               </p>
-            </div>
+            )}
+          </div>
 
-            {/* Symbol Grid */}
+          {/* Symbol Grid - only show when not minimized */}
+          {!isSymbolGuideMinimized && (
             <div className="overflow-y-auto max-h-[60vh] p-4">
               {(() => {
                 // Detect which symbols are in the current content
@@ -3646,21 +3686,27 @@ export default function App() {
                         {title}
                       </h3>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {symbols.map(({ symbol, name, meaning }) => (
+                        {symbols.map(({ symbol, name, meaning, simple }) => (
                           <div
                             key={symbol}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                            className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
                           >
-                            <span className={`text-xl font-mono w-8 text-center ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                            <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
                               {symbol}
                             </span>
                             <div className="flex-1 min-w-0">
-                              <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                {name}
-                              </span>
-                              <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                                — {meaning}
-                              </span>
+                              <div>
+                                <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                  {name}
+                                </span>
+                                <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                  — {meaning}
+                                </span>
+                              </div>
+                              {/* Simple explanation */}
+                              <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                💡 {simple}
+                              </p>
                             </div>
                           </div>
                         ))}
@@ -3687,7 +3733,7 @@ export default function App() {
                 );
               })()}
             </div>
-          </div>
+          )}
         </div>
       )}
 
