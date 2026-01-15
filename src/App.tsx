@@ -1622,6 +1622,7 @@ export default function App() {
 
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
+    if (isDraggingSymbolGuide) return; // Ignore when dragging Symbol Guide
     setIsMouseInside(true);
 
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
@@ -1633,6 +1634,7 @@ export default function App() {
 
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
+    if (isDraggingSymbolGuide) return; // Ignore when dragging Symbol Guide
     setIsMouseInside(false);
 
     // Lock morph when definition popup is open or user is selecting
@@ -3603,6 +3605,7 @@ export default function App() {
             className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
             onMouseDown={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               setIsDraggingSymbolGuide(true);
               symbolGuideDragStart.current = { x: e.clientX - symbolGuidePos.x, y: e.clientY - symbolGuidePos.y };
             }}
