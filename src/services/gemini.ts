@@ -105,45 +105,31 @@ const getProviderConfig = (): ProviderConfig => {
   }
   // Default config without API key - user must provide their own
   return {
-    provider: 'openrouter',
+    provider: 'cloud' as const,
     apiKey: '',
-    model: 'xiaomi/mimo-v2-flash:free',
+    model: '',
+    baseUrl: 'https://openrouter.ai/api/v1',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };
 
 // Validate that API key is present (throws user-friendly error if missing)
 const validateApiKey = (config: ProviderConfig): void => {
-  if (config.provider !== 'ollama' && !config.apiKey) {
+  if (config.provider === 'cloud' && !config.apiKey) {
     throw new Error(
-      `No API key configured. Please open Settings (gear icon) and enter your ${
-        config.provider === 'google' ? 'Google Gemini' :
-        config.provider === 'openrouter' ? 'OpenRouter' :
-        config.provider === 'openai' ? 'OpenAI' :
-        config.provider === 'anthropic' ? 'Anthropic' : ''
-      } API key.`
+      'No API key configured. Please open Settings (gear icon) and enter your API key.'
     );
   }
 };
 
 // Build API URL based on provider
 const buildApiUrl = (config: ProviderConfig): string => {
-  switch (config.provider) {
-    case 'google':
-      return `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-    case 'openai':
-      return 'https://api.openai.com/v1/chat/completions';
-    case 'anthropic':
-      return 'https://api.anthropic.com/v1/messages';
-    case 'ollama':
-      return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
-    case 'openrouter':
-      return 'https://openrouter.ai/api/v1/chat/completions';
-    case 'groq':
-      return 'https://api.groq.com/openai/v1/chat/completions';
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
+  if (config.provider === 'ollama') {
+    return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
   }
+  // Cloud provider - use baseUrl (defaults to OpenRouter)
+  const baseUrl = config.baseUrl || 'https://openrouter.ai/api/v1';
+  return `${baseUrl}/chat/completions`;
 };
 
 // Options for API calls
@@ -158,98 +144,58 @@ interface ApiCallOptions {
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
   const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3 } = options;
 
-  switch (config.provider) {
-    case 'google':
-      return {
-        contents: [{ parts: [{ text: prompt }] }],
-        ...(jsonMode && { generationConfig: { responseMimeType: "application/json" } })
-      };
-    case 'openai':
-    case 'groq':
-      return {
-        model: config.model,
-        messages: [{ role: 'user', content: prompt }],
-        ...(jsonMode && { response_format: { type: 'json_object' } })
-      };
-    case 'anthropic':
-      return {
-        model: config.model,
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }]
-      };
-    case 'ollama':
-      return {
-        model: config.model,
-        prompt: prompt,
-        stream: false,
-        ...(jsonMode && { format: 'json' })
-      };
-    case 'openrouter': {
-      const body: Record<string, any> = {
-        model: config.model,
-        messages: [{ role: 'user', content: prompt }],
-        ...(jsonMode && { response_format: { type: 'json_object' } })
-      };
-
-      // Add web search plugin when enabled (uses OpenRouter's built-in web search)
-      // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request (Mastery Mode)
-      if (webSearch) {
-        const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
-        // Add custom search_prompt if provided - guides how results are integrated
-        if (searchPrompt) {
-          webPlugin.search_prompt = searchPrompt;
-        }
-        body.plugins = [webPlugin];
-        console.log(`[OpenRouter] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
-      }
-
-      return body;
-    }
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
+  if (config.provider === 'ollama') {
+    return {
+      model: config.model,
+      prompt: prompt,
+      stream: false,
+      ...(jsonMode && { format: 'json' })
+    };
   }
+
+  // Cloud provider - OpenAI-compatible format (works with OpenRouter, OpenAI, Groq, Together, etc.)
+  const body: Record<string, any> = {
+    model: config.model,
+    messages: [{ role: 'user', content: prompt }],
+    ...(jsonMode && { response_format: { type: 'json_object' } })
+  };
+
+  // Add web search plugin when enabled (OpenRouter's built-in web search)
+  // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request
+  if (webSearch) {
+    const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
+    if (searchPrompt) {
+      webPlugin.search_prompt = searchPrompt;
+    }
+    body.plugins = [webPlugin];
+    console.log(`[Cloud API] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
+  }
+
+  return body;
 };
 
 // Build headers based on provider
 const buildHeaders = (config: ProviderConfig): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  switch (config.provider) {
-    case 'openai':
-    case 'groq':
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-      break;
-    case 'anthropic':
-      headers['x-api-key'] = config.apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-      break;
-    case 'openrouter':
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-      headers['HTTP-Referer'] = 'https://signal-app.com';
-      headers['X-Title'] = 'Signal Analogy Engine';
-      break;
+  if (config.provider === 'cloud') {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    // OpenRouter-specific headers (ignored by other providers)
+    headers['HTTP-Referer'] = 'https://signal-app.com';
+    headers['X-Title'] = 'Signal Analogy Engine';
   }
+  // Ollama doesn't need auth headers
 
   return headers;
 };
 
 // Extract response text based on provider
 const extractResponseText = (data: any, config: ProviderConfig): string => {
-  switch (config.provider) {
-    case 'google':
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    case 'openai':
-    case 'groq':
-      return data.choices?.[0]?.message?.content || '';
-    case 'anthropic':
-      return data.content?.[0]?.text || '';
-    case 'ollama':
-      return data.response || '';
-    case 'openrouter':
-      return data.choices?.[0]?.message?.content || '';
-    default:
-      return '';
+  if (config.provider === 'ollama') {
+    return data.response || '';
   }
+  // Cloud provider - OpenAI-compatible response format
+  return data.choices?.[0]?.message?.content || '';
 };
 
 // Unified API call with enhanced error handling and circuit breaker
@@ -259,8 +205,8 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
   // Validate API key is present (throws user-friendly error if missing)
   validateApiKey(baseConfig);
 
-  // For OpenRouter, use circuit breaker to select available model
-  const effectiveModel = baseConfig.provider === 'openrouter'
+  // For cloud providers, use circuit breaker to select available model (fallback chain)
+  const effectiveModel = baseConfig.provider === 'cloud'
     ? getAvailableModel(baseConfig.model)
     : baseConfig.model;
 

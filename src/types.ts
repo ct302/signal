@@ -146,13 +146,14 @@ export interface ProximityResult {
 }
 
 // Provider Configuration Types
-export type ProviderType = 'google' | 'openai' | 'anthropic' | 'ollama' | 'openrouter' | 'groq';
+export type ProviderType = 'cloud' | 'ollama';
 
 export interface ProviderConfig {
   provider: ProviderType;
   apiKey: string;
   model: string;
-  ollamaEndpoint?: string;
+  baseUrl?: string;           // For cloud: defaults to OpenRouter
+  ollamaEndpoint?: string;    // For local: defaults to localhost:11434
 }
 
 export interface OllamaModel {
@@ -160,19 +161,6 @@ export interface OllamaModel {
   modified_at: string;
   size: number;
 }
-
-export const DEFAULT_MODELS: Record<ProviderType, string[]> = {
-  google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
-  ollama: [],
-  openrouter: [
-    'xiaomi/mimo-v2-flash:free',
-    'google/gemini-2.0-flash-exp:free',
-    'meta-llama/llama-3.3-70b-instruct:free'
-  ],
-  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
-};
 
 // ============================================
 // MASTERY MODE TYPES
