@@ -338,6 +338,30 @@ export default function App() {
   const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
   const symbolGuideDragStart = useRef({ x: 0, y: 0 });
 
+  // Global drag handler for Symbol Guide - attaches to window for smooth dragging
+  useEffect(() => {
+    if (!isDraggingSymbolGuide) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const newX = e.clientX - symbolGuideDragStart.current.x;
+      const newY = e.clientY - symbolGuideDragStart.current.y;
+      setSymbolGuidePos({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSymbolGuide(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingSymbolGuide]);
+
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
   const [noiseVolume, setNoiseVolume] = useState(0.3);
@@ -3567,29 +3591,21 @@ export default function App() {
         <div
           className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
           style={{
-            left: `calc(50% + ${symbolGuidePos.x}px)`,
-            top: `calc(50% + ${symbolGuidePos.y}px)`,
-            transform: 'translate(-50%, -50%)',
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
             maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
+            willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
           }}
         >
           {/* Draggable Header */}
           <div
             className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
             onMouseDown={(e) => {
+              e.preventDefault();
               setIsDraggingSymbolGuide(true);
               symbolGuideDragStart.current = { x: e.clientX - symbolGuidePos.x, y: e.clientY - symbolGuidePos.y };
             }}
-            onMouseMove={(e) => {
-              if (isDraggingSymbolGuide) {
-                setSymbolGuidePos({
-                  x: e.clientX - symbolGuideDragStart.current.x,
-                  y: e.clientY - symbolGuideDragStart.current.y
-                });
-              }
-            }}
-            onMouseUp={() => setIsDraggingSymbolGuide(false)}
-            onMouseLeave={() => setIsDraggingSymbolGuide(false)}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
