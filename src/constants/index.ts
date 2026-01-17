@@ -280,7 +280,6 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '∫', name: 'Integral', meaning: 'Area under curve', simple: 'Find the total area', latex: ['\\int'] },
   { symbol: '∑', name: 'Sum', meaning: 'Summation', simple: 'Add all values together', latex: ['\\sum'] },
   { symbol: '∏', name: 'Product', meaning: 'Product of sequence', simple: 'Multiply all values together', latex: ['\\prod'] },
-  { symbol: '′', name: 'Prime', meaning: 'Derivative or related variable', simple: 'Rate of change', latex: ["'", '\\prime'] },
 
   // Comparisons & relations
   { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', simple: 'Almost the same', latex: ['\\approx'] },

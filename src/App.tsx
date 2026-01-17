@@ -3588,8 +3588,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Symbol Glossary Modal - Draggable, No Blur */}
-      {showSymbolGlossary && (
+      {/* Symbol Glossary Modal - Draggable, No Blur - Hidden in analogy mode */}
+      {showSymbolGlossary && !(viewMode === 'morph' && isHovering) && (
         <div
           className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
           style={{
