@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
 
 // Mobile detection hook
 const useIsMobile = () => {
@@ -112,6 +112,58 @@ const generateDynamicExplanation = (
     `Every master of ${domainName} knows that ${analogyTerm} isn't just a technique—it's a way of seeing. Once you understand it, you can't unsee it. ${techTerm} offers the same transformation in ${topicName}: a new lens that reveals hidden connections everywhere.`
   ];
   return explanationTemplates[index % explanationTemplates.length];
+};
+
+// Generate "Why It Matters" bullets - low complexity, analogical first-principles
+const generateWhyItMatters = (
+  analogyTerm: string,
+  techTerm: string,
+  domainName: string,
+  importance: number
+): { connection: string; whyImportant: string; withoutIt: string } => {
+  // Connection bullet - WHY these connect
+  const connectionTemplates = [
+    `In ${domainName}, ${analogyTerm} and ${techTerm} solve the same core problem—just in different contexts.`,
+    `Both ${analogyTerm} and ${techTerm} answer the same fundamental question: how do parts relate to the whole?`,
+    `${analogyTerm} in ${domainName} behaves exactly like ${techTerm}—same structure, same purpose, different setting.`,
+    `The pattern you recognize in ${analogyTerm} is the same pattern that makes ${techTerm} work.`
+  ];
+
+  // Importance bullet - WHY it matters for learning
+  const importanceTemplates = importance >= 0.7
+    ? [
+        `This is a cornerstone concept—master it and many other ideas will click into place.`,
+        `Understanding this deeply will unlock related concepts faster than studying them separately.`,
+        `This mapping is foundational—it's one of the key bridges between what you know and what you're learning.`
+      ]
+    : importance >= 0.4
+    ? [
+        `This connection reinforces the core pattern—seeing it strengthens your overall understanding.`,
+        `While not the main idea, this link helps cement how the whole system fits together.`,
+        `This builds on what you already understand, making the new concept feel familiar.`
+      ]
+    : [
+        `This is a supporting detail that rounds out your mental model.`,
+        `A smaller piece of the puzzle, but it helps complete the picture.`,
+        `This fills in the edges—not essential, but useful for full comprehension.`
+      ];
+
+  // Critical bullet - WHY the system fails without it
+  const criticalTemplates = [
+    `Without ${techTerm}, you'd lose the ability to see how individual pieces influence each other—like ${domainName} without ${analogyTerm}.`,
+    `Remove ${techTerm} and the system becomes a collection of isolated facts instead of a connected understanding.`,
+    `${techTerm} is the glue—without it, you can describe parts but not explain how they work together.`,
+    `Skip this and you'll memorize facts but miss the "why"—like knowing ${domainName} stats without understanding strategy.`
+  ];
+
+  const seed = (analogyTerm.length + techTerm.length) % 4;
+  const impSeed = Math.floor(importance * 3) % 3;
+
+  return {
+    connection: connectionTemplates[seed],
+    whyImportant: importanceTemplates[impSeed],
+    withoutIt: criticalTemplates[(seed + 1) % 4]
+  };
 };
 
 export const ConstellationMode: React.FC<ConstellationModeProps> = ({
@@ -461,6 +513,44 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Why It Matters - First Principles Bullets */}
+              {(() => {
+                const bullets = generateWhyItMatters(
+                  cleanLabel(selectedConceptData.concept.analogy_term),
+                  cleanLabel(selectedConceptData.concept.tech_term),
+                  domainName,
+                  selectedConceptData.importance
+                );
+                return (
+                  <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-700/50">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Lightbulb size={16} className="text-emerald-400" />
+                      Why It Matters
+                    </h4>
+                    <ul className="space-y-3">
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
+                        <span className="text-neutral-300 text-sm leading-relaxed">
+                          {bullets.connection}
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
+                        <span className="text-neutral-300 text-sm leading-relaxed">
+                          {bullets.whyImportant}
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
+                        <span className="text-neutral-300 text-sm leading-relaxed">
+                          {bullets.withoutIt}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {/* Why This Works - Now uses AI-generated narrative_mapping */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
