@@ -3845,12 +3845,9 @@ export default function App() {
                     <span className="text-sm font-semibold text-white">Study Mode</span>
                   </div>
                   <button
-                    onClick={() => {
-                      setAmbianceMode('none');
-                      setNoiseType('none');
-                    }}
-                    className="p-1.5 hover:bg-red-500/20 rounded-lg text-neutral-400 hover:text-red-400 transition-colors"
-                    title="Exit Study Mode"
+                    onClick={() => setShowStudyControls(false)}
+                    className="p-1.5 hover:bg-neutral-700 rounded-lg text-neutral-400 hover:text-white transition-colors"
+                    title="Close"
                   >
                     <X size={18} />
                   </button>
@@ -3868,12 +3865,13 @@ export default function App() {
                         <button
                           key={type}
                           onClick={() => setNoiseType(type)}
-                          className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                          className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize flex items-center justify-center gap-1 ${
                             noiseType === type
                               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                               : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                           }`}
                         >
+                          {noiseType === type && <Check size={12} />}
                           {type === 'none' ? 'Off' : type}
                         </button>
                       ))}
@@ -3950,9 +3948,11 @@ export default function App() {
                                 }`}
                               >
                                 <div
-                                  className="w-5 h-5 rounded-full border border-neutral-600"
+                                  className="w-5 h-5 rounded-full border border-neutral-600 flex items-center justify-center"
                                   style={{ backgroundColor: preset.color }}
-                                />
+                                >
+                                  {lampColor === preset.id && <Check size={12} className="text-neutral-800" />}
+                                </div>
                                 <span className="text-xs text-neutral-400">{preset.label}</span>
                               </button>
                             ))}
@@ -3989,12 +3989,13 @@ export default function App() {
                               <button
                                 key={level}
                                 onClick={() => setNightIntensity(level)}
-                                className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                                className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize flex items-center justify-center gap-1 ${
                                   nightIntensity === level
                                     ? 'bg-indigo-600 text-white'
                                     : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                                 }`}
                               >
+                                {nightIntensity === level && <Check size={12} />}
                                 {level}
                               </button>
                             ))}

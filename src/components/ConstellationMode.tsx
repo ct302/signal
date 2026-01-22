@@ -81,6 +81,15 @@ const cleanLabel = (text: string): string => {
     .trim();
 };
 
+// Shorten domain/topic names by removing parenthetical content for cleaner display
+const getShortName = (name: string): string => {
+  const parenIndex = name.indexOf('(');
+  if (parenIndex > 0) {
+    return name.substring(0, parenIndex).trim();
+  }
+  return name;
+};
+
 // Relationship labels
 const RELATIONSHIP_LABELS = [
   'maps to',
@@ -249,12 +258,12 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           </div>
           {/* Domain badges - hidden on small mobile, shown on larger screens */}
           <div className="hidden xs:flex items-center gap-2 text-neutral-400 text-xs md:text-sm">
-            <span className="px-2 md:px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium truncate max-w-[100px] md:max-w-none">
-              {domainName}
+            <span className="px-2 md:px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium truncate max-w-[200px]">
+              {getShortName(domainName)}
             </span>
             <ArrowRight size={14} className="hidden md:block" />
-            <span className="px-2 md:px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium truncate max-w-[100px] md:max-w-none">
-              {topicName}
+            <span className="px-2 md:px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium truncate max-w-[200px]">
+              {getShortName(topicName)}
             </span>
           </div>
           <span className="hidden md:inline text-neutral-300 text-sm ml-4">
@@ -287,13 +296,13 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               <Sparkles className="text-amber-400" size={isMobile ? 18 : 24} />
               <div>
                 <h3 className="text-amber-300 font-bold text-sm md:text-lg">What You Know</h3>
-                <p className="text-amber-400/60 text-xs md:text-sm hidden xs:block">{domainName}</p>
+                <p className="text-amber-400/60 text-xs md:text-sm hidden xs:block">{getShortName(domainName)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
               <div className="text-right">
                 <h3 className="text-blue-300 font-bold text-sm md:text-lg">What You're Learning</h3>
-                <p className="text-blue-400/60 text-xs md:text-sm hidden xs:block">{topicName}</p>
+                <p className="text-blue-400/60 text-xs md:text-sm hidden xs:block">{getShortName(topicName)}</p>
               </div>
               <BookOpen className="text-blue-400" size={isMobile ? 18 : 24} />
             </div>
