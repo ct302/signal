@@ -403,7 +403,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90]'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
-            border-neutral-700 bg-neutral-900/95 overflow-hidden transition-all duration-300
+            border-neutral-700 bg-neutral-900/95 ${isFullScreen && !isMobile ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-300
           `}>
             {/* Mobile Drag Handle */}
             {isMobile && (
@@ -456,7 +456,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
             {/* Concept Comparison - Scrollable content area */}
             <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
-              isMobile ? 'max-h-[calc(60vh-80px)]' : ''
+              isMobile ? 'max-h-[calc(60vh-80px)]' : 'max-h-[calc(100vh-140px)]'
             } ${isFullScreen && !isMobile ? 'max-w-2xl mx-auto' : ''}`}>
               {/* Expertise Term */}
               <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
