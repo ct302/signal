@@ -2380,6 +2380,7 @@ export default function App() {
         setShowHistory={setShowHistory}
         historyCount={history.length}
         onDomainClick={() => {
+          resetAllState({ keepDomain: false });
           setHasSelectedDomain(false);
           setTempDomainInput("");
         }}
