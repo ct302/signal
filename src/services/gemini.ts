@@ -664,7 +664,12 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
       "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
       "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
-      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar)."
+      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).",
+      "why_it_matters": {
+        "connection": "One sentence explaining WHY these two concepts structurally connect—what shared pattern or mechanism links them (not just THAT they connect, but WHY).",
+        "importance": "One sentence explaining WHY mastering THIS specific mapping matters for understanding the system—be specific to the tech_term and analogy_term, not generic.",
+        "critical": "One sentence explaining WHY the system would fail without this concept—what PURPOSE does it serve, what problem does it solve?"
+      }
     }
   ],
   "importance_map": [

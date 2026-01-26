@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, GitBranch } from 'lucide-react';
 
 // Mobile detection hook
 const useIsMobile = () => {
@@ -22,6 +22,11 @@ interface ConceptMapItem {
   six_word_definition?: string;
   narrative_mapping?: string;
   causal_explanation?: string;
+  why_it_matters?: {
+    connection: string;
+    importance: string;
+    critical: string;
+  };
 }
 
 interface ImportanceMapItem {
@@ -88,6 +93,15 @@ const getShortName = (name: string): string => {
     return name.substring(0, parenIndex).trim();
   }
   return name;
+};
+
+// Add appropriate article (a/an) before a term for proper grammar
+const withArticle = (term: string): string => {
+  if (!term || term.length === 0) return term;
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  const firstChar = term[0].toLowerCase();
+  const article = vowels.includes(firstChar) ? 'an' : 'a';
+  return `${article} ${term}`;
 };
 
 // Relationship labels
@@ -159,8 +173,8 @@ const generateWhyItMatters = (
 
   // Critical bullet - WHY the system fails without it
   const criticalTemplates = [
-    `Without ${techTerm}, you'd lose the ability to see how individual pieces influence each other—like ${domainName} without ${analogyTerm}.`,
-    `Remove ${techTerm} and the system becomes a collection of isolated facts instead of a connected understanding.`,
+    `Without ${withArticle(techTerm)}, you'd lose the ability to see how individual pieces influence each other—like ${domainName} without ${withArticle(analogyTerm)}.`,
+    `Remove ${withArticle(techTerm)} and the system becomes a collection of isolated facts instead of a connected understanding.`,
     `${techTerm} is the glue—without it, you can describe parts but not explain how they work together.`,
     `Skip this and you'll memorize facts but miss the "why"—like knowing ${domainName} stats without understanding strategy.`
   ];
@@ -457,7 +471,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             {/* Concept Comparison - Scrollable content area */}
             <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
               isMobile ? 'max-h-[calc(60vh-80px)]' : 'max-h-[calc(100vh-140px)]'
-            } ${isFullScreen && !isMobile ? 'max-w-2xl mx-auto' : ''}`}>
+            } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
               {/* Expertise Term */}
               <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
                 <div className="flex items-center gap-2 mb-2">
@@ -525,14 +539,21 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
               {/* Why It Matters - First Principles Bullets */}
               {(() => {
-                const bullets = generateWhyItMatters(
+                // Use API-generated bullets if available, fallback to template
+                const apiWhy = selectedConceptData.concept.why_it_matters;
+                const fallbackBullets = generateWhyItMatters(
                   cleanLabel(selectedConceptData.concept.analogy_term),
                   cleanLabel(selectedConceptData.concept.tech_term),
                   domainName,
                   selectedConceptData.importance
                 );
+                const bullets = {
+                  connection: apiWhy?.connection || fallbackBullets.connection,
+                  whyImportant: apiWhy?.importance || fallbackBullets.whyImportant,
+                  withoutIt: apiWhy?.critical || fallbackBullets.withoutIt
+                };
                 return (
-                  <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-700/50">
+                  <div className="p-4 rounded-xl bg-emerald-800/30 border border-emerald-600/50">
                     <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                       <Lightbulb size={16} className="text-emerald-400" />
                       Why It Matters
@@ -560,6 +581,52 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   </div>
                 );
               })()}
+
+              {/* Concept Mapping Visualization */}
+              <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
+                <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <GitBranch size={16} className="text-blue-400" />
+                  Mapping Visualization
+                </h4>
+                <svg viewBox="0 0 400 100" className="w-full h-auto">
+                  {/* Analogy Term Box (Amber) */}
+                  <rect x="10" y="15" width="150" height="45" rx="8"
+                        fill="rgba(251, 191, 36, 0.2)" stroke="rgb(251, 191, 36)" strokeWidth="2"/>
+                  <text x="85" y="43" textAnchor="middle" fill="#fbbf24" fontSize="13" fontWeight="600">
+                    {cleanLabel(selectedConceptData.concept.analogy_term).length > 18
+                      ? cleanLabel(selectedConceptData.concept.analogy_term).substring(0, 16) + '...'
+                      : cleanLabel(selectedConceptData.concept.analogy_term)}
+                  </text>
+
+                  {/* Arrow with label */}
+                  <line x1="160" y1="37" x2="230" y2="37" stroke="#6b7280" strokeWidth="2"/>
+                  <polygon points="230,37 220,32 220,42" fill="#6b7280"/>
+                  <text x="195" y="28" textAnchor="middle" fill="#9ca3af" fontSize="9">
+                    {selectedConceptData.relationshipLabel}
+                  </text>
+
+                  {/* Tech Term Box (Blue) */}
+                  <rect x="240" y="15" width="150" height="45" rx="8"
+                        fill="rgba(59, 130, 246, 0.2)" stroke="rgb(59, 130, 246)" strokeWidth="2"/>
+                  <text x="315" y="43" textAnchor="middle" fill="#3b82f6" fontSize="13" fontWeight="600">
+                    {cleanLabel(selectedConceptData.concept.tech_term).length > 18
+                      ? cleanLabel(selectedConceptData.concept.tech_term).substring(0, 16) + '...'
+                      : cleanLabel(selectedConceptData.concept.tech_term)}
+                  </text>
+
+                  {/* Domain labels below */}
+                  <text x="85" y="78" textAnchor="middle" fill="#78716c" fontSize="10" fontStyle="italic">
+                    {getShortName(domainName).length > 20
+                      ? getShortName(domainName).substring(0, 18) + '...'
+                      : getShortName(domainName)}
+                  </text>
+                  <text x="315" y="78" textAnchor="middle" fill="#78716c" fontSize="10" fontStyle="italic">
+                    {getShortName(topicName).length > 20
+                      ? getShortName(topicName).substring(0, 18) + '...'
+                      : getShortName(topicName)}
+                  </text>
+                </svg>
+              </div>
 
               {/* Why This Works - Now uses AI-generated narrative_mapping */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
