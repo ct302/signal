@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Position, Size, ConceptMapItem } from '../types';
-import { SYMBOL_GLOSSARY } from '../constants';
+import { SYMBOL_GLOSSARY, CONCEPT_SYMBOL_HINTS } from '../constants';
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -64,6 +64,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   const [showGlossary, setShowGlossary] = useState(false);
 
   // Detect symbols in the definition text - checks both Unicode and LaTeX commands
+  // Improved: Single ASCII letters only match in LaTeX context to reduce false positives
   const detectedSymbols = useMemo(() => {
     if (!defText) return [];
     const found: Array<{ symbol: string; name: string; meaning: string }> = [];
@@ -72,12 +73,27 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
     for (const entry of SYMBOL_GLOSSARY) {
       if (seen.has(entry.symbol)) continue;
 
-      // Check if Unicode symbol is present
-      let isFound = defText.includes(entry.symbol);
+      let isFound = false;
+      const isSingleAsciiLetter = entry.symbol.length === 1 && /^[A-Za-z]$/.test(entry.symbol);
 
-      // Check if any LaTeX command variant is present
+      if (isSingleAsciiLetter) {
+        // Single ASCII letters: only match in LaTeX context to avoid false positives
+        // Match: $A$, $Ax=b$, \A, but NOT "Mathematical" or "Algebra"
+        const latexPattern = new RegExp(
+          `\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$|\\\\${entry.symbol}(?![a-zA-Z])`,
+          'g'
+        );
+        isFound = latexPattern.test(defText);
+      } else {
+        // Non-ASCII symbols (Greek letters, operators): use includes()
+        isFound = defText.includes(entry.symbol);
+      }
+
+      // Also check LaTeX command variants
       if (!isFound) {
         for (const latexCmd of entry.latex) {
+          // Skip single-letter latex commands that would false-positive
+          if (latexCmd.length === 1 && /^[A-Za-z]$/.test(latexCmd)) continue;
           if (defText.includes(latexCmd)) {
             isFound = true;
             break;
@@ -90,6 +106,23 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
       }
     }
+
+    // Add symbols based on concept keywords in the text
+    const lowerText = defText.toLowerCase();
+    for (const [concept, symbols] of Object.entries(CONCEPT_SYMBOL_HINTS)) {
+      if (lowerText.includes(concept)) {
+        for (const sym of symbols) {
+          if (!seen.has(sym)) {
+            const entry = SYMBOL_GLOSSARY.find(e => e.symbol === sym);
+            if (entry) {
+              seen.add(sym);
+              found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
+            }
+          }
+        }
+      }
+    }
+
     return found;
   }, [defText]);
 

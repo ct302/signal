@@ -77,7 +77,7 @@ import {
 import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError } from './utils';
 
 // Hooks
-import { useMobile, useKatex, useDrag, useHistory } from './hooks';
+import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
 
 // Services
 import {
@@ -226,6 +226,13 @@ export default function App() {
     startResize,
     handleMiniHeaderMouseDown
   } = useDrag({ isMobile });
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isBrowserSupported: isMicSupported
+  } = useSpeechRecognition();
 
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
@@ -239,6 +246,13 @@ export default function App() {
   // Topic State
   const [topic, setTopic] = useState("");
   const [lastSubmittedTopic, setLastSubmittedTopic] = useState("");
+
+  // Voice input: auto-populate search when speech recognition completes
+  useEffect(() => {
+    if (transcript) {
+      setTopic(transcript);
+    }
+  }, [transcript]);
 
   // Content State
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -2387,6 +2401,9 @@ export default function App() {
         onSubmit={handleSubmit}
         isViewingFromHistory={isViewingFromHistory}
         onReturnHome={returnToHome}
+        isListening={isListening}
+        onMicClick={isListening ? stopListening : startListening}
+        isMicSupported={isMicSupported}
       />
 
       {/* History Panel */}

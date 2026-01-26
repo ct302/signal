@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, GitBranch } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
 
 // Mobile detection hook
 const useIsMobile = () => {
@@ -581,52 +581,6 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   </div>
                 );
               })()}
-
-              {/* Concept Mapping Visualization */}
-              <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
-                <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
-                  <GitBranch size={16} className="text-blue-400" />
-                  Mapping Visualization
-                </h4>
-                <svg viewBox="0 0 400 100" className="w-full h-auto">
-                  {/* Analogy Term Box (Amber) */}
-                  <rect x="10" y="15" width="150" height="45" rx="8"
-                        fill="rgba(251, 191, 36, 0.2)" stroke="rgb(251, 191, 36)" strokeWidth="2"/>
-                  <text x="85" y="43" textAnchor="middle" fill="#fbbf24" fontSize="13" fontWeight="600">
-                    {cleanLabel(selectedConceptData.concept.analogy_term).length > 18
-                      ? cleanLabel(selectedConceptData.concept.analogy_term).substring(0, 16) + '...'
-                      : cleanLabel(selectedConceptData.concept.analogy_term)}
-                  </text>
-
-                  {/* Arrow with label */}
-                  <line x1="160" y1="37" x2="230" y2="37" stroke="#6b7280" strokeWidth="2"/>
-                  <polygon points="230,37 220,32 220,42" fill="#6b7280"/>
-                  <text x="195" y="28" textAnchor="middle" fill="#9ca3af" fontSize="9">
-                    {selectedConceptData.relationshipLabel}
-                  </text>
-
-                  {/* Tech Term Box (Blue) */}
-                  <rect x="240" y="15" width="150" height="45" rx="8"
-                        fill="rgba(59, 130, 246, 0.2)" stroke="rgb(59, 130, 246)" strokeWidth="2"/>
-                  <text x="315" y="43" textAnchor="middle" fill="#3b82f6" fontSize="13" fontWeight="600">
-                    {cleanLabel(selectedConceptData.concept.tech_term).length > 18
-                      ? cleanLabel(selectedConceptData.concept.tech_term).substring(0, 16) + '...'
-                      : cleanLabel(selectedConceptData.concept.tech_term)}
-                  </text>
-
-                  {/* Domain labels below */}
-                  <text x="85" y="78" textAnchor="middle" fill="#78716c" fontSize="10" fontStyle="italic">
-                    {getShortName(domainName).length > 20
-                      ? getShortName(domainName).substring(0, 18) + '...'
-                      : getShortName(domainName)}
-                  </text>
-                  <text x="315" y="78" textAnchor="middle" fill="#78716c" fontSize="10" fontStyle="italic">
-                    {getShortName(topicName).length > 20
-                      ? getShortName(topicName).substring(0, 18) + '...'
-                      : getShortName(topicName)}
-                  </text>
-                </svg>
-              </div>
 
               {/* Why This Works - Now uses AI-generated narrative_mapping */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
