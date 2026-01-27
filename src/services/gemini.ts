@@ -1096,6 +1096,57 @@ Return ONLY valid JSON, no markdown code blocks.`;
 };
 
 /**
+ * Generate foundational mapping explanation for a concept
+ * Called lazily when user selects a concept in Knowledge Bridge
+ * Provides first-principles, pragmatic explanation of why this specific mapping matters
+ */
+export const generateFoundationalMapping = async (
+  techTerm: string,
+  analogyTerm: string,
+  domainName: string,
+  topicName: string,
+  importance: number
+): Promise<{ foundationalMapping: string }> => {
+  const importanceLevel = importance >= 0.7
+    ? 'HIGH-importance concept - explain why mastering this specific link accelerates understanding of many related ideas'
+    : importance >= 0.4
+    ? 'MEDIUM-importance concept - explain how this connection reinforces the overall mental model'
+    : 'SUPPORTING concept - explain how this fills in gaps for complete comprehension';
+
+  const prompt = `You are explaining WHY understanding the connection between "${techTerm}" and "${analogyTerm}" (from ${domainName}) matters for learning ${topicName}.
+
+CRITICAL RULES:
+1. Use FIRST-ORDER PRINCIPLES - fundamental reasoning from basic truths
+2. Be PRAGMATIC - explain real, tangible benefits for the learner
+3. NO abstract jargon (NEVER say "foundational", "cornerstone", "key bridge", "unlocks", "essential")
+4. NO generic praise (NEVER say "this is important because...", "understanding this will help...")
+5. Be SPECIFIC about what becomes easier or what confusion is prevented
+6. Write in second person - speak directly to the learner
+
+IMPORTANCE LEVEL: ${Math.round(importance * 100)}% - ${importanceLevel}
+
+EXPLAIN IN 2-3 SENTENCES:
+Why does understanding ${techTerm} through the lens of ${analogyTerm} give the learner an advantage? What specific capability do they gain? What specific confusion does this prevent?
+
+EXAMPLES OF GOOD RESPONSES:
+- "Once you see that gradients work like water flowing downhill, you stop asking 'which direction?' and start predicting it. The steepest slope in ${domainName} and the steepest slope in optimization are the same instinct."
+- "Without this link, learners often confuse velocity with speed. Seeing it through ${analogyTerm} makes the distinction obvious—in ${domainName}, those are clearly different things you track separately."
+
+Return ONLY valid JSON: { "foundationalMapping": "Your 2-3 sentence explanation here" }`;
+
+  try {
+    const response = await callApi(prompt, { jsonMode: true });
+    const parsed = safeJsonParse(response);
+    if (parsed && parsed.foundationalMapping) {
+      return { foundationalMapping: parsed.foundationalMapping };
+    }
+    return { foundationalMapping: '' };
+  } catch {
+    return { foundationalMapping: '' };
+  }
+};
+
+/**
  * Get difficulty description for prompt
  */
 const getDifficultyPrompt = (difficulty: QuizDifficulty): string => {

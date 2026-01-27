@@ -88,7 +88,8 @@ import {
   fetchDefinition as fetchDefinitionApi,
   generateQuiz,
   askTutor,
-  enrichDomainOnSelection
+  enrichDomainOnSelection,
+  generateFoundationalMapping
 } from './services';
 
 // Components
@@ -4100,6 +4101,7 @@ export default function App() {
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
           renderRichText={renderRichText}
+          onFetchFoundationalMapping={generateFoundationalMapping}
         />
       )}
 

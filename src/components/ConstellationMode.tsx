@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, Loader2 } from 'lucide-react';
 
 // Mobile detection hook
 const useIsMobile = () => {
@@ -43,6 +43,13 @@ interface ConstellationModeProps {
   domainName?: string;
   topicName?: string;
   renderRichText?: (text: string, colorClass?: string) => React.ReactNode;
+  onFetchFoundationalMapping?: (
+    techTerm: string,
+    analogyTerm: string,
+    domainName: string,
+    topicName: string,
+    importance: number
+  ) => Promise<{ foundationalMapping: string }>;
 }
 
 // Color palette for concepts
@@ -196,7 +203,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   onClose,
   domainName = 'Your Expertise',
   topicName = 'New Topic',
-  renderRichText
+  renderRichText,
+  onFetchFoundationalMapping
 }) => {
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
   const [hoveredConcept, setHoveredConcept] = useState<number | null>(null);
@@ -204,6 +212,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Foundational mapping cache and loading state
+  const [foundationalMappingCache, setFoundationalMappingCache] = useState<Map<number, string>>(new Map());
+  const [isLoadingFoundational, setIsLoadingFoundational] = useState(false);
+  const [currentFoundationalMapping, setCurrentFoundationalMapping] = useState<string | null>(null);
 
   // Mobile responsive
   const isMobile = useIsMobile();
@@ -260,6 +273,51 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, isFullScreen]);
+
+  // Fetch foundational mapping when a concept is selected
+  useEffect(() => {
+    if (!selectedConceptData || !onFetchFoundationalMapping) {
+      setCurrentFoundationalMapping(null);
+      return;
+    }
+
+    const conceptId = selectedConceptData.concept.id;
+
+    // Check cache first
+    if (foundationalMappingCache.has(conceptId)) {
+      setCurrentFoundationalMapping(foundationalMappingCache.get(conceptId) || null);
+      return;
+    }
+
+    // Fetch from API
+    let isCancelled = false;
+    setIsLoadingFoundational(true);
+    setCurrentFoundationalMapping(null);
+
+    onFetchFoundationalMapping(
+      cleanLabel(selectedConceptData.concept.tech_term),
+      cleanLabel(selectedConceptData.concept.analogy_term),
+      domainName,
+      topicName,
+      selectedConceptData.importance
+    ).then((result) => {
+      if (isCancelled) return;
+      if (result.foundationalMapping) {
+        setFoundationalMappingCache(prev => new Map(prev).set(conceptId, result.foundationalMapping));
+        setCurrentFoundationalMapping(result.foundationalMapping);
+      }
+    }).catch(() => {
+      // Silently fail - will use fallback
+    }).finally(() => {
+      if (!isCancelled) {
+        setIsLoadingFoundational(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedConceptData, onFetchFoundationalMapping, foundationalMappingCache, domainName, topicName]);
 
   return (
     <div className="fixed inset-0 z-[80] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex flex-col">
@@ -549,7 +607,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 );
                 const bullets = {
                   connection: apiWhy?.connection || fallbackBullets.connection,
-                  whyImportant: apiWhy?.importance || fallbackBullets.whyImportant,
+                  // Use dedicated API-generated foundational mapping, then inline API, then fallback
+                  whyImportant: currentFoundationalMapping || apiWhy?.importance || fallbackBullets.whyImportant,
                   withoutIt: apiWhy?.critical || fallbackBullets.withoutIt
                 };
                 return (
@@ -568,7 +627,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       <li className="flex items-start gap-2">
                         <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
                         <span className="text-neutral-300 text-sm leading-relaxed">
-                          {bullets.whyImportant}
+                          {isLoadingFoundational ? (
+                            <span className="flex items-center gap-2 text-neutral-400 italic">
+                              <Loader2 size={12} className="animate-spin" />
+                              Generating insight...
+                            </span>
+                          ) : (
+                            bullets.whyImportant
+                          )}
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
