@@ -32,6 +32,14 @@ export interface ImportanceMapItem {
   importance: number;
 }
 
+// Symbol Guide - API-generated context-aware symbol explanations
+export interface SymbolGuideEntry {
+  symbol: string;        // The symbol itself: "A", "λ", "∫"
+  name: string;          // Context-aware name: "Coordinate Ring" not "Matrix A"
+  meaning: string;       // Technical meaning in THIS context
+  simple: string;        // Plain English for learners
+}
+
 export interface AttentionMapItem {
   word: string;
   weight: number;

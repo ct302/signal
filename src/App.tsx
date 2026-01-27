@@ -59,7 +59,8 @@ import {
   HistoryItem,
   ProximityResult,
   CompleteMasteryHistory,
-  CachedDomainEnrichment
+  CachedDomainEnrichment,
+  SymbolGuideEntry
 } from './types';
 
 // Constants
@@ -265,6 +266,8 @@ export default function App() {
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
   const [synthesisSummary, setSynthesisSummary] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
+  const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
+  const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
 
   // UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -618,6 +621,19 @@ export default function App() {
       });
     } else {
       setCondensedData(null);
+    }
+
+    // Parse symbol guide (API-generated context-aware symbol explanations)
+    const symbolGuideData = findContext(data, ["symbol_guide"]);
+    if (symbolGuideData && Array.isArray(symbolGuideData)) {
+      setSymbolGuide(symbolGuideData.map((entry: any) => ({
+        symbol: entry.symbol || "",
+        name: entry.name || "",
+        meaning: entry.meaning || "",
+        simple: entry.simple || ""
+      })));
+    } else {
+      setSymbolGuide([]);
     }
 
     setLastSubmittedTopic(topicName);
@@ -978,17 +994,29 @@ export default function App() {
     } else {
       setIsLoadingDef(true);
       setDefText("");
+      setDefSymbolGuide([]); // Clear previous symbol guide
       setDefComplexity(level);
     }
 
     try {
       const result = await fetchDefinitionApi(term, context, level);
-      if (isMini) setMiniDefText(result);
-      else setDefText(result);
+      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[] }
+      const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
+      const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
+
+      if (isMini) {
+        setMiniDefText(definition);
+      } else {
+        setDefText(definition);
+        setDefSymbolGuide(symbolGuideData);
+      }
     } catch (e) {
       const errText = "Could not load definition.";
       if (isMini) setMiniDefText(errText);
-      else setDefText(errText);
+      else {
+        setDefText(errText);
+        setDefSymbolGuide([]);
+      }
     } finally {
       if (isMini) setIsLoadingMiniDef(false);
       else setIsLoadingDef(false);
@@ -3324,6 +3352,7 @@ export default function App() {
           setIsDefColorMode={setIsDefColorMode}
           isMobile={isMobile}
           copiedId={copiedId}
+          symbolGuide={defSymbolGuide}
           onClose={() => {
             setDefPosition(null);
             setSelectedTerm(null);

@@ -714,7 +714,15 @@ REQUIRED JSON STRUCTURE (strict compliance):
         "R = [Fifth word] → [Key concept from bullet 5]"
       ]
     }
-  }
+  },
+  "symbol_guide": [
+    {
+      "symbol": "the symbol exactly as written (e.g., 'A', 'λ', '∫', 'f(x)')",
+      "name": "Context-specific name for THIS topic (e.g., 'Coordinate Ring' not 'Matrix A' if A represents a ring)",
+      "meaning": "What this symbol represents in THIS specific context",
+      "simple": "Plain English explanation a beginner would understand"
+    }
+  ]
 }
 
 ${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
@@ -907,13 +915,24 @@ REQUIREMENTS:
 - Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
 - Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
 
+SYMBOL_GUIDE RULES:
+The symbol_guide provides CONTEXT-AWARE explanations for mathematical symbols used in technical_explanation.
+- Include ALL symbols, variables, and mathematical notation used (Greek letters, operators, single-letter variables)
+- Names must be CONTEXT-SPECIFIC to THIS topic: if 'A' represents a coordinate ring in algebraic geometry, name it "Coordinate Ring", NOT "Matrix A"
+- If 'λ' represents eigenvalues, name it "Eigenvalue", not just "Lambda"
+- Order by importance/first appearance in the explanation
+- The "simple" field should be genuinely helpful for beginners - use analogies or plain English
+- Only include symbols that ACTUALLY APPEAR in your technical_explanation
+- For non-STEM topics with no mathematical symbols, return an empty array: "symbol_guide": []
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
 3. importance_map should include ALL significant terms (15-25 items)
 4. attention_map must cover ALL content words (50-100+ per explanation)
 5. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
-6. Return ONLY valid JSON, no markdown code blocks`;
+6. Return ONLY valid JSON, no markdown code blocks
+7. symbol_guide must have CONTEXT-SPECIFIC names (never generic like "Matrix A" unless it truly is a generic matrix)`;
 
   // Build search prompt to guide how web results are used
   // For granular domains, constrain to the specific event
@@ -1029,17 +1048,50 @@ Make it click instantly. No textbook voice.`
 
   const config = levelConfig[level as keyof typeof levelConfig] || levelConfig[50];
 
+  // For ELI5, we don't need symbol_guide (no math symbols)
+  const includeSymbolGuide = level !== 5;
+
   let promptText = `Define "${term}" in context of: "${context}".
 
 LEVEL: ${config.name}
 TARGET LENGTH: ${config.words} (IMPORTANT: Don't be terse! Give a substantive explanation)
 
-${config.style}`;
+${config.style}
+
+Return JSON in this EXACT format:
+{
+  "definition": "Your definition here...",
+  "symbol_guide": [${includeSymbolGuide ? `
+    {
+      "symbol": "symbol as written",
+      "name": "Context-specific name for THIS definition (not generic)",
+      "meaning": "What it represents in THIS context",
+      "simple": "Plain English for beginners"
+    }
+  ` : ''}]
+}
+
+SYMBOL_GUIDE RULES:
+- Include ONLY symbols that appear in YOUR definition
+- Names must be CONTEXT-SPECIFIC (if 'x' is an input value, call it "Input Value", not "Variable X")
+- For ELI5 with no math symbols, return empty array: "symbol_guide": []
+- The "simple" field should genuinely help beginners understand
+
+Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    return await callApi(promptText);
+    const response = await callApi(promptText);
+
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(response);
+      return parsed;
+    } catch {
+      // If parsing fails, return the raw text as definition (backwards compatibility)
+      return { definition: response, symbol_guide: [] };
+    }
   } catch {
-    return "Could not load definition.";
+    return { definition: "Could not load definition.", symbol_guide: [] };
   }
 };
 

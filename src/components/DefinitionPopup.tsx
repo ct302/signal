@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
-import { Position, Size, ConceptMapItem } from '../types';
-import { SYMBOL_GLOSSARY, CONCEPT_SYMBOL_HINTS } from '../constants';
+import { Position, Size, ConceptMapItem, SymbolGuideEntry } from '../types';
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -17,6 +16,7 @@ interface DefinitionPopupProps {
   setIsDefColorMode: React.Dispatch<React.SetStateAction<boolean>>;
   isMobile: boolean;
   copiedId: string | null;
+  symbolGuide?: SymbolGuideEntry[];  // API-provided context-aware symbol explanations
   onClose: () => void;
   onStartDrag: (e: React.MouseEvent, target: string) => void;
   onStartResize: (e: React.MouseEvent, target: string) => void;
@@ -51,6 +51,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   setIsDefColorMode,
   isMobile,
   copiedId,
+  symbolGuide = [],  // API-provided context-aware symbols
   onClose,
   onStartDrag,
   onStartResize,
@@ -62,69 +63,6 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
 }) => {
   const [textScale, setTextScale] = useState(1);
   const [showGlossary, setShowGlossary] = useState(false);
-
-  // Detect symbols in the definition text - checks both Unicode and LaTeX commands
-  // Improved: Single ASCII letters only match in LaTeX context to reduce false positives
-  const detectedSymbols = useMemo(() => {
-    if (!defText) return [];
-    const found: Array<{ symbol: string; name: string; meaning: string }> = [];
-    const seen = new Set<string>();
-
-    for (const entry of SYMBOL_GLOSSARY) {
-      if (seen.has(entry.symbol)) continue;
-
-      let isFound = false;
-      const isSingleAsciiLetter = entry.symbol.length === 1 && /^[A-Za-z]$/.test(entry.symbol);
-
-      if (isSingleAsciiLetter) {
-        // Single ASCII letters: only match in LaTeX context to avoid false positives
-        // Match: $A$, $Ax=b$, \A, but NOT "Mathematical" or "Algebra"
-        const latexPattern = new RegExp(
-          `\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$|\\\\${entry.symbol}(?![a-zA-Z])`,
-          'g'
-        );
-        isFound = latexPattern.test(defText);
-      } else {
-        // Non-ASCII symbols (Greek letters, operators): use includes()
-        isFound = defText.includes(entry.symbol);
-      }
-
-      // Also check LaTeX command variants
-      if (!isFound) {
-        for (const latexCmd of entry.latex) {
-          // Skip single-letter latex commands that would false-positive
-          if (latexCmd.length === 1 && /^[A-Za-z]$/.test(latexCmd)) continue;
-          if (defText.includes(latexCmd)) {
-            isFound = true;
-            break;
-          }
-        }
-      }
-
-      if (isFound) {
-        seen.add(entry.symbol);
-        found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
-      }
-    }
-
-    // Add symbols based on concept keywords in the text
-    const lowerText = defText.toLowerCase();
-    for (const [concept, symbols] of Object.entries(CONCEPT_SYMBOL_HINTS)) {
-      if (lowerText.includes(concept)) {
-        for (const sym of symbols) {
-          if (!seen.has(sym)) {
-            const entry = SYMBOL_GLOSSARY.find(e => e.symbol === sym);
-            if (entry) {
-              seen.add(sym);
-              found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
-            }
-          }
-        }
-      }
-    }
-
-    return found;
-  }, [defText]);
 
   const style: React.CSSProperties = isMobile
     ? {
@@ -214,8 +152,8 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           </div>
         )}
 
-        {/* Symbol Glossary - shows when math symbols detected */}
-        {!isLoadingDef && detectedSymbols.length > 0 && (
+        {/* Symbol Guide - API-provided context-aware symbol explanations */}
+        {!isLoadingDef && symbolGuide.length > 0 && (
           <div className="mt-2 pt-2 border-t border-neutral-800">
             <button
               onClick={() => setShowGlossary(!showGlossary)}
@@ -223,19 +161,24 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             >
               <BookOpen size={12} />
               <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
-              <span className="text-neutral-600">({detectedSymbols.length})</span>
+              <span className="text-neutral-600">({symbolGuide.length})</span>
               {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
             </button>
             {showGlossary && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {detectedSymbols.map(({ symbol, name, meaning }) => (
+              <div className="mt-2 space-y-2">
+                {symbolGuide.map(({ symbol, name, meaning, simple }) => (
                   <div
                     key={symbol}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-xs"
-                    title={meaning}
+                    className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
                   >
-                    <span className="text-blue-300 font-mono text-xs">{symbol}</span>
-                    <span className="text-neutral-400">{name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-300 font-mono">{symbol}</span>
+                      <span className="text-white font-medium">{name}</span>
+                    </div>
+                    <div className="text-neutral-400 text-xs mt-0.5">{meaning}</div>
+                    {simple && (
+                      <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
+                    )}
                   </div>
                 ))}
               </div>
