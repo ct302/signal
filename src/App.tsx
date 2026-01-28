@@ -355,6 +355,7 @@ export default function App() {
   const [isSymbolGuideMinimized, setIsSymbolGuideMinimized] = useState(false);
   const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
   const symbolGuideDragStart = useRef({ x: 0, y: 0 });
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
 
   // Global drag handler for Symbol Guide - attaches to window for smooth dragging
   useEffect(() => {
@@ -3454,56 +3455,21 @@ export default function App() {
             onTouchStart={() => setShowWeatherSelector(false)}
           />
         )}
-        {/* Weather Mode Button with Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowWeatherSelector(!showWeatherSelector)}
-            className={`p-3 rounded-full shadow-lg border transition-colors ${
-              weatherMode !== 'none'
-                ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
-                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
-            }`}
-            title="Weather Mode (2)"
-          >
-            <Cloud size={20} />
-          </button>
-          {/* Weather Selector Dropdown */}
-          {showWeatherSelector && (
-            <div className={`
-              absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
-              ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
-              backdrop-blur-md
-            `}>
-              <div className="p-2 space-y-1">
-                {WEATHER_OPTIONS.map((option) => (
-                  <button
-                    key={option.type}
-                    onClick={() => {
-                      setWeatherMode(option.type);
-                      setShowWeatherSelector(false);
-                    }}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                      transition-all
-                      ${weatherMode === option.type
-                        ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
-                        : isDarkMode
-                          ? 'text-neutral-300 hover:bg-neutral-700'
-                          : 'text-neutral-700 hover:bg-neutral-100'
-                      }
-                    `}
-                  >
-                    <span className="text-lg">{option.emoji}</span>
-                    <span>{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-          )}
-        </div>
+        {/* Weather Mode Button */}
+        <button
+          onClick={() => setShowWeatherSelector(!showWeatherSelector)}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            weatherMode !== 'none'
+              ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
+          }`}
+          title="Weather Mode (2)"
+        >
+          <Cloud size={20} />
+        </button>
         {hasStarted && (
           <button
-            onClick={resetAll}
+            onClick={() => setShowClearConfirmation(true)}
             className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500'}`}
             title="Clear Text"
           >
@@ -3810,6 +3776,86 @@ export default function App() {
               })()}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Weather Selector Modal */}
+      {showWeatherSelector && (
+        <>
+          {/* Backdrop to close - covers entire screen */}
+          <div
+            className="fixed inset-0 z-[100]"
+            onClick={() => setShowWeatherSelector(false)}
+          />
+          {/* Dropdown Menu - positioned near bottom-right where button is */}
+          <div className={`
+            fixed bottom-20 right-6 w-44 rounded-xl overflow-hidden shadow-2xl z-[101]
+            ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
+            backdrop-blur-md
+          `}>
+            <div className="p-2 space-y-1">
+              {WEATHER_OPTIONS.map((option) => (
+                <button
+                  key={option.type}
+                  onClick={() => {
+                    setWeatherMode(option.type);
+                    setShowWeatherSelector(false);
+                  }}
+                  className={`
+                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                    transition-all
+                    ${weatherMode === option.type
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
+                      : isDarkMode
+                        ? 'text-neutral-300 hover:bg-neutral-700'
+                        : 'text-neutral-700 hover:bg-neutral-100'
+                    }
+                  `}
+                >
+                  <span className="text-lg">{option.emoji}</span>
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Clear Text Confirmation Modal */}
+      {showClearConfirmation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowClearConfirmation(false)}>
+          <div
+            className={`relative w-full max-w-sm mx-4 p-6 rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className={`text-lg font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+              Clear All Content?
+            </h2>
+            <p className={`text-sm mb-6 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+              This will clear your current search results and reset the view. Your search history will be preserved.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirmation(false)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                    : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  resetAll();
+                  setShowClearConfirmation(false);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
