@@ -3462,14 +3462,11 @@ export default function App() {
           {/* Weather Selector Dropdown */}
           {showWeatherSelector && (
             <>
-              {/* Backdrop to close - covers entire screen with semi-transparent overlay */}
+              {/* Invisible backdrop to close on tap anywhere */}
               <div
-                className="fixed inset-0 z-[99] bg-black/20"
+                className="fixed inset-0 z-[99]"
                 onClick={() => setShowWeatherSelector(false)}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  setShowWeatherSelector(false);
-                }}
+                onTouchStart={() => setShowWeatherSelector(false)}
               />
               {/* Dropdown Menu */}
               <div className={`
