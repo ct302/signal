@@ -3513,7 +3513,16 @@ export default function App() {
         {/* Symbol Glossary Button - only show when there's STEM content */}
         {hasStarted && segments.length > 0 && (
           <button
-            onClick={() => setShowSymbolGlossary(true)}
+            onClick={() => {
+              if (showSymbolGlossary) {
+                // Close and reset state (same as X button)
+                setShowSymbolGlossary(false);
+                setSymbolGuidePos({ x: 0, y: 0 });
+                setIsSymbolGuideMinimized(false);
+              } else {
+                setShowSymbolGlossary(true);
+              }
+            }}
             className={`p-3 rounded-full shadow-lg border transition-colors ${
               showSymbolGlossary
                 ? 'bg-blue-500 border-blue-600 text-white ring-2 ring-blue-400/50'

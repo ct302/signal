@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, Loader2 } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
 
 // Mobile detection hook
 const useIsMobile = () => {
@@ -213,10 +213,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Foundational mapping cache and loading state
+  // Foundational mapping cache (pre-generated on mount)
   const [foundationalMappingCache, setFoundationalMappingCache] = useState<Map<number, string>>(new Map());
-  const [isLoadingFoundational, setIsLoadingFoundational] = useState(false);
-  const [currentFoundationalMapping, setCurrentFoundationalMapping] = useState<string | null>(null);
 
   // Mobile responsive
   const isMobile = useIsMobile();
@@ -274,77 +272,83 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, isFullScreen]);
 
-  // Fetch foundational mapping when a concept is selected
+  // Pre-generate foundational mappings for ALL concepts on mount
   useEffect(() => {
-    if (!selectedConceptData || !onFetchFoundationalMapping) {
-      setCurrentFoundationalMapping(null);
-      return;
-    }
+    if (!onFetchFoundationalMapping || conceptData.length === 0) return;
 
-    const conceptId = selectedConceptData.concept.id;
-
-    // Check cache first
-    if (foundationalMappingCache.has(conceptId)) {
-      setCurrentFoundationalMapping(foundationalMappingCache.get(conceptId) || null);
-      return;
-    }
-
-    // Fetch from API
     let isCancelled = false;
-    setIsLoadingFoundational(true);
-    setCurrentFoundationalMapping(null);
 
-    onFetchFoundationalMapping(
-      cleanLabel(selectedConceptData.concept.tech_term),
-      cleanLabel(selectedConceptData.concept.analogy_term),
-      domainName,
-      topicName,
-      selectedConceptData.importance
-    ).then((result) => {
-      if (isCancelled) return;
-      if (result.foundationalMapping) {
-        setFoundationalMappingCache(prev => new Map(prev).set(conceptId, result.foundationalMapping));
-        setCurrentFoundationalMapping(result.foundationalMapping);
-      }
-    }).catch(() => {
-      // Silently fail - will use fallback
-    }).finally(() => {
-      if (!isCancelled) {
-        setIsLoadingFoundational(false);
-      }
+    // Fetch all mappings in parallel
+    conceptData.forEach((item) => {
+      const conceptId = item.concept.id;
+
+      // Skip if already cached
+      if (foundationalMappingCache.has(conceptId)) return;
+
+      onFetchFoundationalMapping(
+        cleanLabel(item.concept.tech_term),
+        cleanLabel(item.concept.analogy_term),
+        domainName,
+        topicName,
+        item.importance
+      ).then((result) => {
+        if (isCancelled) return;
+        if (result.foundationalMapping) {
+          setFoundationalMappingCache(prev => new Map(prev).set(conceptId, result.foundationalMapping));
+        }
+      }).catch(() => {
+        // Silently fail - will use fallback
+      });
     });
 
     return () => {
       isCancelled = true;
     };
-  }, [selectedConceptData, onFetchFoundationalMapping, foundationalMappingCache, domainName, topicName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onFetchFoundationalMapping, domainName, topicName]);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex flex-col">
+    <div className={`fixed inset-0 z-[80] flex flex-col ${
+      isDarkMode
+        ? 'bg-gradient-to-br from-neutral-800 via-neutral-850 to-neutral-900'
+        : 'bg-gradient-to-br from-slate-50 via-neutral-100 to-blue-50'
+    }`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900/80 backdrop-blur-sm">
+      <div className={`flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b backdrop-blur-sm ${
+        isDarkMode
+          ? 'border-neutral-600 bg-neutral-800/90'
+          : 'border-neutral-200 bg-white/80'
+      }`}>
         <div className="flex items-center gap-2 md:gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Layers className="text-blue-400" size={isMobile ? 20 : 24} />
-            <h2 className="text-white text-base md:text-xl font-bold">Knowledge Bridge</h2>
+            <Layers className="text-blue-500" size={isMobile ? 20 : 24} />
+            <h2 className={`text-base md:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>Knowledge Bridge</h2>
           </div>
           {/* Domain badges - hidden on small mobile, shown on larger screens */}
-          <div className="hidden xs:flex items-center gap-2 text-neutral-400 text-xs md:text-sm">
-            <span className="px-2 md:px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-medium truncate max-w-[200px]">
+          <div className="hidden xs:flex items-center gap-2 text-xs md:text-sm">
+            <span className={`px-2 md:px-3 py-1 rounded-full font-medium truncate max-w-[200px] ${
+              isDarkMode ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'
+            }`}>
               {getShortName(domainName)}
             </span>
-            <ArrowRight size={14} className="hidden md:block" />
-            <span className="px-2 md:px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-medium truncate max-w-[200px]">
+            <ArrowRight size={14} className={`hidden md:block ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`} />
+            <span className={`px-2 md:px-3 py-1 rounded-full font-medium truncate max-w-[200px] ${
+              isDarkMode ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'
+            }`}>
               {getShortName(topicName)}
             </span>
           </div>
-          <span className="hidden md:inline text-neutral-300 text-sm ml-4">
+          <span className={`hidden md:inline text-sm ml-4 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
             {conceptMap.length} concept mappings
           </span>
         </div>
         <button
           onClick={onClose}
-          className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg bg-neutral-800 text-neutral-300 hover:bg-red-500 hover:text-white transition-colors"
+          className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg transition-colors ${
+            isDarkMode
+              ? 'bg-neutral-700 text-neutral-300 hover:bg-red-500 hover:text-white'
+              : 'bg-neutral-200 text-neutral-600 hover:bg-red-500 hover:text-white'
+          }`}
         >
           <X size={20} />
         </button>
@@ -365,18 +369,18 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           {/* Column Headers */}
           <div className="flex justify-between mb-4 md:mb-8 px-2 md:px-4">
             <div className="flex items-center gap-2 md:gap-3">
-              <Sparkles className="text-amber-400" size={isMobile ? 18 : 24} />
+              <Sparkles className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} size={isMobile ? 18 : 24} />
               <div>
-                <h3 className="text-amber-300 font-bold text-sm md:text-lg">What You Know</h3>
-                <p className="text-amber-400/60 text-xs md:text-sm hidden xs:block">{getShortName(domainName)}</p>
+                <h3 className={`font-bold text-sm md:text-lg ${isDarkMode ? 'text-amber-300' : 'text-amber-600'}`}>What You Know</h3>
+                <p className={`text-xs md:text-sm hidden xs:block ${isDarkMode ? 'text-amber-400/60' : 'text-amber-500/70'}`}>{getShortName(domainName)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
               <div className="text-right">
-                <h3 className="text-blue-300 font-bold text-sm md:text-lg">What You're Learning</h3>
-                <p className="text-blue-400/60 text-xs md:text-sm hidden xs:block">{getShortName(topicName)}</p>
+                <h3 className={`font-bold text-sm md:text-lg ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>What You're Learning</h3>
+                <p className={`text-xs md:text-sm hidden xs:block ${isDarkMode ? 'text-blue-400/60' : 'text-blue-500/70'}`}>{getShortName(topicName)}</p>
               </div>
-              <BookOpen className="text-blue-400" size={isMobile ? 18 : 24} />
+              <BookOpen className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} size={isMobile ? 18 : 24} />
             </div>
           </div>
 
@@ -404,12 +408,16 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
                     }`}
                     style={{
-                      backgroundColor: isActive ? data.color + '35' : 'rgba(251, 191, 36, 0.15)',
-                      border: `2px solid ${isActive ? data.color : 'rgba(251, 191, 36, 0.5)'}`,
+                      backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(251, 191, 36, 0.15)' : 'rgba(251, 191, 36, 0.2)'),
+                      border: `2px solid ${isActive ? data.color : (isDarkMode ? 'rgba(251, 191, 36, 0.5)' : 'rgba(217, 119, 6, 0.5)')}`,
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${isActive ? 'text-white' : 'text-amber-100'}`}>
+                    <span className={`font-semibold text-sm md:text-base ${
+                      isActive
+                        ? (isDarkMode ? 'text-white' : 'text-neutral-900')
+                        : (isDarkMode ? 'text-amber-100' : 'text-amber-800')
+                    }`}>
                       {cleanLabel(data.concept.analogy_term)}
                     </span>
                   </div>
@@ -422,7 +430,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       style={{
                         background: isActive
                           ? data.color
-                          : 'linear-gradient(90deg, rgba(251, 191, 36, 0.4), rgba(96, 165, 250, 0.4))'
+                          : (isDarkMode
+                              ? 'linear-gradient(90deg, rgba(251, 191, 36, 0.4), rgba(96, 165, 250, 0.4))'
+                              : 'linear-gradient(90deg, rgba(217, 119, 6, 0.5), rgba(37, 99, 235, 0.5))')
                       }}
                     />
 
@@ -438,8 +448,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                     <span
                       className={`relative z-10 px-2 md:px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 border hidden xs:inline ${
                         isActive
-                          ? 'bg-neutral-900 text-white border-neutral-600'
-                          : 'bg-neutral-900 text-neutral-400 border-neutral-700'
+                          ? (isDarkMode ? 'bg-neutral-800 text-white border-neutral-600' : 'bg-white text-neutral-800 border-neutral-300')
+                          : (isDarkMode ? 'bg-neutral-800 text-neutral-400 border-neutral-700' : 'bg-white text-neutral-500 border-neutral-300')
                       }`}
                     >
                       {data.relationshipLabel}
@@ -452,12 +462,16 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
                     }`}
                     style={{
-                      backgroundColor: isActive ? data.color + '35' : 'rgba(96, 165, 250, 0.15)',
-                      border: `2px solid ${isActive ? data.color : 'rgba(96, 165, 250, 0.5)'}`,
+                      backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(96, 165, 250, 0.15)' : 'rgba(59, 130, 246, 0.15)'),
+                      border: `2px solid ${isActive ? data.color : (isDarkMode ? 'rgba(96, 165, 250, 0.5)' : 'rgba(37, 99, 235, 0.5)')}`,
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${isActive ? 'text-white' : 'text-blue-100'}`}>
+                    <span className={`font-semibold text-sm md:text-base ${
+                      isActive
+                        ? (isDarkMode ? 'text-white' : 'text-neutral-900')
+                        : (isDarkMode ? 'text-blue-100' : 'text-blue-800')
+                    }`}>
                       {cleanLabel(data.concept.tech_term)}
                     </span>
                   </div>
@@ -475,25 +489,32 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90]'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
-            border-neutral-700 bg-neutral-900/95 ${isFullScreen && !isMobile ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-300
+            ${isDarkMode ? 'border-neutral-600 bg-neutral-800/98' : 'border-neutral-200 bg-white/98'}
+            ${isFullScreen && !isMobile ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-300
           `}>
             {/* Mobile Drag Handle */}
             {isMobile && (
               <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 bg-neutral-600 rounded-full" />
+                <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} />
               </div>
             )}
 
             {/* Panel Header */}
-            <div className="sticky top-0 px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900">
+            <div className={`sticky top-0 px-4 md:px-6 py-3 md:py-4 border-b ${
+              isDarkMode ? 'border-neutral-600 bg-neutral-800' : 'border-neutral-200 bg-white'
+            }`}>
               <div className="flex items-center justify-between mb-2 md:mb-3">
-                <h3 className="text-white font-bold text-base md:text-lg">Deep Dive</h3>
+                <h3 className={`font-bold text-base md:text-lg ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>Deep Dive</h3>
                 <div className="flex items-center gap-2">
                   {/* Maximize/Minimize Button - Desktop only */}
                   {!isMobile && (
                     <button
                       onClick={() => setIsFullScreen(!isFullScreen)}
-                      className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
+                      className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg transition-colors ${
+                        isDarkMode
+                          ? 'text-neutral-400 hover:bg-neutral-700 hover:text-white'
+                          : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800'
+                      }`}
                       title={isFullScreen ? 'Minimize' : 'Maximize'}
                     >
                       {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -508,7 +529,11 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                         setShowExplanation(false);
                       }
                     }}
-                    className="p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg text-neutral-400 hover:bg-red-500/80 hover:text-white transition-colors"
+                    className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-lg transition-colors ${
+                      isDarkMode
+                        ? 'text-neutral-400 hover:bg-red-500/80 hover:text-white'
+                        : 'text-neutral-500 hover:bg-red-500 hover:text-white'
+                    }`}
                     title={isFullScreen ? 'Back to split view' : 'Close panel'}
                   >
                     <X size={18} />
@@ -520,7 +545,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   className="w-3 h-3 md:w-4 md:h-4 rounded-full"
                   style={{ backgroundColor: selectedConceptData.color }}
                 />
-                <span className="text-neutral-300 text-xs md:text-sm">
+                <span className={`text-xs md:text-sm ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   Mapping {selectedConceptData.index + 1} of {conceptMap.length}
                 </span>
               </div>
@@ -531,60 +556,66 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               isMobile ? 'max-h-[calc(60vh-80px)]' : 'max-h-[calc(100vh-140px)]'
             } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
               {/* Expertise Term */}
-              <div className="p-4 rounded-xl bg-amber-900/30 border border-amber-700/60">
+              <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-amber-900/30 border border-amber-700/60' : 'bg-amber-50 border border-amber-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="text-amber-400" size={16} />
-                  <span className="text-amber-200 text-xs font-bold uppercase tracking-wider">
+                  <Sparkles className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} size={16} />
+                  <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-amber-200' : 'text-amber-600'}`}>
                     What You Know
                   </span>
                 </div>
-                <p className="text-white text-xl font-semibold">
+                <p className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                   {cleanLabel(selectedConceptData.concept.analogy_term)}
                 </p>
               </div>
 
               {/* Arrow */}
               <div className="flex justify-center">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700">
-                  <ChevronRight className="text-neutral-500" size={16} />
-                  <span className="text-neutral-400 text-sm font-medium">
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
+                  isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
+                }`}>
+                  <ChevronRight className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} size={16} />
+                  <span className={`text-sm font-medium ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
                     {selectedConceptData.relationshipLabel}
                   </span>
-                  <ChevronRight className="text-neutral-500" size={16} />
+                  <ChevronRight className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} size={16} />
                 </div>
               </div>
 
               {/* Learning Term */}
-              <div className="p-4 rounded-xl bg-blue-900/30 border border-blue-700/60">
+              <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-blue-900/30 border border-blue-700/60' : 'bg-blue-50 border border-blue-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <BookOpen className="text-blue-400" size={16} />
-                  <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">
+                  <BookOpen className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} size={16} />
+                  <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-blue-200' : 'text-blue-600'}`}>
                     What You're Learning
                   </span>
                 </div>
-                <p className="text-white text-xl font-semibold">
+                <p className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                   {cleanLabel(selectedConceptData.concept.tech_term)}
                 </p>
               </div>
 
               {/* Six-Word Definition */}
               {selectedConceptData.concept.six_word_definition && (
-                <div className="text-center py-3 px-4 rounded-lg bg-neutral-800/40 border border-neutral-700/50">
-                  <p className="text-neutral-200 text-sm italic">
+                <div className={`text-center py-3 px-4 rounded-lg border ${
+                  isDarkMode ? 'bg-neutral-700/40 border-neutral-600/50' : 'bg-neutral-100 border-neutral-200'
+                }`}>
+                  <p className={`text-sm italic ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
                     "{selectedConceptData.concept.six_word_definition}"
                   </p>
                 </div>
               )}
 
               {/* Importance Meter */}
-              <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
+              <div className={`p-4 rounded-xl border ${
+                isDarkMode ? 'bg-neutral-700/50 border-neutral-600' : 'bg-neutral-50 border-neutral-200'
+              }`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-neutral-400 text-sm">Concept Importance</span>
-                  <span className="text-white font-bold">
+                  <span className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>Concept Importance</span>
+                  <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                     {Math.round(selectedConceptData.importance * 100)}%
                   </span>
                 </div>
-                <div className="h-2 bg-neutral-700 rounded-full overflow-hidden">
+                <div className={`h-2 rounded-full overflow-hidden ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-200'}`}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
@@ -605,41 +636,36 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   domainName,
                   selectedConceptData.importance
                 );
+                // Get cached foundational mapping (pre-generated on mount)
+                const cachedFoundational = foundationalMappingCache.get(selectedConceptData.concept.id);
                 const bullets = {
                   connection: apiWhy?.connection || fallbackBullets.connection,
-                  // Use dedicated API-generated foundational mapping, then inline API, then fallback
-                  whyImportant: currentFoundationalMapping || apiWhy?.importance || fallbackBullets.whyImportant,
+                  // Use cached API-generated foundational mapping, then inline API, then fallback
+                  whyImportant: cachedFoundational || apiWhy?.importance || fallbackBullets.whyImportant,
                   withoutIt: apiWhy?.critical || fallbackBullets.withoutIt
                 };
                 return (
-                  <div className="p-4 rounded-xl bg-emerald-800/30 border border-emerald-600/50">
-                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-                      <Lightbulb size={16} className="text-emerald-400" />
+                  <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-emerald-800/30 border border-emerald-600/50' : 'bg-emerald-50 border border-emerald-200'}`}>
+                    <h4 className={`font-semibold mb-3 flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                      <Lightbulb size={16} className={isDarkMode ? 'text-emerald-400' : 'text-emerald-500'} />
                       Why It Matters
                     </h4>
                     <ul className="space-y-3">
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
-                        <span className="text-neutral-300 text-sm leading-relaxed">
+                        <span className={`mt-0.5 text-lg leading-none ${isDarkMode ? 'text-emerald-400' : 'text-emerald-500'}`}>•</span>
+                        <span className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                           {bullets.connection}
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
-                        <span className="text-neutral-300 text-sm leading-relaxed">
-                          {isLoadingFoundational ? (
-                            <span className="flex items-center gap-2 text-neutral-400 italic">
-                              <Loader2 size={12} className="animate-spin" />
-                              Generating insight...
-                            </span>
-                          ) : (
-                            bullets.whyImportant
-                          )}
+                        <span className={`mt-0.5 text-lg leading-none ${isDarkMode ? 'text-emerald-400' : 'text-emerald-500'}`}>•</span>
+                        <span className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
+                          {bullets.whyImportant}
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5 text-lg leading-none">•</span>
-                        <span className="text-neutral-300 text-sm leading-relaxed">
+                        <span className={`mt-0.5 text-lg leading-none ${isDarkMode ? 'text-emerald-400' : 'text-emerald-500'}`}>•</span>
+                        <span className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                           {bullets.withoutIt}
                         </span>
                       </li>
@@ -649,12 +675,16 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               })()}
 
               {/* Why This Works - Now uses AI-generated narrative_mapping */}
-              <div className="p-4 rounded-xl bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700">
-                <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <Layers size={16} className="text-purple-400" />
+              <div className={`p-4 rounded-xl border ${
+                isDarkMode
+                  ? 'bg-gradient-to-br from-neutral-700/80 to-neutral-800/80 border-neutral-600'
+                  : 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-100'
+              }`}>
+                <h4 className={`font-semibold mb-3 flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  <Layers size={16} className={isDarkMode ? 'text-purple-400' : 'text-purple-500'} />
                   Why This Works
                 </h4>
-                <p className="text-neutral-300 text-sm leading-relaxed">
+                <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                   {selectedConceptData.concept.narrative_mapping || generateDynamicExplanation(
                     cleanLabel(selectedConceptData.concept.analogy_term),
                     cleanLabel(selectedConceptData.concept.tech_term),
@@ -667,26 +697,28 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
               {/* Causal Mechanics Accordion */}
               {selectedConceptData.concept.causal_explanation && (
-                <div className="rounded-xl border border-neutral-700 overflow-hidden">
+                <div className={`rounded-xl border overflow-hidden ${isDarkMode ? 'border-neutral-600' : 'border-neutral-200'}`}>
                   <button
                     onClick={() => setShowCausalMechanics(!showCausalMechanics)}
-                    className="w-full p-4 flex items-center justify-between bg-neutral-800/50 hover:bg-neutral-800/70 transition-colors"
+                    className={`w-full p-4 flex items-center justify-between transition-colors ${
+                      isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700/70' : 'bg-neutral-50 hover:bg-neutral-100'
+                    }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Atom size={16} className="text-cyan-400" />
-                      <span className="text-white font-semibold">Causal Mechanics</span>
+                      <Atom size={16} className={isDarkMode ? 'text-cyan-400' : 'text-cyan-500'} />
+                      <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>Causal Mechanics</span>
                     </div>
                     {showCausalMechanics ? (
-                      <ChevronUp size={18} className="text-neutral-400" />
+                      <ChevronUp size={18} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
                     ) : (
-                      <ChevronDown size={18} className="text-neutral-400" />
+                      <ChevronDown size={18} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
                     )}
                   </button>
                   {showCausalMechanics && (
-                    <div className="p-4 bg-neutral-900/50 border-t border-neutral-700">
-                      <div className="text-neutral-300 text-sm leading-relaxed">
+                    <div className={`p-4 border-t ${isDarkMode ? 'bg-neutral-800/50 border-neutral-600' : 'bg-white border-neutral-200'}`}>
+                      <div className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                         {renderRichText
-                          ? renderRichText(selectedConceptData.concept.causal_explanation || '', 'text-neutral-300')
+                          ? renderRichText(selectedConceptData.concept.causal_explanation || '', isDarkMode ? 'text-neutral-300' : 'text-neutral-700')
                           : selectedConceptData.concept.causal_explanation
                         }
                       </div>
@@ -695,7 +727,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                 </div>
               )}
 
-              <div className="text-center text-neutral-300 text-xs pt-4">
+              <div className={`text-center text-xs pt-4 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                 {isFullScreen
                   ? 'Press minimize or ESC to return to split view'
                   : 'Click other concepts to explore more mappings'
@@ -707,12 +739,14 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-4 md:px-6 py-3 border-t border-neutral-700 bg-neutral-900/80 pb-safe">
+      <div className={`px-4 md:px-6 py-3 border-t pb-safe ${
+        isDarkMode ? 'border-neutral-600 bg-neutral-800/90' : 'border-neutral-200 bg-white/90'
+      }`}>
         <div className="flex items-center justify-between">
-          <span className="text-amber-200/70 text-xs md:text-sm">
+          <span className={`text-xs md:text-sm ${isDarkMode ? 'text-amber-200/70' : 'text-amber-600/80'}`}>
             {isMobile ? 'Tap any mapping to explore' : 'Click any mapping to explore the connection in depth'}
           </span>
-          <span className="text-neutral-300 text-xs hidden md:inline">
+          <span className={`text-xs hidden md:inline ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
             Press Esc to close
           </span>
         </div>
