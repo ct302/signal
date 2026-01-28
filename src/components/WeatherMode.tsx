@@ -131,7 +131,7 @@ const WeatherEffects: React.FC<{ weather: WeatherType }> = ({ weather }) => {
   if (weather === 'none') return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
       {/* Background scenes */}
       {weather === 'sunny' && <SunnyScene />}
       {weather === 'rain' && <RainScene />}

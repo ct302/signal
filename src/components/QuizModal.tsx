@@ -157,20 +157,20 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                 Question {questionNumber}
               </h4>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${difficultyConfig.bg} ${difficultyConfig.color}`}>
-                  <Zap size={8} className="inline mr-0.5" />
+                <span className={`text-xs px-1.5 py-0.5 rounded ${difficultyConfig.bg} ${difficultyConfig.color}`}>
+                  <Zap size={10} className="inline mr-0.5" />
                   {difficultyConfig.label}
                 </span>
                 {retryCount > 0 && (
-                  <span className="text-[10px] text-amber-400">
+                  <span className="text-xs text-amber-400">
                     Retry {retryCount}/{maxRetries}
                   </span>
                 )}
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-amber-300 hover:text-white">
-            <X size={14} />
+          <button onClick={onClose} className="p-2 min-w-touch min-h-touch flex items-center justify-center text-amber-300 hover:text-white">
+            <X size={18} />
           </button>
         </div>
 

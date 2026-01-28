@@ -46,6 +46,7 @@ import {
   generateMasterySummary,
   regenerateContextualDefinitions
 } from '../services';
+import { useMobile } from '../hooks/useMobile';
 
 // ============================================
 // LOGIC VALIDATOR TYPES & SERVICE STUB
@@ -950,6 +951,7 @@ const ChatWindow: React.FC<{
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isMobile = useMobile();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1018,8 +1020,11 @@ const ChatWindow: React.FC<{
 
   return (
     <div className={`
-      fixed bottom-24 right-6 z-[150] w-96 h-[500px] rounded-xl shadow-2xl
-      flex flex-col overflow-hidden border
+      fixed z-[150] flex flex-col overflow-hidden border shadow-2xl
+      ${isMobile
+        ? 'inset-0 rounded-none'
+        : 'bottom-24 right-6 w-96 h-[500px] rounded-xl'
+      }
       ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}
     `}>
       {/* Header */}
@@ -1239,7 +1244,7 @@ const KeywordPanel: React.FC<{
       {isExpanded && (
         <div className="px-4 pb-4">
           {/* Grid of keyword cards */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-3">
             {visibleKeywords.map((keyword, index) => {
               const isDetected = detectedKeywords.includes(keyword.term);
               const techDef = stage === 2 ? keyword.techDefinition3 : keyword.techDefinition6;
@@ -1286,13 +1291,13 @@ const KeywordPanel: React.FC<{
                   </div>
 
                   {/* Stage definition label */}
-                  <div className={`text-[9px] uppercase tracking-wider font-semibold mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                  <div className={`text-xs uppercase tracking-wider font-semibold mb-2 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                     Stage {stage} Definition
                   </div>
 
                   {/* Tech definition */}
                   <div className="mb-2">
-                    <span className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                    <span className={`text-xs uppercase font-bold ${isDarkMode ? 'text-cyan-400' : 'text-cyan-600'}`}>
                       TECH:
                     </span>
                     <span className={`text-xs ml-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
@@ -1302,7 +1307,7 @@ const KeywordPanel: React.FC<{
 
                   {/* Analogy definition */}
                   <div>
-                    <span className={`text-[10px] uppercase font-bold ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                    <span className={`text-xs uppercase font-bold ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                       {shortDomain.toUpperCase()}:
                     </span>
                     <span className={`text-xs ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
@@ -1629,11 +1634,11 @@ const OverviewMode: React.FC<{
               </div>
 
               {/* Scores */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-2 md:gap-4">
                 {[1, 2, 3].map((stage) => (
                   <div
                     key={stage}
-                    className={`p-4 rounded-xl text-center ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}
+                    className={`p-2 md:p-4 rounded-xl text-center ${isDarkMode ? 'bg-neutral-800/50' : 'bg-white shadow-sm'}`}
                   >
                     <div className={`text-3xl font-bold ${
                       stage === 1 ? 'text-blue-500' : stage === 2 ? 'text-purple-500' : 'text-green-500'
@@ -1846,11 +1851,11 @@ const CompletionCelebration: React.FC<{
         </p>
 
         {/* Scores */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
           {[1, 2, 3].map((stage) => (
             <div
               key={stage}
-              className={`p-3 rounded-lg ${isDarkMode ? 'bg-neutral-800' : 'bg-neutral-100'}`}
+              className={`p-2 md:p-3 rounded-lg ${isDarkMode ? 'bg-neutral-800' : 'bg-neutral-100'}`}
             >
               <div className={`text-2xl font-bold ${
                 stage === 1 ? 'text-blue-500' : stage === 2 ? 'text-purple-500' : 'text-green-500'

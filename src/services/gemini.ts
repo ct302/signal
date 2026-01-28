@@ -105,45 +105,31 @@ const getProviderConfig = (): ProviderConfig => {
   }
   // Default config without API key - user must provide their own
   return {
-    provider: 'openrouter',
+    provider: 'cloud' as const,
     apiKey: '',
-    model: 'xiaomi/mimo-v2-flash:free',
+    model: '',
+    baseUrl: 'https://openrouter.ai/api/v1',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
 };
 
 // Validate that API key is present (throws user-friendly error if missing)
 const validateApiKey = (config: ProviderConfig): void => {
-  if (config.provider !== 'ollama' && !config.apiKey) {
+  if (config.provider === 'cloud' && !config.apiKey) {
     throw new Error(
-      `No API key configured. Please open Settings (gear icon) and enter your ${
-        config.provider === 'google' ? 'Google Gemini' :
-        config.provider === 'openrouter' ? 'OpenRouter' :
-        config.provider === 'openai' ? 'OpenAI' :
-        config.provider === 'anthropic' ? 'Anthropic' : ''
-      } API key.`
+      'No API key configured. Please open Settings (gear icon) and enter your API key.'
     );
   }
 };
 
 // Build API URL based on provider
 const buildApiUrl = (config: ProviderConfig): string => {
-  switch (config.provider) {
-    case 'google':
-      return `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-    case 'openai':
-      return 'https://api.openai.com/v1/chat/completions';
-    case 'anthropic':
-      return 'https://api.anthropic.com/v1/messages';
-    case 'ollama':
-      return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
-    case 'openrouter':
-      return 'https://openrouter.ai/api/v1/chat/completions';
-    case 'groq':
-      return 'https://api.groq.com/openai/v1/chat/completions';
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
+  if (config.provider === 'ollama') {
+    return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
   }
+  // Cloud provider - use baseUrl (defaults to OpenRouter)
+  const baseUrl = config.baseUrl || 'https://openrouter.ai/api/v1';
+  return `${baseUrl}/chat/completions`;
 };
 
 // Options for API calls
@@ -158,98 +144,58 @@ interface ApiCallOptions {
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
   const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3 } = options;
 
-  switch (config.provider) {
-    case 'google':
-      return {
-        contents: [{ parts: [{ text: prompt }] }],
-        ...(jsonMode && { generationConfig: { responseMimeType: "application/json" } })
-      };
-    case 'openai':
-    case 'groq':
-      return {
-        model: config.model,
-        messages: [{ role: 'user', content: prompt }],
-        ...(jsonMode && { response_format: { type: 'json_object' } })
-      };
-    case 'anthropic':
-      return {
-        model: config.model,
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }]
-      };
-    case 'ollama':
-      return {
-        model: config.model,
-        prompt: prompt,
-        stream: false,
-        ...(jsonMode && { format: 'json' })
-      };
-    case 'openrouter': {
-      const body: Record<string, any> = {
-        model: config.model,
-        messages: [{ role: 'user', content: prompt }],
-        ...(jsonMode && { response_format: { type: 'json_object' } })
-      };
-
-      // Add web search plugin when enabled (uses OpenRouter's built-in web search)
-      // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request (Mastery Mode)
-      if (webSearch) {
-        const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
-        // Add custom search_prompt if provided - guides how results are integrated
-        if (searchPrompt) {
-          webPlugin.search_prompt = searchPrompt;
-        }
-        body.plugins = [webPlugin];
-        console.log(`[OpenRouter] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
-      }
-
-      return body;
-    }
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
+  if (config.provider === 'ollama') {
+    return {
+      model: config.model,
+      prompt: prompt,
+      stream: false,
+      ...(jsonMode && { format: 'json' })
+    };
   }
+
+  // Cloud provider - OpenAI-compatible format (works with OpenRouter, OpenAI, Groq, Together, etc.)
+  const body: Record<string, any> = {
+    model: config.model,
+    messages: [{ role: 'user', content: prompt }],
+    ...(jsonMode && { response_format: { type: 'json_object' } })
+  };
+
+  // Add web search plugin when enabled (OpenRouter's built-in web search)
+  // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request
+  if (webSearch) {
+    const webPlugin: Record<string, any> = { id: 'web', max_results: maxResults };
+    if (searchPrompt) {
+      webPlugin.search_prompt = searchPrompt;
+    }
+    body.plugins = [webPlugin];
+    console.log(`[Cloud API] Web search enabled with max_results: ${maxResults}` + (searchPrompt ? ', custom search_prompt' : ''));
+  }
+
+  return body;
 };
 
 // Build headers based on provider
 const buildHeaders = (config: ProviderConfig): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  switch (config.provider) {
-    case 'openai':
-    case 'groq':
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-      break;
-    case 'anthropic':
-      headers['x-api-key'] = config.apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-      break;
-    case 'openrouter':
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-      headers['HTTP-Referer'] = 'https://signal-app.com';
-      headers['X-Title'] = 'Signal Analogy Engine';
-      break;
+  if (config.provider === 'cloud') {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    // OpenRouter-specific headers (ignored by other providers)
+    headers['HTTP-Referer'] = 'https://signal-app.com';
+    headers['X-Title'] = 'Signal Analogy Engine';
   }
+  // Ollama doesn't need auth headers
 
   return headers;
 };
 
 // Extract response text based on provider
 const extractResponseText = (data: any, config: ProviderConfig): string => {
-  switch (config.provider) {
-    case 'google':
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    case 'openai':
-    case 'groq':
-      return data.choices?.[0]?.message?.content || '';
-    case 'anthropic':
-      return data.content?.[0]?.text || '';
-    case 'ollama':
-      return data.response || '';
-    case 'openrouter':
-      return data.choices?.[0]?.message?.content || '';
-    default:
-      return '';
+  if (config.provider === 'ollama') {
+    return data.response || '';
   }
+  // Cloud provider - OpenAI-compatible response format
+  return data.choices?.[0]?.message?.content || '';
 };
 
 // Unified API call with enhanced error handling and circuit breaker
@@ -259,8 +205,8 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
   // Validate API key is present (throws user-friendly error if missing)
   validateApiKey(baseConfig);
 
-  // For OpenRouter, use circuit breaker to select available model
-  const effectiveModel = baseConfig.provider === 'openrouter'
+  // For cloud providers, use circuit breaker to select available model (fallback chain)
+  const effectiveModel = baseConfig.provider === 'cloud'
     ? getAvailableModel(baseConfig.model)
     : baseConfig.model;
 
@@ -718,7 +664,12 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
       "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
       "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
-      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar)."
+      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).",
+      "why_it_matters": {
+        "connection": "One sentence explaining WHY these two concepts structurally connect—what shared pattern or mechanism links them (not just THAT they connect, but WHY).",
+        "importance": "One sentence explaining WHY understanding the specific link between THIS tech_term and THIS analogy_term unlocks deeper understanding. Be SPECIFIC: name what concepts become easier, what confusion it prevents, or what capability it enables. NEVER use generic phrases like 'this is foundational', 'key bridge', or 'cornerstone concept'.",
+        "critical": "One sentence explaining WHY the system would fail without this concept—what PURPOSE does it serve, what problem does it solve?"
+      }
     }
   ],
   "importance_map": [
@@ -752,8 +703,26 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "First-principle point 3 - core mechanism",
       "First-principle point 4 - key relationship",
       "First-principle point 5 - essential limitation or edge case"
-    ]
-  }
+    ],
+    "mnemonic": {
+      "phrase": "A catchy memorable phrase where each word starts with the first letter of each bullet point. Make it vivid, silly, or surprising - the weirder the better for memory! (e.g., 'Every Expert Dances Daily, Rejoicing' for EEDDR)",
+      "breakdown": [
+        "E = [First word of phrase] → [Key concept from bullet 1]",
+        "E = [Second word] → [Key concept from bullet 2]",
+        "D = [Third word] → [Key concept from bullet 3]",
+        "D = [Fourth word] → [Key concept from bullet 4]",
+        "R = [Fifth word] → [Key concept from bullet 5]"
+      ]
+    }
+  },
+  "symbol_guide": [
+    {
+      "symbol": "the symbol exactly as written (e.g., 'A', 'λ', '∫', 'f(x)')",
+      "name": "Context-specific name for THIS topic (e.g., 'Coordinate Ring' not 'Matrix A' if A represents a ring)",
+      "meaning": "What this symbol represents in THIS specific context",
+      "simple": "Plain English explanation a beginner would understand"
+    }
+  ]
 }
 
 ${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
@@ -946,13 +915,24 @@ REQUIREMENTS:
 - Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
 - Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
 
+SYMBOL_GUIDE RULES:
+The symbol_guide provides CONTEXT-AWARE explanations for mathematical symbols used in technical_explanation.
+- Include ALL symbols, variables, and mathematical notation used (Greek letters, operators, single-letter variables)
+- Names must be CONTEXT-SPECIFIC to THIS topic: if 'A' represents a coordinate ring in algebraic geometry, name it "Coordinate Ring", NOT "Matrix A"
+- If 'λ' represents eigenvalues, name it "Eigenvalue", not just "Lambda"
+- Order by importance/first appearance in the explanation
+- The "simple" field should be genuinely helpful for beginners - use analogies or plain English
+- Only include symbols that ACTUALLY APPEAR in your technical_explanation
+- For non-STEM topics with no mathematical symbols, return an empty array: "symbol_guide": []
+
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
 2. concept_map: tech_term and analogy_term must be DIFFERENT words (never the same)
 3. importance_map should include ALL significant terms (15-25 items)
 4. attention_map must cover ALL content words (50-100+ per explanation)
 5. LaTeX FORMATTING (JSON ESCAPING): use \\\\ not \\ for backslashes
-6. Return ONLY valid JSON, no markdown code blocks`;
+6. Return ONLY valid JSON, no markdown code blocks
+7. symbol_guide must have CONTEXT-SPECIFIC names (never generic like "Matrix A" unless it truly is a generic matrix)`;
 
   // Build search prompt to guide how web results are used
   // For granular domains, constrain to the specific event
@@ -1068,17 +1048,101 @@ Make it click instantly. No textbook voice.`
 
   const config = levelConfig[level as keyof typeof levelConfig] || levelConfig[50];
 
+  // For ELI5, we don't need symbol_guide (no math symbols)
+  const includeSymbolGuide = level !== 5;
+
   let promptText = `Define "${term}" in context of: "${context}".
 
 LEVEL: ${config.name}
 TARGET LENGTH: ${config.words} (IMPORTANT: Don't be terse! Give a substantive explanation)
 
-${config.style}`;
+${config.style}
+
+Return JSON in this EXACT format:
+{
+  "definition": "Your definition here...",
+  "symbol_guide": [${includeSymbolGuide ? `
+    {
+      "symbol": "symbol as written",
+      "name": "Context-specific name for THIS definition (not generic)",
+      "meaning": "What it represents in THIS context",
+      "simple": "Plain English for beginners"
+    }
+  ` : ''}]
+}
+
+SYMBOL_GUIDE RULES:
+- Include ONLY symbols that appear in YOUR definition
+- Names must be CONTEXT-SPECIFIC (if 'x' is an input value, call it "Input Value", not "Variable X")
+- For ELI5 with no math symbols, return empty array: "symbol_guide": []
+- The "simple" field should genuinely help beginners understand
+
+Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    return await callApi(promptText);
+    const response = await callApi(promptText);
+
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(response);
+      return parsed;
+    } catch {
+      // If parsing fails, return the raw text as definition (backwards compatibility)
+      return { definition: response, symbol_guide: [] };
+    }
   } catch {
-    return "Could not load definition.";
+    return { definition: "Could not load definition.", symbol_guide: [] };
+  }
+};
+
+/**
+ * Generate foundational mapping explanation for a concept
+ * Called lazily when user selects a concept in Knowledge Bridge
+ * Provides first-principles, pragmatic explanation of why this specific mapping matters
+ */
+export const generateFoundationalMapping = async (
+  techTerm: string,
+  analogyTerm: string,
+  domainName: string,
+  topicName: string,
+  importance: number
+): Promise<{ foundationalMapping: string }> => {
+  const importanceLevel = importance >= 0.7
+    ? 'HIGH-importance concept - explain why mastering this specific link accelerates understanding of many related ideas'
+    : importance >= 0.4
+    ? 'MEDIUM-importance concept - explain how this connection reinforces the overall mental model'
+    : 'SUPPORTING concept - explain how this fills in gaps for complete comprehension';
+
+  const prompt = `You are explaining WHY understanding the connection between "${techTerm}" and "${analogyTerm}" (from ${domainName}) matters for learning ${topicName}.
+
+CRITICAL RULES:
+1. Use FIRST-ORDER PRINCIPLES - fundamental reasoning from basic truths
+2. Be PRAGMATIC - explain real, tangible benefits for the learner
+3. NO abstract jargon (NEVER say "foundational", "cornerstone", "key bridge", "unlocks", "essential")
+4. NO generic praise (NEVER say "this is important because...", "understanding this will help...")
+5. Be SPECIFIC about what becomes easier or what confusion is prevented
+6. Write in second person - speak directly to the learner
+
+IMPORTANCE LEVEL: ${Math.round(importance * 100)}% - ${importanceLevel}
+
+EXPLAIN IN 2-3 SENTENCES:
+Why does understanding ${techTerm} through the lens of ${analogyTerm} give the learner an advantage? What specific capability do they gain? What specific confusion does this prevent?
+
+EXAMPLES OF GOOD RESPONSES:
+- "Once you see that gradients work like water flowing downhill, you stop asking 'which direction?' and start predicting it. The steepest slope in ${domainName} and the steepest slope in optimization are the same instinct."
+- "Without this link, learners often confuse velocity with speed. Seeing it through ${analogyTerm} makes the distinction obvious—in ${domainName}, those are clearly different things you track separately."
+
+Return ONLY valid JSON: { "foundationalMapping": "Your 2-3 sentence explanation here" }`;
+
+  try {
+    const response = await callApi(prompt, { jsonMode: true });
+    const parsed = safeJsonParse(response);
+    if (parsed && parsed.foundationalMapping) {
+      return { foundationalMapping: parsed.foundationalMapping };
+    }
+    return { foundationalMapping: '' };
+  } catch {
+    return { foundationalMapping: '' };
   }
 };
 

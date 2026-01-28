@@ -34,7 +34,9 @@ import {
   Dices,
   History,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Minus,
+  GripHorizontal
 } from 'lucide-react';
 
 // Types
@@ -57,7 +59,8 @@ import {
   HistoryItem,
   ProximityResult,
   CompleteMasteryHistory,
-  CachedDomainEnrichment
+  CachedDomainEnrichment,
+  SymbolGuideEntry
 } from './types';
 
 // Constants
@@ -75,7 +78,7 @@ import {
 import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError } from './utils';
 
 // Hooks
-import { useMobile, useKatex, useDrag, useHistory } from './hooks';
+import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
 
 // Services
 import {
@@ -85,7 +88,8 @@ import {
   fetchDefinition as fetchDefinitionApi,
   generateQuiz,
   askTutor,
-  enrichDomainOnSelection
+  enrichDomainOnSelection,
+  generateFoundationalMapping
 } from './services';
 
 // Components
@@ -224,6 +228,13 @@ export default function App() {
     startResize,
     handleMiniHeaderMouseDown
   } = useDrag({ isMobile });
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isBrowserSupported: isMicSupported
+  } = useSpeechRecognition();
 
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
@@ -238,6 +249,13 @@ export default function App() {
   const [topic, setTopic] = useState("");
   const [lastSubmittedTopic, setLastSubmittedTopic] = useState("");
 
+  // Voice input: auto-populate search when speech recognition completes
+  useEffect(() => {
+    if (transcript) {
+      setTopic(transcript);
+    }
+  }, [transcript]);
+
   // Content State
   const [segments, setSegments] = useState<Segment[]>([]);
   const [conceptMap, setConceptMap] = useState<ConceptMapItem[]>([]);
@@ -249,6 +267,8 @@ export default function App() {
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
   const [synthesisSummary, setSynthesisSummary] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
+  const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
+  const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
 
   // UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -331,6 +351,35 @@ export default function App() {
   const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
   const [showWeatherSelector, setShowWeatherSelector] = useState(false);
   const [showSymbolGlossary, setShowSymbolGlossary] = useState(false);
+  const [symbolGuidePos, setSymbolGuidePos] = useState({ x: 0, y: 0 });
+  const [isSymbolGuideMinimized, setIsSymbolGuideMinimized] = useState(false);
+  const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
+  const symbolGuideDragStart = useRef({ x: 0, y: 0 });
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+
+  // Global drag handler for Symbol Guide - attaches to window for smooth dragging
+  useEffect(() => {
+    if (!isDraggingSymbolGuide) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const newX = e.clientX - symbolGuideDragStart.current.x;
+      const newY = e.clientY - symbolGuideDragStart.current.y;
+      setSymbolGuidePos({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSymbolGuide(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingSymbolGuide]);
 
   // Noise Generator State
   const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'brown'>('none');
@@ -550,18 +599,43 @@ export default function App() {
       setSynthesisCitation(stripMathSymbols(cleanText(fixUnicode(synthesis.citation || ""))));
     }
 
-    // Parse condensed view data (WHAT/WHY + bullet points)
+    // Parse condensed view data (WHAT/WHY + bullet points + mnemonic)
     const condensed = findContext(data, ["condensed"]);
     if (condensed) {
+      // Parse mnemonic object (phrase + breakdown array)
+      let mnemonicData = undefined;
+      if (condensed.mnemonic && typeof condensed.mnemonic === 'object') {
+        mnemonicData = {
+          phrase: stripMathSymbols(cleanText(fixUnicode(condensed.mnemonic.phrase || ""))),
+          breakdown: Array.isArray(condensed.mnemonic.breakdown)
+            ? condensed.mnemonic.breakdown.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
+            : []
+        };
+      }
+
       setCondensedData({
         what: stripMathSymbols(cleanText(fixUnicode(condensed.what || ""))),
         why: stripMathSymbols(cleanText(fixUnicode(condensed.why || ""))),
         bullets: Array.isArray(condensed.bullets)
           ? condensed.bullets.map((b: string) => stripMathSymbols(cleanText(fixUnicode(b || ""))))
-          : []
+          : [],
+        mnemonic: mnemonicData
       });
     } else {
       setCondensedData(null);
+    }
+
+    // Parse symbol guide (API-generated context-aware symbol explanations)
+    const symbolGuideData = findContext(data, ["symbol_guide"]);
+    if (symbolGuideData && Array.isArray(symbolGuideData)) {
+      setSymbolGuide(symbolGuideData.map((entry: any) => ({
+        symbol: entry.symbol || "",
+        name: entry.name || "",
+        meaning: entry.meaning || "",
+        simple: entry.simple || ""
+      })));
+    } else {
+      setSymbolGuide([]);
     }
 
     setLastSubmittedTopic(topicName);
@@ -922,17 +996,29 @@ export default function App() {
     } else {
       setIsLoadingDef(true);
       setDefText("");
+      setDefSymbolGuide([]); // Clear previous symbol guide
       setDefComplexity(level);
     }
 
     try {
       const result = await fetchDefinitionApi(term, context, level);
-      if (isMini) setMiniDefText(result);
-      else setDefText(result);
+      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[] }
+      const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
+      const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
+
+      if (isMini) {
+        setMiniDefText(definition);
+      } else {
+        setDefText(definition);
+        setDefSymbolGuide(symbolGuideData);
+      }
     } catch (e) {
       const errText = "Could not load definition.";
       if (isMini) setMiniDefText(errText);
-      else setDefText(errText);
+      else {
+        setDefText(errText);
+        setDefSymbolGuide([]);
+      }
     } finally {
       if (isMini) setIsLoadingMiniDef(false);
       else setIsLoadingDef(false);
@@ -1580,6 +1666,7 @@ export default function App() {
 
   const handleMouseEnterWrapper = () => {
     if (isMobile) return;
+    if (isDraggingSymbolGuide) return; // Ignore when dragging Symbol Guide
     setIsMouseInside(true);
 
     if (!hasStarted || viewMode !== 'morph' || isScrolling) return;
@@ -1591,6 +1678,7 @@ export default function App() {
 
   const handleMouseLeaveWrapper = () => {
     if (isMobile) return;
+    if (isDraggingSymbolGuide) return; // Ignore when dragging Symbol Guide
     setIsMouseInside(false);
 
     // Lock morph when definition popup is open or user is selecting
@@ -1620,6 +1708,10 @@ export default function App() {
       // Transition INTO first principles (mutually exclusive with Story and Bullets)
       setIsNarrativeMode(false);
       setIsBulletMode(false);
+      // If in Morph mode, switch to Tech mode so Essence view renders
+      if (viewMode === 'morph') {
+        setViewMode('tech');
+      }
       setIsCondensedMorphing(true);
       condensedMorphTimerRef.current = setTimeout(() => {
         setShowCondensedView(true);
@@ -2332,12 +2424,16 @@ export default function App() {
         setShowHistory={setShowHistory}
         historyCount={history.length}
         onDomainClick={() => {
+          resetAllState({ keepDomain: false });
           setHasSelectedDomain(false);
           setTempDomainInput("");
         }}
         onSubmit={handleSubmit}
         isViewingFromHistory={isViewingFromHistory}
         onReturnHome={returnToHome}
+        isListening={isListening}
+        onMicClick={isListening ? stopListening : startListening}
+        isMicSupported={isMicSupported}
       />
 
       {/* History Panel */}
@@ -2354,7 +2450,7 @@ export default function App() {
 
       {/* Main Content */}
       <main ref={scrollRef} className={`flex-1 overflow-y-auto transition-all duration-500 ${isImmersive ? 'pt-0' : 'pt-4'}`}>
-        <div className={`max-w-4xl mx-auto px-4 pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-8' : ''}`}>
+        <div className={`max-w-4xl mx-auto px-3 md:px-4 pb-20 md:pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-4 md:px-8' : ''}`}>
           {/* Loading State */}
           {isLoading && (
             <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
@@ -2418,7 +2514,7 @@ export default function App() {
             <div className="space-y-4">
               {/* Main Content Card */}
               <div
-                className={`rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
+                className={`relative z-10 rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
                   isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
                 } ${
                   viewMode === 'morph' && isHovering
@@ -2449,7 +2545,7 @@ export default function App() {
                     </button>
                     {/* Show selecting indicator when morph is locked for selection */}
                     {morphLockedForSelection && viewMode === 'morph' && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
                         Selecting...
                       </span>
                     )}
@@ -2528,7 +2624,7 @@ export default function App() {
                             key={level}
                             onClick={() => handleComplexityChange(level)}
                             disabled={isRegenerating || isLoading}
-                            className={`px-2 py-1 text-[10px] font-bold transition-colors ${
+                            className={`px-2 py-2 min-h-touch text-xs font-bold transition-colors ${
                               mainComplexity === level
                                 ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
                                 : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
@@ -2642,8 +2738,8 @@ export default function App() {
                     )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
-                      <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
-                        <Loader2 size={10} className="animate-spin" />
+                      <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                        <Loader2 size={12} className="animate-spin" />
                         Regenerating...
                       </span>
                     )}
@@ -2694,7 +2790,7 @@ export default function App() {
                       <div className="space-y-4">
                         {/* WHAT Section */}
                         <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
-                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                          <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-1.5 ${
                             isDarkMode ? 'text-purple-400/80' : 'text-purple-500'
                           }`}>
                             <span>📐</span>
@@ -2710,7 +2806,7 @@ export default function App() {
 
                         {/* WHY Section */}
                         <div className={`pb-3 border-b ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
-                          <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-1.5 ${
+                          <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-1.5 ${
                             isDarkMode ? 'text-emerald-400/80' : 'text-emerald-500'
                           }`}>
                             <span>🎯</span>
@@ -2727,7 +2823,7 @@ export default function App() {
                         {/* First Principles Bullets - with heatmap importance colors */}
                         {condensedData.bullets.length > 0 && (
                           <div>
-                            <div className={`flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-2 ${
+                            <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-2 ${
                               isDarkMode ? 'text-orange-400/80' : 'text-orange-500'
                             }`}>
                               <span>⚡</span>
@@ -2789,6 +2885,42 @@ export default function App() {
                                 );
                               })}
                             </ul>
+                          </div>
+                        )}
+
+                        {/* Mnemonic Section - Memory Aid with Breakdown */}
+                        {condensedData.mnemonic && condensedData.mnemonic.phrase && (
+                          <div className={`mt-4 pt-4 border-t border-dashed ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-300/50'}`}>
+                            <div className={`flex items-center gap-1.5 text-xs uppercase font-semibold tracking-wider mb-2 ${
+                              isDarkMode ? 'text-pink-400/80' : 'text-pink-500'
+                            }`}>
+                              <span>🧠</span>
+                              <span>Remember It</span>
+                            </div>
+                            {/* The mnemonic phrase */}
+                            <p
+                              className={`font-bold italic leading-snug mb-3 ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
+                              style={{ fontSize: `${1.15 * textScale}rem` }}
+                            >
+                              "{condensedData.mnemonic.phrase}"
+                            </p>
+                            {/* Letter breakdown */}
+                            {condensedData.mnemonic.breakdown && condensedData.mnemonic.breakdown.length > 0 && (
+                              <ul className="space-y-1">
+                                {condensedData.mnemonic.breakdown.map((item, i) => (
+                                  <li
+                                    key={i}
+                                    className={`text-sm flex items-start gap-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}
+                                    style={{ fontSize: `${0.85 * textScale}rem` }}
+                                  >
+                                    <span className={`font-mono font-bold flex-shrink-0 ${isDarkMode ? 'text-pink-400' : 'text-pink-600'}`}>
+                                      {item.charAt(0)}
+                                    </span>
+                                    <span>{item.substring(item.indexOf('=') + 1).trim()}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2895,7 +3027,7 @@ export default function App() {
                       <BookOpen size={14} />
                       <span>Define</span>
                       {pendingSelection.split(/\s+/).length > 1 && (
-                        <span className="text-neutral-400 text-[10px]">
+                        <span className="text-neutral-400 text-xs">
                           ({pendingSelection.split(/\s+/).length} words)
                         </span>
                       )}
@@ -2908,8 +3040,8 @@ export default function App() {
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   {/* Selection hint - only show when not in morph mode */}
                   {viewMode !== 'morph' && (
-                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-[10px] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      <BookOpen size={10} />
+                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                      <BookOpen size={12} />
                       <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
                     </div>
                   )}
@@ -3166,7 +3298,7 @@ export default function App() {
 
       {/* Controls Panel */}
       {showControls && (
-        <div ref={controlsPanelRef} className={`fixed bottom-20 right-6 z-50 rounded-xl shadow-xl p-4 space-y-3 w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
+        <div ref={controlsPanelRef} className={`fixed bottom-20 right-3 md:right-6 z-50 rounded-xl shadow-xl p-3 md:p-4 space-y-3 w-48 md:w-56 ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}>
           <div className="flex justify-between items-center pb-2 border-b border-neutral-200">
             <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Attention Mode</span>
           </div>
@@ -3222,6 +3354,7 @@ export default function App() {
           setIsDefColorMode={setIsDefColorMode}
           isMobile={isMobile}
           copiedId={copiedId}
+          symbolGuide={defSymbolGuide}
           onClose={() => {
             setDefPosition(null);
             setSelectedTerm(null);
@@ -3314,64 +3447,29 @@ export default function App() {
         >
           <Coffee size={20} />
         </button>
-        {/* Weather Mode Button with Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowWeatherSelector(!showWeatherSelector)}
-            className={`p-3 rounded-full shadow-lg border transition-colors ${
-              weatherMode !== 'none'
-                ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
-                : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
-            }`}
-            title="Weather Mode (2)"
-          >
-            <Cloud size={20} />
-          </button>
-          {/* Weather Selector Dropdown */}
-          {showWeatherSelector && (
-            <>
-              {/* Backdrop to close - covers entire screen */}
-              <div
-                className="fixed inset-0 z-[99]"
-                onClick={() => setShowWeatherSelector(false)}
-              />
-              {/* Dropdown Menu */}
-              <div className={`
-                absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
-                ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
-                backdrop-blur-md
-              `}>
-                <div className="p-2 space-y-1">
-                  {WEATHER_OPTIONS.map((option) => (
-                    <button
-                      key={option.type}
-                      onClick={() => {
-                        setWeatherMode(option.type);
-                        setShowWeatherSelector(false);
-                      }}
-                      className={`
-                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                        transition-all
-                        ${weatherMode === option.type
-                          ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
-                          : isDarkMode
-                            ? 'text-neutral-300 hover:bg-neutral-700'
-                            : 'text-neutral-700 hover:bg-neutral-100'
-                        }
-                      `}
-                    >
-                      <span className="text-lg">{option.emoji}</span>
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Weather Mode Backdrop - rendered outside relative container for proper full-screen coverage */}
+        {showWeatherSelector && (
+          <div
+            className="fixed inset-0 z-[98]"
+            onClick={() => setShowWeatherSelector(false)}
+            onTouchStart={() => setShowWeatherSelector(false)}
+          />
+        )}
+        {/* Weather Mode Button */}
+        <button
+          onClick={() => setShowWeatherSelector(!showWeatherSelector)}
+          className={`p-3 rounded-full shadow-lg border transition-colors ${
+            weatherMode !== 'none'
+              ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
+              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
+          }`}
+          title="Weather Mode (2)"
+        >
+          <Cloud size={20} />
+        </button>
         {hasStarted && (
           <button
-            onClick={resetAll}
+            onClick={() => setShowClearConfirmation(true)}
             className={`p-3 rounded-full shadow-lg border transition-colors ${isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-red-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-red-500'}`}
             title="Clear Text"
           >
@@ -3381,7 +3479,16 @@ export default function App() {
         {/* Symbol Glossary Button - only show when there's STEM content */}
         {hasStarted && segments.length > 0 && (
           <button
-            onClick={() => setShowSymbolGlossary(true)}
+            onClick={() => {
+              if (showSymbolGlossary) {
+                // Close and reset state (same as X button)
+                setShowSymbolGlossary(false);
+                setSymbolGuidePos({ x: 0, y: 0 });
+                setIsSymbolGuideMinimized(false);
+              } else {
+                setShowSymbolGlossary(true);
+              }
+            }}
             className={`p-3 rounded-full shadow-lg border transition-colors ${
               showSymbolGlossary
                 ? 'bg-blue-500 border-blue-600 text-white ring-2 ring-blue-400/50'
@@ -3504,35 +3611,62 @@ export default function App() {
         </div>
       )}
 
-      {/* Symbol Glossary Modal */}
-      {showSymbolGlossary && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSymbolGlossary(false)}>
+      {/* Symbol Glossary Modal - Draggable, No Blur - Hidden in analogy mode */}
+      {showSymbolGlossary && !(viewMode === 'morph' && isHovering) && (
+        <div
+          className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+          style={{
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
+            maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
+            willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
+          }}
+        >
+          {/* Draggable Header */}
           <div
-            className={`relative w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
-            onClick={(e) => e.stopPropagation()}
+            className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDraggingSymbolGuide(true);
+              symbolGuideDragStart.current = { x: e.clientX - symbolGuidePos.x, y: e.clientY - symbolGuidePos.y };
+            }}
           >
-            {/* Header */}
-            <div className={`sticky top-0 px-6 py-4 border-b ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">∑</span>
-                  <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                    Symbol Guide
-                  </h2>
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GripHorizontal size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                <span className="text-xl">∑</span>
+                <h2 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                  Symbol Guide
+                </h2>
+              </div>
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowSymbolGlossary(false)}
-                  className={`p-1.5 rounded-full transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  onClick={() => setIsSymbolGuideMinimized(!isSymbolGuideMinimized)}
+                  className={`p-1.5 rounded transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  title={isSymbolGuideMinimized ? 'Expand' : 'Minimize'}
                 >
-                  <X size={20} />
+                  {isSymbolGuideMinimized ? <Maximize2 size={14} /> : <Minus size={14} />}
+                </button>
+                <button
+                  onClick={() => { setShowSymbolGlossary(false); setSymbolGuidePos({ x: 0, y: 0 }); setIsSymbolGuideMinimized(false); }}
+                  className={`p-1.5 rounded transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-black hover:bg-neutral-100'}`}
+                  title="Close"
+                >
+                  <X size={14} />
                 </button>
               </div>
-              <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+            </div>
+            {!isSymbolGuideMinimized && (
+              <p className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                 Mathematical notation explained in plain English
               </p>
-            </div>
+            )}
+          </div>
 
-            {/* Symbol Grid */}
+          {/* Symbol Grid - only show when not minimized */}
+          {!isSymbolGuideMinimized && (
             <div className="overflow-y-auto max-h-[60vh] p-4">
               {(() => {
                 // Detect which symbols are in the current content
@@ -3594,21 +3728,27 @@ export default function App() {
                         {title}
                       </h3>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {symbols.map(({ symbol, name, meaning }) => (
+                        {symbols.map(({ symbol, name, meaning, simple }) => (
                           <div
                             key={symbol}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                            className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
                           >
-                            <span className={`text-xl font-mono w-8 text-center ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                            <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
                               {symbol}
                             </span>
                             <div className="flex-1 min-w-0">
-                              <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                {name}
-                              </span>
-                              <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                                — {meaning}
-                              </span>
+                              <div>
+                                <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                  {name}
+                                </span>
+                                <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                  — {meaning}
+                                </span>
+                              </div>
+                              {/* Simple explanation */}
+                              <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                💡 {simple}
+                              </p>
                             </div>
                           </div>
                         ))}
@@ -3634,6 +3774,86 @@ export default function App() {
                   </>
                 );
               })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Weather Selector Modal */}
+      {showWeatherSelector && (
+        <>
+          {/* Backdrop to close - covers entire screen */}
+          <div
+            className="fixed inset-0 z-[100]"
+            onClick={() => setShowWeatherSelector(false)}
+          />
+          {/* Dropdown Menu - positioned near bottom-right where button is */}
+          <div className={`
+            fixed bottom-20 right-6 w-44 rounded-xl overflow-hidden shadow-2xl z-[101]
+            ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
+            backdrop-blur-md
+          `}>
+            <div className="p-2 space-y-1">
+              {WEATHER_OPTIONS.map((option) => (
+                <button
+                  key={option.type}
+                  onClick={() => {
+                    setWeatherMode(option.type);
+                    setShowWeatherSelector(false);
+                  }}
+                  className={`
+                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                    transition-all
+                    ${weatherMode === option.type
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
+                      : isDarkMode
+                        ? 'text-neutral-300 hover:bg-neutral-700'
+                        : 'text-neutral-700 hover:bg-neutral-100'
+                    }
+                  `}
+                >
+                  <span className="text-lg">{option.emoji}</span>
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Clear Text Confirmation Modal */}
+      {showClearConfirmation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowClearConfirmation(false)}>
+          <div
+            className={`relative w-full max-w-sm mx-4 p-6 rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className={`text-lg font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+              Clear All Content?
+            </h2>
+            <p className={`text-sm mb-6 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+              This will clear your current search results and reset the view. Your search history will be preserved.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirmation(false)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                    : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  resetAll();
+                  setShowClearConfirmation(false);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Clear
+              </button>
             </div>
           </div>
         </div>
@@ -3728,12 +3948,9 @@ export default function App() {
                     <span className="text-sm font-semibold text-white">Study Mode</span>
                   </div>
                   <button
-                    onClick={() => {
-                      setAmbianceMode('none');
-                      setNoiseType('none');
-                    }}
-                    className="p-1.5 hover:bg-red-500/20 rounded-lg text-neutral-400 hover:text-red-400 transition-colors"
-                    title="Exit Study Mode"
+                    onClick={() => setShowStudyControls(false)}
+                    className="p-1.5 hover:bg-neutral-700 rounded-lg text-neutral-400 hover:text-white transition-colors"
+                    title="Close"
                   >
                     <X size={18} />
                   </button>
@@ -3751,12 +3968,13 @@ export default function App() {
                         <button
                           key={type}
                           onClick={() => setNoiseType(type)}
-                          className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                          className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize flex items-center justify-center gap-1 ${
                             noiseType === type
                               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                               : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                           }`}
                         >
+                          {noiseType === type && <Check size={12} />}
                           {type === 'none' ? 'Off' : type}
                         </button>
                       ))}
@@ -3833,10 +4051,12 @@ export default function App() {
                                 }`}
                               >
                                 <div
-                                  className="w-5 h-5 rounded-full border border-neutral-600"
+                                  className="w-5 h-5 rounded-full border border-neutral-600 flex items-center justify-center"
                                   style={{ backgroundColor: preset.color }}
-                                />
-                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                                >
+                                  {lampColor === preset.id && <Check size={12} className="text-neutral-800" />}
+                                </div>
+                                <span className="text-xs text-neutral-400">{preset.label}</span>
                               </button>
                             ))}
                           </div>
@@ -3872,12 +4092,13 @@ export default function App() {
                               <button
                                 key={level}
                                 onClick={() => setNightIntensity(level)}
-                                className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize ${
+                                className={`px-2 py-1.5 text-xs rounded-lg transition-all capitalize flex items-center justify-center gap-1 ${
                                   nightIntensity === level
                                     ? 'bg-indigo-600 text-white'
                                     : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
                                 }`}
                               >
+                                {nightIntensity === level && <Check size={12} />}
                                 {level}
                               </button>
                             ))}
@@ -3904,7 +4125,7 @@ export default function App() {
                                   className="w-5 h-5 rounded-full border border-neutral-600"
                                   style={{ backgroundColor: preset.color }}
                                 />
-                                <span className="text-[10px] text-neutral-400">{preset.label}</span>
+                                <span className="text-xs text-neutral-400">{preset.label}</span>
                               </button>
                             ))}
                           </div>
@@ -3935,6 +4156,7 @@ export default function App() {
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
           renderRichText={renderRichText}
+          onFetchFoundationalMapping={generateFoundationalMapping}
         />
       )}
 

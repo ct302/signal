@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, History, Moon, Sun, Loader2, Home, Lock } from 'lucide-react';
+import { Sparkles, History, Moon, Sun, Loader2, Home, Lock, Mic, MicOff } from 'lucide-react';
 import { Settings } from './Settings';
 
 interface HeaderProps {
@@ -18,6 +18,10 @@ interface HeaderProps {
   onSubmit: () => void;
   isViewingFromHistory?: boolean;
   onReturnHome?: () => void;
+  // Voice input props
+  isListening?: boolean;
+  onMicClick?: () => void;
+  isMicSupported?: boolean;
 }
 
 /**
@@ -47,7 +51,10 @@ export const Header: React.FC<HeaderProps> = ({
   onDomainClick,
   onSubmit,
   isViewingFromHistory = false,
-  onReturnHome
+  onReturnHome,
+  isListening = false,
+  onMicClick,
+  isMicSupported = false
 }) => {
   const [isHoveringDomain, setIsHoveringDomain] = useState(false);
   const shortDomain = getShortDomainName(analogyDomain);
@@ -61,13 +68,13 @@ export const Header: React.FC<HeaderProps> = ({
         isImmersive ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       } ${isDarkMode ? 'bg-neutral-900/80 border-neutral-800' : 'bg-white/80 border-neutral-200'}`}
     >
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div className="max-w-4xl mx-auto px-3 md:px-4 py-3 flex items-center gap-2 md:gap-3">
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onDomainClick}
             onMouseEnter={() => setIsHoveringDomain(true)}
             onMouseLeave={() => setIsHoveringDomain(false)}
-            className={`flex items-center gap-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`flex items-center gap-2 py-2 min-h-touch rounded-full text-sm font-medium transition-all duration-200 ${
               isHoveringDomain ? 'px-3' : 'px-2'
             } ${
               isDarkMode
@@ -89,14 +96,14 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setShowHistory(!showHistory)}
             data-history-toggle
-            className={`p-2 rounded-full transition-colors relative ${
+            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors relative ${
               isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}
             title="History"
           >
             <History size={18} />
             {historyCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 {historyCount}
               </span>
             )}
@@ -104,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-full transition-colors ${
+            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors ${
               isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
             }`}
             title="Toggle Theme"
@@ -155,12 +162,29 @@ export const Header: React.FC<HeaderProps> = ({
                 onKeyDown={(e) => e.key === 'Enter' && !isLoading && onSubmit()}
                 disabled={isLoading}
                 placeholder="What do you want to learn about?"
-                className={`w-full pl-4 pr-12 py-2.5 rounded-xl border-2 transition-all outline-none text-sm disabled:opacity-60 disabled:cursor-not-allowed ${
+                className={`w-full pl-4 ${isMicSupported ? 'pr-24' : 'pr-12'} py-2.5 rounded-xl border-2 transition-all outline-none text-sm disabled:opacity-60 disabled:cursor-not-allowed ${
                   isDarkMode
                     ? 'bg-neutral-800 border-neutral-700 focus:border-blue-500 text-white placeholder-neutral-500'
                     : 'border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
                 }`}
               />
+              {/* Microphone button */}
+              {isMicSupported && onMicClick && (
+                <button
+                  onClick={onMicClick}
+                  disabled={isLoading}
+                  className={`absolute right-14 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                    isListening
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : isDarkMode
+                        ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700'
+                        : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
+                  } disabled:opacity-50`}
+                  title={isListening ? 'Stop listening' : 'Voice input'}
+                >
+                  {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+              )}
               <button
                 onClick={onSubmit}
                 disabled={isLoading || !topic.trim()}

@@ -34,7 +34,7 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6 relative">
+    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4 md:p-6 relative">
       {/* Disambiguation Modal */}
       {disambiguation && disambiguation.type === 'domain' && (
         <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
@@ -85,11 +85,11 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
       {/* Main Content */}
       <div className="max-w-lg w-full space-y-8 text-center">
         <div className="space-y-2">
-          <h1 className="text-5xl font-black tracking-tight text-neutral-900">Signal</h1>
-          <p className="text-neutral-500 text-lg">Learn anything through powerful analogies</p>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-neutral-900">Signal</h1>
+          <p className="text-neutral-500 text-base md:text-lg">Learn anything through powerful analogies</p>
         </div>
 
-        <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-8 space-y-6">
+        <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 md:p-8 space-y-6">
           <div className="space-y-2">
             <label className="text-sm font-bold text-neutral-700 uppercase tracking-wider">
               Choose Your Analogy Domain
@@ -105,7 +105,7 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
               onChange={(e) => setTempDomainInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSetDomain()}
               placeholder="e.g., NFL, Cooking, Music, Video Games..."
-              className="w-full pl-12 pr-4 py-4 text-lg rounded-xl border-2 border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+              className="w-full pl-12 pr-4 py-3 md:py-4 text-base md:text-lg rounded-xl border-2 border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
               autoFocus
             />
           </div>
@@ -115,7 +115,7 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
           <button
             onClick={() => handleSetDomain()}
             disabled={isSettingDomain || !tempDomainInput.trim()}
-            className="w-full bg-neutral-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-neutral-900 text-white py-3 md:py-4 rounded-xl font-bold text-base md:text-lg hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-h-touch"
           >
             {isSettingDomain ? (
               <Loader2 className="animate-spin" size={20} />

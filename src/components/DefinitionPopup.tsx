@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
-import { Position, Size, ConceptMapItem } from '../types';
-import { SYMBOL_GLOSSARY } from '../constants';
+import { Position, Size, ConceptMapItem, SymbolGuideEntry } from '../types';
 
 interface DefinitionPopupProps {
   selectedTerm: string;
@@ -17,6 +16,7 @@ interface DefinitionPopupProps {
   setIsDefColorMode: React.Dispatch<React.SetStateAction<boolean>>;
   isMobile: boolean;
   copiedId: string | null;
+  symbolGuide?: SymbolGuideEntry[];  // API-provided context-aware symbol explanations
   onClose: () => void;
   onStartDrag: (e: React.MouseEvent, target: string) => void;
   onStartResize: (e: React.MouseEvent, target: string) => void;
@@ -51,6 +51,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   setIsDefColorMode,
   isMobile,
   copiedId,
+  symbolGuide = [],  // API-provided context-aware symbols
   onClose,
   onStartDrag,
   onStartResize,
@@ -62,36 +63,6 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
 }) => {
   const [textScale, setTextScale] = useState(1);
   const [showGlossary, setShowGlossary] = useState(false);
-
-  // Detect symbols in the definition text - checks both Unicode and LaTeX commands
-  const detectedSymbols = useMemo(() => {
-    if (!defText) return [];
-    const found: Array<{ symbol: string; name: string; meaning: string }> = [];
-    const seen = new Set<string>();
-
-    for (const entry of SYMBOL_GLOSSARY) {
-      if (seen.has(entry.symbol)) continue;
-
-      // Check if Unicode symbol is present
-      let isFound = defText.includes(entry.symbol);
-
-      // Check if any LaTeX command variant is present
-      if (!isFound) {
-        for (const latexCmd of entry.latex) {
-          if (defText.includes(latexCmd)) {
-            isFound = true;
-            break;
-          }
-        }
-      }
-
-      if (isFound) {
-        seen.add(entry.symbol);
-        found.push({ symbol: entry.symbol, name: entry.name, meaning: entry.meaning });
-      }
-    }
-    return found;
-  }, [defText]);
 
   const style: React.CSSProperties = isMobile
     ? {
@@ -135,21 +106,21 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             {/* Text Scale Controls */}
             <button
               onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.max(0.8, s - 0.1)); }}
-              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
               title="Decrease text size"
             >
-              <ZoomOut size={12} />
+              <ZoomOut size={14} />
             </button>
-            <span className="text-[10px] text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
+            <span className="text-xs text-neutral-500 w-8 text-center">{Math.round(textScale * 100)}%</span>
             <button
               onClick={(e) => { e.stopPropagation(); setTextScale(s => Math.min(1.5, s + 0.1)); }}
-              className="p-1 hover:text-white hover:bg-neutral-800 rounded"
+              className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white hover:bg-neutral-800 rounded"
               title="Increase text size"
             >
-              <ZoomIn size={12} />
+              <ZoomIn size={14} />
             </button>
-            <button onClick={onClose} className="hover:text-white ml-1">
-              <X size={14} />
+            <button onClick={onClose} className="p-2 min-w-touch min-h-touch flex items-center justify-center hover:text-white ml-1">
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -176,33 +147,38 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           )}
         </div>
         {onWordClick && !isLoadingDef && (
-          <div className="text-[9px] text-neutral-600 mt-1 text-center">
+          <div className="text-xs text-neutral-600 mt-1 text-center">
             Click any word for a nested definition
           </div>
         )}
 
-        {/* Symbol Glossary - shows when math symbols detected */}
-        {!isLoadingDef && detectedSymbols.length > 0 && (
+        {/* Symbol Guide - API-provided context-aware symbol explanations */}
+        {!isLoadingDef && symbolGuide.length > 0 && (
           <div className="mt-2 pt-2 border-t border-neutral-800">
             <button
               onClick={() => setShowGlossary(!showGlossary)}
-              className="flex items-center gap-2 text-[10px] text-blue-400 hover:text-blue-300 transition-colors w-full"
+              className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors w-full"
             >
               <BookOpen size={12} />
               <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
-              <span className="text-neutral-600">({detectedSymbols.length})</span>
+              <span className="text-neutral-600">({symbolGuide.length})</span>
               {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
             </button>
             {showGlossary && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {detectedSymbols.map(({ symbol, name, meaning }) => (
+              <div className="mt-2 space-y-2">
+                {symbolGuide.map(({ symbol, name, meaning, simple }) => (
                   <div
                     key={symbol}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-[10px]"
-                    title={meaning}
+                    className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
                   >
-                    <span className="text-blue-300 font-mono text-xs">{symbol}</span>
-                    <span className="text-neutral-400">{name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-300 font-mono">{symbol}</span>
+                      <span className="text-white font-medium">{name}</span>
+                    </div>
+                    <div className="text-neutral-400 text-xs mt-0.5">{meaning}</div>
+                    {simple && (
+                      <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -222,7 +198,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                   onEliClick(level);
                 }}
                 disabled={isLoadingDef}
-                className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
+                className={`flex-1 px-2 py-2 min-h-touch text-xs font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
                   defComplexity === level
                     ? 'bg-neutral-700 text-white'
                     : 'text-neutral-500 hover:text-neutral-300'
