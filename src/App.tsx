@@ -3446,6 +3446,14 @@ export default function App() {
         >
           <Coffee size={20} />
         </button>
+        {/* Weather Mode Backdrop - rendered outside relative container for proper full-screen coverage */}
+        {showWeatherSelector && (
+          <div
+            className="fixed inset-0 z-[98]"
+            onClick={() => setShowWeatherSelector(false)}
+            onTouchStart={() => setShowWeatherSelector(false)}
+          />
+        )}
         {/* Weather Mode Button with Dropdown */}
         <div className="relative">
           <button
@@ -3461,45 +3469,36 @@ export default function App() {
           </button>
           {/* Weather Selector Dropdown */}
           {showWeatherSelector && (
-            <>
-              {/* Invisible backdrop to close on tap anywhere */}
-              <div
-                className="fixed inset-0 z-[99]"
-                onClick={() => setShowWeatherSelector(false)}
-                onTouchStart={() => setShowWeatherSelector(false)}
-              />
-              {/* Dropdown Menu */}
-              <div className={`
-                absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
-                ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
-                backdrop-blur-md
-              `}>
-                <div className="p-2 space-y-1">
-                  {WEATHER_OPTIONS.map((option) => (
-                    <button
-                      key={option.type}
-                      onClick={() => {
-                        setWeatherMode(option.type);
-                        setShowWeatherSelector(false);
-                      }}
-                      className={`
-                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                        transition-all
-                        ${weatherMode === option.type
-                          ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
-                          : isDarkMode
-                            ? 'text-neutral-300 hover:bg-neutral-700'
-                            : 'text-neutral-700 hover:bg-neutral-100'
-                        }
-                      `}
-                    >
-                      <span className="text-lg">{option.emoji}</span>
-                      <span>{option.label}</span>
+            <div className={`
+              absolute bottom-full right-0 mb-2 w-44 rounded-xl overflow-hidden shadow-2xl z-[100]
+              ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
+              backdrop-blur-md
+            `}>
+              <div className="p-2 space-y-1">
+                {WEATHER_OPTIONS.map((option) => (
+                  <button
+                    key={option.type}
+                    onClick={() => {
+                      setWeatherMode(option.type);
+                      setShowWeatherSelector(false);
+                    }}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                      transition-all
+                      ${weatherMode === option.type
+                        ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
+                        : isDarkMode
+                          ? 'text-neutral-300 hover:bg-neutral-700'
+                          : 'text-neutral-700 hover:bg-neutral-100'
+                      }
+                    `}
+                  >
+                    <span className="text-lg">{option.emoji}</span>
+                    <span>{option.label}</span>
                     </button>
                   ))}
                 </div>
               </div>
-            </>
           )}
         </div>
         {hasStarted && (
