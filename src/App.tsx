@@ -20,7 +20,6 @@ import {
   BookOpen,
   HelpCircle,
   X,
-  Cloud,
   Coffee,
   Network,
   Columns,
@@ -107,10 +106,7 @@ import {
   IsomorphicDualPane,
   ProximityWarningModal,
   MasteryMode,
-  MasterySessionCache,
-  WeatherMode,
-  WeatherType,
-  WEATHER_OPTIONS
+  MasterySessionCache
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -348,8 +344,6 @@ export default function App() {
   // Ambiance Mode State
   const [ambianceMode, setAmbianceMode] = useState<'none' | 'study'>('none');
   const [showStudyControls, setShowStudyControls] = useState(true);
-  const [weatherMode, setWeatherMode] = useState<WeatherType>('none');
-  const [showWeatherSelector, setShowWeatherSelector] = useState(false);
   const [showSymbolGlossary, setShowSymbolGlossary] = useState(false);
   const [symbolGuidePos, setSymbolGuidePos] = useState({ x: 0, y: 0 });
   const [isSymbolGuideMinimized, setIsSymbolGuideMinimized] = useState(false);
@@ -487,7 +481,9 @@ export default function App() {
           .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
-        narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || "")))
+        narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || ""))),
+        // Intuition tattoo - the memorable one-liner
+        tattoo: cleanText(s.tattoo || "")
       })));
     }
 
@@ -1364,12 +1360,6 @@ export default function App() {
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
-          break;
-        case '2':
-          // Weather mode toggle (cycles through: none -> sunny -> rain -> snow -> none)
-          const weatherCycle: WeatherType[] = ['none', 'sunny', 'rain', 'snow'];
-          const currentIndex = weatherCycle.indexOf(weatherMode);
-          setWeatherMode(weatherCycle[(currentIndex + 1) % weatherCycle.length]);
           break;
       }
     };
@@ -3035,6 +3025,47 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Intuition Tattoo - The memorable one-liner */}
+                {segments.length > 0 && segments[0].tattoo && isAnalogyVisualMode && (
+                  <div className={`mx-4 my-3 p-4 rounded-xl border-2 border-dashed ${
+                    isDarkMode
+                      ? 'bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-purple-500/40'
+                      : 'bg-gradient-to-r from-purple-50 to-blue-50 border-purple-300'
+                  }`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1">
+                        <span className="text-2xl">💡</span>
+                        <p className={`text-lg italic font-medium leading-relaxed ${
+                          isDarkMode ? 'text-purple-200' : 'text-purple-900'
+                        }`}>
+                          "{segments[0].tattoo}"
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(segments[0].tattoo || '');
+                          // Show brief feedback - reuse copiedId pattern
+                          setCopiedId('tattoo');
+                          setTimeout(() => setCopiedId(null), 2000);
+                        }}
+                        className={`shrink-0 p-2 rounded-lg transition-all ${
+                          copiedId === 'tattoo'
+                            ? 'bg-green-500 text-white'
+                            : isDarkMode
+                              ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                              : 'bg-white text-neutral-600 hover:bg-neutral-100 shadow-sm'
+                        }`}
+                        title="Copy insight"
+                      >
+                        {copiedId === 'tattoo' ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
+                    </div>
+                    <p className={`mt-2 text-xs ${isDarkMode ? 'text-purple-400/70' : 'text-purple-600/70'}`}>
+                      Your intuition tattoo — share it, remember it
+                    </p>
+                  </div>
+                )}
+
                 {/* Content Footer - Hide when in Essence mode */}
                 {!(showCondensedView && isFirstPrinciplesMode) && (
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
@@ -3447,26 +3478,6 @@ export default function App() {
         >
           <Coffee size={20} />
         </button>
-        {/* Weather Mode Backdrop - rendered outside relative container for proper full-screen coverage */}
-        {showWeatherSelector && (
-          <div
-            className="fixed inset-0 z-[98]"
-            onClick={() => setShowWeatherSelector(false)}
-            onTouchStart={() => setShowWeatherSelector(false)}
-          />
-        )}
-        {/* Weather Mode Button */}
-        <button
-          onClick={() => setShowWeatherSelector(!showWeatherSelector)}
-          className={`p-3 rounded-full shadow-lg border transition-colors ${
-            weatherMode !== 'none'
-              ? 'bg-gradient-to-r from-violet-500 to-purple-500 border-violet-600 text-white ring-2 ring-violet-400/50'
-              : (isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-violet-400' : 'bg-white border-neutral-200 text-neutral-500 hover:text-violet-500')
-          }`}
-          title="Weather Mode (2)"
-        >
-          <Cloud size={20} />
-        </button>
         {hasStarted && (
           <button
             onClick={() => setShowClearConfirmation(true)}
@@ -3585,10 +3596,6 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>1</kbd>
                   <span>Study Mode</span>
-                </div>
-                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>2</kbd>
-                  <span>Weather Mode</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Actions</div>
@@ -3777,48 +3784,6 @@ export default function App() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Weather Selector Modal */}
-      {showWeatherSelector && (
-        <>
-          {/* Backdrop to close - covers entire screen */}
-          <div
-            className="fixed inset-0 z-[100]"
-            onClick={() => setShowWeatherSelector(false)}
-          />
-          {/* Dropdown Menu - positioned near bottom-right where button is */}
-          <div className={`
-            fixed bottom-20 right-6 w-44 rounded-xl overflow-hidden shadow-2xl z-[101]
-            ${isDarkMode ? 'bg-neutral-800/95 border border-neutral-700' : 'bg-white/95 border border-neutral-200'}
-            backdrop-blur-md
-          `}>
-            <div className="p-2 space-y-1">
-              {WEATHER_OPTIONS.map((option) => (
-                <button
-                  key={option.type}
-                  onClick={() => {
-                    setWeatherMode(option.type);
-                    setShowWeatherSelector(false);
-                  }}
-                  className={`
-                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                    transition-all
-                    ${weatherMode === option.type
-                      ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white'
-                      : isDarkMode
-                        ? 'text-neutral-300 hover:bg-neutral-700'
-                        : 'text-neutral-700 hover:bg-neutral-100'
-                    }
-                  `}
-                >
-                  <span className="text-lg">{option.emoji}</span>
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
       )}
 
       {/* Clear Text Confirmation Modal */}
@@ -4139,11 +4104,6 @@ export default function App() {
           )}
         </>
       )}
-
-      {/* Weather Mode */}
-      <WeatherMode
-        weather={weatherMode}
-      />
 
       {/* Constellation Mode */}
       {isConstellationMode && (

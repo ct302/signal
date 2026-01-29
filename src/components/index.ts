@@ -12,5 +12,3 @@ export * from './ConstellationMode';
 export * from './IsomorphicDualPane';
 export * from './ProximityWarningModal';
 export * from './MasteryMode';
-export * from './WeatherMode';
-export { WEATHER_OPTIONS } from './WeatherMode';

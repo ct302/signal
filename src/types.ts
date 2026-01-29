@@ -11,6 +11,7 @@ export interface Segment {
   tech: string;
   analogy: string;
   narrative?: string;
+  tattoo?: string; // Memorable one-liner insight - the "intuition tattoo" users remember and share
 }
 
 export interface ConceptMapItem {
