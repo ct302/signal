@@ -1505,30 +1505,71 @@ Return ONLY this JSON (no markdown):
       });
     }
 
-    // Fallback: generate basic keywords from concept map
-    return topConcepts.map((c, idx) => ({
-      id: idx,
-      term: c.tech_term,
-      analogyTerm: c.analogy_term,
-      techDefinition3: 'Core concept here',
-      analogyDefinition3: 'Core meaning here',
-      techDefinition6: 'The fundamental essence of this concept',
-      analogyDefinition6: 'The fundamental essence in domain terms',
-      importance: c.importance
-    }));
+    // Smart fallback: generate definitions from existing concept map data
+    return topConcepts.map((c, idx) => {
+      // Use existing six_word_definition or create from tech_term
+      const sixWordDef = c.six_word_definition || `Core concept of ${c.tech_term} explained`;
+      const words = sixWordDef.split(/\s+/);
+      const threeWordDef = words.slice(0, 3).join(' ') || c.tech_term;
+
+      // Derive analogy definitions from narrative_mapping if available
+      let analogyDef6 = '';
+      let analogyDef3 = '';
+
+      if (c.narrative_mapping) {
+        // Extract first clause from narrative_mapping
+        const firstClause = c.narrative_mapping.split(/[.,]/)[0].trim();
+        const clauseWords = firstClause.split(/\s+/);
+        analogyDef6 = clauseWords.slice(0, 6).join(' ') || `${c.analogy_term} in action here`;
+        analogyDef3 = clauseWords.slice(0, 3).join(' ') || c.analogy_term;
+      } else {
+        // Fallback to analogy_term based definitions
+        analogyDef6 = `The ${c.analogy_term} equivalent concept explained`;
+        analogyDef3 = c.analogy_term.split(/\s+/).slice(0, 3).join(' ') || c.analogy_term;
+      }
+
+      return {
+        id: idx,
+        term: c.tech_term,
+        analogyTerm: c.analogy_term,
+        techDefinition3: threeWordDef,
+        analogyDefinition3: analogyDef3,
+        techDefinition6: sixWordDef,
+        analogyDefinition6: analogyDef6,
+        importance: c.importance
+      };
+    });
   } catch (error) {
     console.error('Failed to generate mastery keywords:', error);
-    // Return basic fallback
-    return topConcepts.slice(0, 10).map((c, idx) => ({
-      id: idx,
-      term: c.tech_term,
-      analogyTerm: c.analogy_term,
-      techDefinition3: 'Core concept here',
-      analogyDefinition3: 'Core meaning here',
-      techDefinition6: 'The fundamental essence of this concept',
-      analogyDefinition6: 'The fundamental essence in domain terms',
-      importance: c.importance
-    }));
+    // Smart fallback: use existing concept map data instead of placeholders
+    return topConcepts.slice(0, 10).map((c, idx) => {
+      const sixWordDef = c.six_word_definition || `Core concept of ${c.tech_term} explained`;
+      const threeWordDef = sixWordDef.split(/\s+/).slice(0, 3).join(' ') || c.tech_term;
+
+      let analogyDef6 = '';
+      let analogyDef3 = '';
+
+      if (c.narrative_mapping) {
+        const firstClause = c.narrative_mapping.split(/[.,]/)[0].trim();
+        const clauseWords = firstClause.split(/\s+/);
+        analogyDef6 = clauseWords.slice(0, 6).join(' ') || `${c.analogy_term} in action`;
+        analogyDef3 = clauseWords.slice(0, 3).join(' ') || c.analogy_term;
+      } else {
+        analogyDef6 = `The ${c.analogy_term} equivalent explained`;
+        analogyDef3 = c.analogy_term.split(/\s+/).slice(0, 3).join(' ') || c.analogy_term;
+      }
+
+      return {
+        id: idx,
+        term: c.tech_term,
+        analogyTerm: c.analogy_term,
+        techDefinition3: threeWordDef,
+        analogyDefinition3: analogyDef3,
+        techDefinition6: sixWordDef,
+        analogyDefinition6: analogyDef6,
+        importance: c.importance
+      };
+    });
   }
 };
 
@@ -1829,7 +1870,8 @@ export const generateMasteryStory = async (
   domain: string,
   stage: MasteryStage,
   keywords: MasteryKeyword[],
-  previousStory?: string // For continuity in stages 2-3
+  previousStory?: string, // For continuity in stages 2-3
+  analogyText?: string // Fallback content for Stage 1 if API fails
 ): Promise<MasteryStory> => {
   // Web search is ALWAYS enabled for Mastery Mode to prevent hallucination
   // We fetch 8 sources to synthesize into factually accurate narratives
@@ -2065,17 +2107,49 @@ FACT-CHECKING RULES:
 Your story must read like a ${shortDomain} documentary featuring REAL people and REAL events.
 Do NOT write generic scenarios - use the SPECIFIC historical content from search results.`;
 
-    const storyContent = await callApi(prompt, {
-      webSearch: true, // ALWAYS enable web search for Mastery Mode
-      searchPrompt: searchPromptText,
-      maxResults: 8 // Fetch 8 sources for comprehensive factual grounding
-    });
+    // Retry logic for short responses
+    const MIN_WORD_COUNT: Record<MasteryStage, number> = { 1: 100, 2: 100, 3: 200 };
+    const MAX_RETRIES = 2;
 
-    // Clean up the response
-    const cleanContent = storyContent
-      .trim()
-      .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
-      .replace(/^Story:\s*/i, ''); // Remove "Story:" prefix if any
+    let cleanContent = '';
+    let attempts = 0;
+
+    while (attempts < MAX_RETRIES) {
+      attempts++;
+
+      const storyContent = await callApi(prompt, {
+        webSearch: true, // ALWAYS enable web search for Mastery Mode
+        searchPrompt: searchPromptText,
+        maxResults: 8 // Fetch 8 sources for comprehensive factual grounding
+      });
+
+      // Clean up the response
+      cleanContent = storyContent
+        .trim()
+        .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
+        .replace(/^Story:\s*/i, ''); // Remove "Story:" prefix if any
+
+      const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
+      const minWords = MIN_WORD_COUNT[stage];
+
+      if (wordCount >= minWords) {
+        console.log(`[generateMasteryStory] Stage ${stage} success: ${wordCount} words (min: ${minWords})`);
+        break;
+      }
+
+      console.warn(`[generateMasteryStory] Stage ${stage} attempt ${attempts}: only ${wordCount} words (min: ${minWords}), retrying...`);
+
+      // Brief pause before retry
+      if (attempts < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // If still too short after retries, log warning but continue
+    const finalWordCount = cleanContent.split(/\s+/).filter(Boolean).length;
+    if (finalWordCount < MIN_WORD_COUNT[stage]) {
+      console.warn(`[generateMasteryStory] Stage ${stage}: final word count ${finalWordCount} below minimum ${MIN_WORD_COUNT[stage]}, using anyway`);
+    }
 
     const highlightedTerms = stage === 1
       ? []
@@ -2091,10 +2165,42 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
     };
   } catch (error) {
     console.error('Failed to generate mastery story:', error);
-    // Return fallback story
+
+    // Tiered fallback strategy using existing content
+    const visibleKeywords = stage === 2 ? keywords.slice(0, 6) : keywords;
+
+    // Stage 1: Use existing analogyText (real, quality content!)
+    if (stage === 1 && analogyText && analogyText.trim().length > 100) {
+      console.log('[generateMasteryStory] Stage 1 fallback: using existing analogyText');
+      return {
+        stage: 1,
+        content: analogyText.trim(),
+        highlightedTerms: [],
+        generatedAt: new Date()
+      };
+    }
+
+    // Stage 2-3: Build on previous story if available
+    if (stage > 1 && previousStory && previousStory.trim().length > 100) {
+      console.log(`[generateMasteryStory] Stage ${stage} fallback: expanding on previous story`);
+      const keywordList = visibleKeywords.map(k => `**${k.analogyTerm}** (${k.term})`).join(', ');
+      const expansionNote = stage === 2
+        ? `\n\nNow, let's introduce the key players: ${keywordList}. These concepts map directly to what we just explored.`
+        : `\n\nLet's go deeper into the technical connections: ${keywordList}. Each of these concepts has precise meaning that mirrors the ${domain} dynamics we've been following.`;
+
+      return {
+        stage,
+        content: previousStory.trim() + expansionNote,
+        highlightedTerms: visibleKeywords.map(k => k.term),
+        generatedAt: new Date()
+      };
+    }
+
+    // Final fallback: Error marker for component to handle
+    console.error('[generateMasteryStory] No fallback content available - returning error marker');
     return {
       stage,
-      content: `Imagine ${topic} as a ${domain} scenario. The fundamental principles work similarly to what you already know from ${domain}.`,
+      content: '[GENERATION_FAILED] We couldn\'t generate the story. Please try regenerating or selecting a different topic.',
       highlightedTerms: [],
       generatedAt: new Date()
     };

@@ -432,19 +432,24 @@ const StoryCard: React.FC<{
 
   // Render story with importance-based styling
   const renderStoryWithImportance = () => {
-    if (!story || !story.content || story.content.trim().length === 0) {
-      // Show empty state with generate button
+    // Check for generation failure marker
+    const isGenerationFailed = story?.content?.includes('[GENERATION_FAILED]');
+
+    if (!story || !story.content || story.content.trim().length === 0 || isGenerationFailed) {
+      // Show empty/error state with generate button
       return (
         <div className="flex flex-col items-center justify-center py-8 gap-4">
           <p className={`text-center ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-            Story not available. Click below to generate.
+            {isGenerationFailed
+              ? 'Story generation failed. Please try regenerating.'
+              : 'Story not available. Click below to generate.'}
           </p>
           <button
             onClick={onRegenerate}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium"
           >
             <RotateCcw size={16} />
-            Generate Story
+            {isGenerationFailed ? 'Regenerate Story' : 'Generate Story'}
           </button>
         </div>
       );
@@ -2013,7 +2018,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
 
         // Generate the Stage 1 story first (with validation)
         setGenerationPhase('generating');
-        let story = await generateMasteryStory(topic, domain, 1, keywords);
+        let story = await generateMasteryStory(topic, domain, 1, keywords, undefined, analogyText);
 
         // Retry once if story content is empty (rare API edge case)
         if (!story?.content || story.content.trim().length === 0) {
@@ -2021,7 +2026,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
           setGenerationPhase('retrying');
           setValidationAttempts(2);
           await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause before retry
-          story = await generateMasteryStory(topic, domain, 1, keywords);
+          story = await generateMasteryStory(topic, domain, 1, keywords, undefined, analogyText);
         }
 
         // Validate the initial story
@@ -2034,7 +2039,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
             if (validation.severity === 'major') {
               setGenerationPhase('retrying');
               setValidationAttempts(2);
-              story = await generateMasteryStory(topic, domain, 1, keywords);
+              story = await generateMasteryStory(topic, domain, 1, keywords, undefined, analogyText);
             }
           }
         }
@@ -2104,7 +2109,8 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
         domain,
         stage,
         keywords,
-        previousStoryContent
+        previousStoryContent,
+        analogyText
       );
 
       // Phase 2: Validate
