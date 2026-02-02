@@ -61,10 +61,11 @@ export const CONCEPT_COLORS = [
   'text-indigo-600', 'text-rose-600', 'text-teal-600', 'text-amber-600'
 ];
 
+// Background colors with opacity - works well in both light and dark modes
 export const CONCEPT_BG_COLORS = [
-  'bg-red-200', 'bg-blue-200', 'bg-emerald-200', 'bg-purple-200',
-  'bg-orange-200', 'bg-cyan-200', 'bg-pink-200', 'bg-lime-200',
-  'bg-indigo-200', 'bg-rose-200', 'bg-teal-200', 'bg-amber-200'
+  'bg-red-500/20', 'bg-blue-500/20', 'bg-emerald-500/20', 'bg-purple-500/20',
+  'bg-orange-500/20', 'bg-cyan-500/20', 'bg-pink-500/20', 'bg-lime-500/20',
+  'bg-indigo-500/20', 'bg-rose-500/20', 'bg-teal-500/20', 'bg-amber-500/20'
 ];
 
 // Quick start domains - full list (randomized subset shown to users)

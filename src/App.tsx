@@ -2198,12 +2198,12 @@ export default function App() {
 
     let classes = "";
     if (isImportant && isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
-      if (mode === 'heatmap') {
-        classes = heatmapColorClass;
-        style.backgroundColor = undefined;
-      } else {
-        classes = segmentColorClass;
-      }
+      // Option A: Color-matched backgrounds - concept terms get BOTH rainbow text AND matching background
+      // This creates the layered effect: background heat map + rainbow text on top
+      classes = `${segmentColorClass} ${heatmapColorClass}`;
+      style.backgroundColor = undefined; // Let Tailwind handle the background
+      style.padding = '0 2px';
+      style.borderRadius = '4px';
     }
 
     let contentToRender = item.text;
