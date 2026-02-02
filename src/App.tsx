@@ -622,7 +622,23 @@ export default function App() {
         mnemonic: mnemonicData
       });
     } else {
-      setCondensedData(null);
+      // Fallback: Generate basic condensed data from context if available
+      // This ensures Essence mode is still accessible even if API doesn't return condensed
+      if (context) {
+        const fallbackWhat = context.header
+          ? `${context.header} - a concept worth understanding deeply.`
+          : `${topicName} explained through analogy.`;
+        const fallbackWhy = context.why || context.real_world || context.realWorld || 'Understanding this concept opens doors to deeper learning.';
+
+        setCondensedData({
+          what: stripMathSymbols(cleanText(fixUnicode(fallbackWhat))),
+          why: stripMathSymbols(cleanText(fixUnicode(fallbackWhy))),
+          bullets: [], // No bullets in fallback
+          mnemonic: undefined
+        });
+      } else {
+        setCondensedData(null);
+      }
     }
 
     // Parse symbol guide (API-generated context-aware symbol explanations)
