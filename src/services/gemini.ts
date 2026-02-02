@@ -655,7 +655,11 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "tech": "A single sentence or concept from the technical explanation",
       "analogy": "The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms",
       "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon",
-      "tattoo": "A punchy, memorable one-liner (under 12 words) that captures the core insight in quotable form. This is the 'intuition tattoo' - the shareable insight that sticks forever. Format: '[Tech concept] is like [${shortDomain} analogy]' or similar memorable phrasing."
+      "intuitions": [
+        "First memorable one-liner (under 12 words). Format: '[Tech concept] is like [${shortDomain} analogy]'",
+        "Second memorable one-liner - different angle or metaphor on the same concept",
+        "Third memorable one-liner - the 'aha' moment phrasing that sticks forever"
+      ]
     }
   ],
   "concept_map": [

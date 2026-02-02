@@ -35,7 +35,8 @@ import {
   ChevronUp,
   ChevronDown,
   Minus,
-  GripHorizontal
+  GripHorizontal,
+  Lightbulb
 } from 'lucide-react';
 
 // Types
@@ -400,6 +401,7 @@ export default function App() {
   const [showMasteryHistory, setShowMasteryHistory] = useState(false);
   const [selectedMasteryEntry, setSelectedMasteryEntry] = useState<CompleteMasteryHistory | null>(null);
   const [masterySessionCache, setMasterySessionCache] = useState<MasterySessionCache | null>(null);
+  const [showIntuitionModal, setShowIntuitionModal] = useState(false); // Intuition Mode modal
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -482,8 +484,10 @@ export default function App() {
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || ""))),
-        // Intuition tattoo - the memorable one-liner
-        tattoo: cleanText(s.tattoo || "")
+        // 3 memorable one-liner intuitions for the Intuition Mode modal
+        intuitions: Array.isArray(s.intuitions)
+          ? s.intuitions.map((i: string) => cleanText(i || "")).filter((i: string) => i.length > 0)
+          : s.tattoo ? [cleanText(s.tattoo)] : [] // Backwards compatibility with old tattoo field
       })));
     }
 
@@ -2671,6 +2675,21 @@ export default function App() {
                         <span className="hidden sm:inline">Mastery</span>
                       </button>
                     )}
+                    {/* Intuition Mode Button - Opens modal with 3 memorable one-liners */}
+                    {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
+                      <button
+                        onClick={() => setShowIntuitionModal(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          showIntuitionModal
+                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="View Core Intuitions"
+                      >
+                        <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
+                        <span className="hidden sm:inline">Intuition</span>
+                      </button>
+                    )}
                     {/* Regenerate Button - Dice to regenerate description and reset mastery */}
                     {hasStarted && lastSubmittedTopic && (
                       <button
@@ -3024,47 +3043,6 @@ export default function App() {
                     </button>
                   )}
                 </div>
-
-                {/* Intuition Tattoo - The memorable one-liner */}
-                {segments.length > 0 && segments[0].tattoo && isAnalogyVisualMode && (
-                  <div className={`mx-4 my-3 p-4 rounded-xl border-2 border-dashed ${
-                    isDarkMode
-                      ? 'bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-purple-500/40'
-                      : 'bg-gradient-to-r from-purple-50 to-blue-50 border-purple-300'
-                  }`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1">
-                        <span className="text-2xl">💡</span>
-                        <p className={`text-lg italic font-medium leading-relaxed ${
-                          isDarkMode ? 'text-purple-200' : 'text-purple-900'
-                        }`}>
-                          "{segments[0].tattoo}"
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(segments[0].tattoo || '');
-                          // Show brief feedback - reuse copiedId pattern
-                          setCopiedId('tattoo');
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                        className={`shrink-0 p-2 rounded-lg transition-all ${
-                          copiedId === 'tattoo'
-                            ? 'bg-green-500 text-white'
-                            : isDarkMode
-                              ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-                              : 'bg-white text-neutral-600 hover:bg-neutral-100 shadow-sm'
-                        }`}
-                        title="Copy insight"
-                      >
-                        {copiedId === 'tattoo' ? <Check size={16} /> : <Copy size={16} />}
-                      </button>
-                    </div>
-                    <p className={`mt-2 text-xs ${isDarkMode ? 'text-purple-400/70' : 'text-purple-600/70'}`}>
-                      Your intuition tattoo — share it, remember it
-                    </p>
-                  </div>
-                )}
 
                 {/* Content Footer - Hide when in Essence mode */}
                 {!(showCondensedView && isFirstPrinciplesMode) && (
@@ -4145,6 +4123,77 @@ export default function App() {
           cachedState={masterySessionCache}
           onStateChange={setMasterySessionCache}
         />
+      )}
+
+      {/* Intuition Mode Modal - 3 memorable one-liners */}
+      {showIntuitionModal && segments.length > 0 && segments[0].intuitions && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowIntuitionModal(false);
+          }}
+        >
+          {/* Dark blue/black backdrop */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 opacity-95" />
+
+          {/* Modal content */}
+          <div className="relative max-w-lg w-full mx-4 p-6 rounded-2xl bg-slate-900/80 border border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/10">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Lightbulb className="text-yellow-400" size={24} />
+                <h2 className="text-lg font-bold text-white">
+                  Core Intuitions
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowIntuitionModal(false)}
+                className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X size={20} className="text-neutral-400" />
+              </button>
+            </div>
+
+            {/* Intuitions List */}
+            <div className="space-y-4">
+              {segments[0].intuitions.map((intuition, idx) => (
+                <div
+                  key={idx}
+                  className="group relative p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/30 transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <p className="text-blue-100 text-base leading-relaxed italic flex-1">
+                      "{intuition}"
+                    </p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(intuition);
+                        setCopiedId(`intuition-${idx}`);
+                        setTimeout(() => setCopiedId(null), 2000);
+                      }}
+                      className={`flex-shrink-0 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
+                        copiedId === `intuition-${idx}`
+                          ? 'bg-green-500 text-white opacity-100'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                      title="Copy"
+                    >
+                      {copiedId === `intuition-${idx}` ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer hint */}
+            <p className="mt-6 text-center text-xs text-slate-500">
+              Low-complexity insights — easy to remember, powerful to share
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Mastery History Modal */}

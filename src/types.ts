@@ -11,7 +11,7 @@ export interface Segment {
   tech: string;
   analogy: string;
   narrative?: string;
-  tattoo?: string; // Memorable one-liner insight - the "intuition tattoo" users remember and share
+  intuitions?: string[]; // 3 memorable one-liner insights for the Intuition Mode modal
 }
 
 export interface ConceptMapItem {
