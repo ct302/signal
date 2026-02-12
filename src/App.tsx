@@ -266,6 +266,8 @@ export default function App() {
   const [synthesisCitation, setSynthesisCitation] = useState("");
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
+  const [technicalExplanation, setTechnicalExplanation] = useState<string>(""); // Full 250+ word technical explanation
+  const [analogyExplanation, setAnalogyExplanation] = useState<string>(""); // Full 250+ word analogy explanation
 
   // UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -489,6 +491,18 @@ export default function App() {
           ? s.intuitions.map((i: string) => cleanText(i || "")).filter((i: string) => i.length > 0)
           : s.tattoo ? [cleanText(s.tattoo)] : [] // Backwards compatibility with old tattoo field
       })));
+    }
+
+    // Store full explanations (250+ words each) - these are the main content
+    if (technicalExplanation) {
+      setTechnicalExplanation(
+        cleanText(fixUnicode(technicalExplanation))
+          .replace(/∈\s*(?=[a-z])/gi, 'in ')
+          .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+      );
+    }
+    if (analogyExplanation) {
+      setAnalogyExplanation(stripMathSymbols(cleanText(fixUnicode(analogyExplanation))));
     }
 
     if (conceptMapArray && Array.isArray(conceptMapArray)) {
@@ -1666,6 +1680,8 @@ export default function App() {
     setTopic("");
     setProcessedWords([]);
     setSegments([]);
+    setTechnicalExplanation("");
+    setAnalogyExplanation("");
     setContextData(null);
     setCondensedData(null);
   };
@@ -1760,6 +1776,8 @@ export default function App() {
     setAttentionMap(null);
     setEntityLookup(null);
     setProcessedWords([]);
+    setTechnicalExplanation("");
+    setAnalogyExplanation("");
     setContextData(null);
     setCondensedData(null);
     setSynthesisSummary("");
@@ -2274,73 +2292,82 @@ export default function App() {
     );
   };
 
-  // Process words effect
+  // Process words effect - uses FULL explanations (250+ words) not short segment snippets
   useEffect(() => {
-    if (!segments.length || isLoading) return;
+    // Need either full explanations or segments to display content
+    const hasFullExplanation = technicalExplanation || analogyExplanation;
+    const hasSegments = segments.length > 0;
+    if ((!hasFullExplanation && !hasSegments) || isLoading) return;
 
     const allTokens: ProcessedWord[] = [];
     let fallbackCounter = -1;
 
-    segments.forEach((segment, segmentIndex) => {
-      const textToParse = isNarrativeMode ? segment.narrative : (isAnalogyVisualMode ? segment.analogy : segment.tech);
-      if (!textToParse) return;
+    // Select the appropriate full text based on view mode
+    // Priority: Full explanation > Joined segments (fallback)
+    let textToParse: string;
+    const isTechnicalMode = !isNarrativeMode && !isAnalogyVisualMode;
 
-      // Only apply LaTeX processing to technical text
-      // Analogy/narrative should be pure prose - no LaTeX conversion
-      // (otherwise "to" becomes "\to" → "→" and "end" becomes "\end" → red error)
-      const isTechnicalMode = !isNarrativeMode && !isAnalogyVisualMode;
+    if (isNarrativeMode) {
+      // Narrative mode: join all narrative segments (no full narrative explanation exists)
+      textToParse = segments.map(s => s.narrative).filter(Boolean).join(' ');
+    } else if (isAnalogyVisualMode) {
+      // Analogy/Expert mode: use full analogy explanation, fall back to joined segments
+      textToParse = analogyExplanation || segments.map(s => s.analogy).filter(Boolean).join(' ');
+    } else {
+      // Technical mode: use full technical explanation, fall back to joined segments
+      textToParse = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
+    }
 
-      let processedText: string;
-      if (isTechnicalMode) {
-        // Technical mode: fix malformed LaTeX, then wrap bare commands
-        const sanitizedText = sanitizeLatex(textToParse);
-        processedText = wrapBareLatex(sanitizedText);
+    if (!textToParse) return;
+
+    // Only apply LaTeX processing to technical text
+    // Analogy/narrative should be pure prose - no LaTeX conversion
+    let processedText: string;
+    if (isTechnicalMode) {
+      // Technical mode: fix malformed LaTeX, then wrap bare commands
+      const sanitizedText = sanitizeLatex(textToParse);
+      processedText = wrapBareLatex(sanitizedText);
+    } else {
+      // Analogy/narrative mode: pure prose, no LaTeX processing
+      processedText = textToParse;
+    }
+
+    const parts = processedText.split(LATEX_REGEX);
+
+    parts.forEach(part => {
+      if (!part) return;
+      const isLatex = part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1);
+
+      if (isLatex) {
+        allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });
       } else {
-        // Analogy/narrative mode: pure prose, no LaTeX processing
-        processedText = textToParse;
-      }
+        part.split(/(\s+)/).forEach(word => {
+          if (!word) return;
+          if (/^\s+$/.test(word)) {
+            allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex: 0 });
+            return;
+          }
+          // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
+          const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
+          // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
+          const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
 
-      const parts = processedText.split(LATEX_REGEX);
-
-      parts.forEach(part => {
-        if (!part) return;
-        const isLatex = part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1);
-
-        if (isLatex) {
-          allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex });
-        } else {
-          part.split(/(\s+)/).forEach(word => {
-            if (!word) return;
-            if (/^\s+$/.test(word)) {
-              allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex });
-              return;
+          // Determine conceptIndex: prioritize entityId, then conceptMap, then fallback
+          let cIdx: number | undefined;
+          if (entityId !== undefined) {
+            // Use entityId for consistent multi-word entity coloring
+            cIdx = entityId;
+          } else {
+            const mappedId = getConceptId(word, conceptMap);
+            if (mappedId !== -1) {
+              cIdx = mappedId;
+            } else if (weight > 0.6) {
+              fallbackCounter++;
+              cIdx = fallbackCounter;
             }
-            // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
-            const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
-            // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
-            const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
-
-            // Determine conceptIndex: prioritize entityId, then conceptMap, then fallback
-            let cIdx: number | undefined;
-            if (entityId !== undefined) {
-              // Use entityId for consistent multi-word entity coloring
-              cIdx = entityId;
-            } else {
-              const mappedId = getConceptId(word, conceptMap);
-              if (mappedId !== -1) {
-                cIdx = mappedId;
-              } else if (weight > 0.6) {
-                fallbackCounter++;
-                cIdx = fallbackCounter;
-              }
-            }
-            allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex, conceptIndex: cIdx, entityId });
-          });
-        }
-      });
-
-      if (segmentIndex < segments.length - 1) {
-        allTokens.push({ text: " ", weight: 0, isSpace: true, segmentIndex });
+          }
+          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: cIdx, entityId });
+        });
       }
     });
 
@@ -2355,7 +2382,7 @@ export default function App() {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition]);
+  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation]);
 
   const modeLabel = getViewModeLabel();
 
