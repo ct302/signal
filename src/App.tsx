@@ -75,7 +75,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
@@ -494,15 +494,22 @@ export default function App() {
     }
 
     // Store full explanations (250+ words each) - these are the main content
+    // Apply unescapeControlSequences to convert literal \n sequences to actual newlines
     if (technicalExplanation) {
       setTechnicalExplanation(
-        cleanText(fixUnicode(technicalExplanation))
-          .replace(/∈\s*(?=[a-z])/gi, 'in ')
-          .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+        unescapeControlSequences(
+          cleanText(fixUnicode(technicalExplanation))
+            .replace(/∈\s*(?=[a-z])/gi, 'in ')
+            .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+        )
       );
     }
     if (analogyExplanation) {
-      setAnalogyExplanation(stripMathSymbols(cleanText(fixUnicode(analogyExplanation))));
+      setAnalogyExplanation(
+        unescapeControlSequences(
+          stripMathSymbols(cleanText(fixUnicode(analogyExplanation)))
+        )
+      );
     }
 
     if (conceptMapArray && Array.isArray(conceptMapArray)) {
@@ -3702,7 +3709,15 @@ export default function App() {
             <div className="overflow-y-auto max-h-[60vh] p-4">
               {(() => {
                 // Detect which symbols are in the current content
-                const currentText = segments.map(s => isAnalogyVisualMode ? s.analogy : s.tech).join(' ');
+                // Use the same text source as displayed content (full explanations, not segments)
+                let currentText: string;
+                if (isNarrativeMode) {
+                  currentText = segments.map(s => s.narrative).filter(Boolean).join(' ');
+                } else if (isAnalogyVisualMode) {
+                  currentText = analogyExplanation || segments.map(s => s.analogy).filter(Boolean).join(' ');
+                } else {
+                  currentText = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
+                }
                 const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
                   // Single Latin letters (linear algebra) - only match in LaTeX context to avoid false positives
                   const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);

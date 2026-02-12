@@ -430,6 +430,23 @@ export const fixUnicode = (text: string | null | undefined): string => {
 };
 
 /**
+ * Convert escape sequences like \n, \t, \r to actual characters
+ * This handles the output from safeJsonParse where backslashes are restored
+ * but escape sequences weren't converted to actual control characters.
+ *
+ * Note: We convert \n to space (not newline) since our display is inline prose.
+ */
+export const unescapeControlSequences = (text: string | null | undefined): string => {
+  if (!text || typeof text !== 'string') return "";
+  return text
+    .replace(/\\n/g, ' ')      // Convert \n to space (prose display, not code)
+    .replace(/\\r/g, ' ')      // Convert \r to space
+    .replace(/\\t/g, ' ')      // Convert \t to space
+    .replace(/\s{2,}/g, ' ')   // Collapse multiple spaces to single
+    .replace(/\\\\/g, '\\');   // Handle escaped backslashes
+};
+
+/**
  * Fix LaTeX commands that are missing backslashes
  * e.g., "mathbf{x}" -> "\mathbf{x}", "cdot" -> "\cdot"
  *
