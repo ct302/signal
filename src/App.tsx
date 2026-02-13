@@ -107,7 +107,8 @@ import {
   IsomorphicDualPane,
   ProximityWarningModal,
   MasteryMode,
-  MasterySessionCache
+  MasterySessionCache,
+  SkeletonLoader
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -2501,17 +2502,7 @@ export default function App() {
         <div className={`max-w-4xl mx-auto px-3 md:px-4 pb-20 md:pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-4 md:px-8' : ''}`}>
           {/* Loading State */}
           {isLoading && (
-            <div className={`rounded-2xl p-12 text-center ${isDarkMode ? 'bg-neutral-800' : 'bg-white border border-neutral-200'}`}>
-              <Loader2 className={`mx-auto animate-spin mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-500'}`} size={48} />
-              <p className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>
-                Generating your personalized analogy...
-              </p>
-              {isExtendedLoading && (
-                <p className={`mt-3 text-sm ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-                  ⏳ This is taking longer than usual. The API may be busy - retrying automatically...
-                </p>
-              )}
-            </div>
+            <SkeletonLoader isDarkMode={isDarkMode} domain={analogyDomain} />
           )}
 
           {/* API Error State */}
