@@ -92,6 +92,48 @@ const getAvailableModel = (preferredModel: string): string => {
   return preferredModel;
 };
 
+// ============================================
+// PRODUCTION PROXY DETECTION
+// ============================================
+
+/**
+ * Check if we're running in production (deployed) vs local development
+ * In production, we use a server-side proxy to keep API keys secure
+ */
+const isProduction = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  // Local development: localhost, 127.0.0.1, or any .local domain
+  const isLocalDev = hostname === 'localhost' ||
+                     hostname === '127.0.0.1' ||
+                     hostname.endsWith('.local');
+  return !isLocalDev;
+};
+
+/**
+ * Check if user has configured their own API key (for local dev or self-hosted)
+ */
+const hasUserApiKey = (): boolean => {
+  const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      return Boolean(parsed.apiKey && parsed.apiKey.trim());
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+/**
+ * Determine if we should use the server-side proxy
+ * Use proxy in production UNLESS user has configured their own API key
+ */
+const shouldUseProxy = (): boolean => {
+  return isProduction() && !hasUserApiKey();
+};
+
 // Get stored provider config
 const getProviderConfig = (): ProviderConfig => {
   const stored = localStorage.getItem(STORAGE_KEYS.PROVIDER_CONFIG);
@@ -114,7 +156,12 @@ const getProviderConfig = (): ProviderConfig => {
 };
 
 // Validate that API key is present (throws user-friendly error if missing)
+// In production with proxy, API key is server-side so we don't require it
 const validateApiKey = (config: ProviderConfig): void => {
+  // Skip validation if using server-side proxy (production mode)
+  if (shouldUseProxy()) {
+    return;
+  }
   if (config.provider === 'cloud' && !config.apiKey) {
     throw new Error(
       'No API key configured. Please open Settings (gear icon) and enter your API key.'
@@ -127,7 +174,11 @@ const buildApiUrl = (config: ProviderConfig): string => {
   if (config.provider === 'ollama') {
     return `${config.ollamaEndpoint || DEFAULT_OLLAMA_ENDPOINT}/api/generate`;
   }
-  // Cloud provider - use baseUrl (defaults to OpenRouter)
+  // In production, use server-side proxy to keep API key secure
+  if (shouldUseProxy()) {
+    return '/api/chat';
+  }
+  // Cloud provider (local dev or user has own API key) - use baseUrl
   const baseUrl = config.baseUrl || 'https://openrouter.ai/api/v1';
   return `${baseUrl}/chat/completions`;
 };
@@ -179,10 +230,13 @@ const buildHeaders = (config: ProviderConfig): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (config.provider === 'cloud') {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-    // OpenRouter-specific headers (ignored by other providers)
-    headers['HTTP-Referer'] = 'https://signal-app.com';
-    headers['X-Title'] = 'Signal Analogy Engine';
+    // In production proxy mode, don't send API key - server handles it
+    if (!shouldUseProxy()) {
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      // OpenRouter-specific headers (ignored by other providers)
+      headers['HTTP-Referer'] = 'https://signal-app.com';
+      headers['X-Title'] = 'Signal Analogy Engine';
+    }
   }
   // Ollama doesn't need auth headers
 
