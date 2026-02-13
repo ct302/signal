@@ -1,46 +1,142 @@
-# Getting Started with Create React App
+# Signal
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**Learn anything through the lens of what you already know.**
 
-## Available Scripts
+Signal is an AI-powered learning platform that teaches complex technical concepts through *isomorphic analogies* — structural equivalences mapped to domains you already understand like sports, music, cooking, or games.
 
-In the project directory, you can run:
+Instead of memorizing abstract definitions, you leverage existing mental models. Matrix decomposition becomes a football play breakdown. Neural networks become a kitchen brigade. The structure transfers, and suddenly it clicks.
 
-### `npm start`
+---
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Features
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+### Core Learning Modes
 
-### `npm test`
+| Mode | Description |
+|------|-------------|
+| **Morph** | Hover to smoothly transition between analogy and technical views |
+| **Expert Lock** | Lock to your chosen domain's vocabulary |
+| **Tech Lock** | Lock to formal technical definitions |
+| **Story Mode** | Narrative explanations using your domain's language |
+| **Essence Mode** | First-principles WHAT/WHY atomic insights |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Visualization
 
-### `npm run build`
+- **Constellation View** — Interactive concept graph showing tech↔analogy mappings
+- **Dual Pane** — Side-by-side comparison with structural "Why This Works" explanations
+- **Heatmap Mode** — Color-gradient backgrounds showing word importance
+- **Isomorphic Coloring** — Color-coded equivalent concepts across domains
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Interactive Learning
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **Quiz Me** — Adaptive difficulty with retry system and personalized feedback
+- **Ask Question** — Follow-up conversations with branching history
+- **Mastery Mode** — Three-stage progressive system where you prove understanding:
+  - Stage 1: Pure narrative, zero jargon
+  - Stage 2: Same narrative with ~6 technical terms woven in
+  - Stage 3: Full narrative with all 10 terms
+  - AI proctor scores your responses and extracts learning insights
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Extras
 
-### `npm run eject`
+- **Symbol Guide** — Context-aware explanations for 50+ mathematical symbols
+- **Definition Lookup** — Select any text for instant definitions with complexity slider
+- **Intuitions** — Three memorable one-liner insights per topic
+- **Study Mode** — Ambient noise (white/pink/brown) with adjustable desk lamp
+- **30+ Analogy Domains** — NFL, Chess, Music Production, Cooking, Gardening, and more
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+---
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Quick Start
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+### 1. Clone and Install
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+```bash
+git clone https://github.com/ct302/signal.git
+cd signal
+npm install
+```
 
-## Learn More
+### 2. Get an API Key
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Get a free API key from [OpenRouter](https://openrouter.ai/keys).
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### 3. Run
+
+```bash
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000), click the gear icon, and enter your API key.
+
+---
+
+## How It Works
+
+You enter a topic (e.g., "singular value decomposition") and choose a domain you know well (e.g., "NFL").
+
+Signal generates:
+
+1. **10 Concept Mappings** — Structural equivalences between technical terms and domain terms
+2. **Attention Maps** — Word-level importance highlighting
+3. **Narratives** — Stories that bridge both worlds
+4. **Causal Explanations** — Why each mapping works structurally, not just thematically
+
+Example mapping:
+```
+Matrix          ↔  Playbook
+Rank            ↔  Offensive Depth
+Decomposition   ↔  Breaking Down Film
+Eigenvalue      ↔  Key Player Impact Rating
+```
+
+Each mapping includes definitions, narrative context, and structural justification.
+
+---
+
+## Deployment
+
+### Vercel (Recommended)
+
+1. Push to GitHub
+2. Import repo at [vercel.com](https://vercel.com)
+3. Deploy
+
+Users will need to provide their own OpenRouter API key in the app settings.
+
+### Local LLM Support
+
+Signal supports local models via [Ollama](https://ollama.ai):
+
+1. Install Ollama and pull a model: `ollama pull llama3`
+2. In Signal settings, switch to "Local (Ollama)" provider
+3. Select your model
+
+---
+
+## Tech Stack
+
+- **Frontend**: React 19, TypeScript, Tailwind CSS
+- **Icons**: Lucide React
+- **Math Rendering**: KaTeX
+- **LLM Integration**: OpenRouter (cloud), Ollama (local)
+- **Deployment**: Vercel
+
+---
+
+## Architecture Highlights
+
+- **Circuit Breaker Pattern** — Automatic fallback to alternate models on rate limits
+- **Retry with Exponential Backoff** — Resilient API calls with jitter
+- **Isomorphic Validation** — Filters out non-structural mappings
+- **Attention-Based Rendering** — Words highlight based on conceptual importance
+
+---
+
+## License
+
+MIT
+
+---
+
+**Signal** — Because understanding beats memorization.
