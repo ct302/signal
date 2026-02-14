@@ -93,6 +93,81 @@ const getAvailableModel = (preferredModel: string): string => {
 };
 
 // ============================================
+// FREE TIER STATE MANAGEMENT
+// ============================================
+
+interface FreeTierState {
+  remaining: number | null;  // null = unknown (not using proxy)
+  limit: number;
+  isExhausted: boolean;
+}
+
+let freeTierState: FreeTierState = {
+  remaining: null,
+  limit: 5,
+  isExhausted: false
+};
+
+// Listeners for free tier state changes
+const freeTierListeners: Set<(state: FreeTierState) => void> = new Set();
+
+/**
+ * Get current free tier state
+ */
+export const getFreeTierState = (): FreeTierState => ({ ...freeTierState });
+
+/**
+ * Subscribe to free tier state changes
+ */
+export const subscribeToFreeTier = (listener: (state: FreeTierState) => void): (() => void) => {
+  freeTierListeners.add(listener);
+  return () => freeTierListeners.delete(listener);
+};
+
+/**
+ * Update free tier state from response headers
+ */
+const updateFreeTierFromResponse = (response: Response): void => {
+  const remaining = response.headers.get('X-Free-Remaining');
+  const limit = response.headers.get('X-Free-Limit');
+
+  if (remaining !== null) {
+    freeTierState = {
+      remaining: parseInt(remaining, 10),
+      limit: limit ? parseInt(limit, 10) : 5,
+      isExhausted: parseInt(remaining, 10) <= 0
+    };
+    // Notify listeners
+    freeTierListeners.forEach(listener => listener(freeTierState));
+  }
+};
+
+/**
+ * Check if user is on free tier (using proxy without own key)
+ */
+export const isOnFreeTier = (): boolean => {
+  return shouldUseProxy();
+};
+
+/**
+ * Reset free tier exhausted state (e.g., after user adds their own key)
+ */
+export const resetFreeTierState = (): void => {
+  freeTierState = { remaining: null, limit: 5, isExhausted: false };
+  freeTierListeners.forEach(listener => listener(freeTierState));
+};
+
+/**
+ * Custom error for free tier exhausted
+ */
+export class FreeTierExhaustedError extends Error {
+  constructor(message: string, public remaining: number = 0, public limit: number = 5) {
+    super(message);
+    this.name = 'FreeTierExhaustedError';
+  }
+}
+
+// ============================================
 // PRODUCTION PROXY DETECTION
 // ============================================
 
@@ -299,6 +374,11 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
       }
     );
 
+    // Update free tier state from response headers (when using proxy)
+    if (shouldUseProxy()) {
+      updateFreeTierFromResponse(response);
+    }
+
     const data = await response.json();
     const result = extractResponseText(data, config);
 
@@ -313,6 +393,23 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
     return result;
 
   } catch (error) {
+    // Check for free tier exhausted error (403 with FREE_TIER_EXHAUSTED code)
+    if (error instanceof ApiError && error.status === 403 && error.responseBody) {
+      try {
+        const body = JSON.parse(error.responseBody);
+        if (body.code === 'FREE_TIER_EXHAUSTED') {
+          // Update free tier state
+          freeTierState = { remaining: 0, limit: body.limit || 5, isExhausted: true };
+          freeTierListeners.forEach(listener => listener(freeTierState));
+          // Throw specialized error
+          throw new FreeTierExhaustedError(body.error, 0, body.limit || 5);
+        }
+      } catch (parseError) {
+        if (parseError instanceof FreeTierExhaustedError) throw parseError;
+        // If parsing fails, continue with original error
+      }
+    }
+
     // Record failure for circuit breaker (only for rate limit or server errors)
     if (error instanceof ApiError && (error.status === 429 || error.status >= 500)) {
       recordFailure(effectiveModel);

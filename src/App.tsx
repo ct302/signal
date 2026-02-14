@@ -89,7 +89,11 @@ import {
   generateQuiz,
   askTutor,
   enrichDomainOnSelection,
-  generateFoundationalMapping
+  generateFoundationalMapping,
+  getFreeTierState,
+  subscribeToFreeTier,
+  isOnFreeTier,
+  FreeTierExhaustedError
 } from './services';
 
 // Components
@@ -354,6 +358,33 @@ export default function App() {
   const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
   const symbolGuideDragStart = useRef({ x: 0, y: 0 });
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+
+  // Free Tier State
+  const [freeTierRemaining, setFreeTierRemaining] = useState<number | null>(null);
+  const [freeTierLimit, setFreeTierLimit] = useState(5);
+  const [showFreeTierModal, setShowFreeTierModal] = useState(false);
+
+  // Subscribe to free tier state changes
+  useEffect(() => {
+    // Initialize from current state
+    const initialState = getFreeTierState();
+    setFreeTierRemaining(initialState.remaining);
+    setFreeTierLimit(initialState.limit);
+    if (initialState.isExhausted) {
+      setShowFreeTierModal(true);
+    }
+
+    // Subscribe to changes
+    const unsubscribe = subscribeToFreeTier((state) => {
+      setFreeTierRemaining(state.remaining);
+      setFreeTierLimit(state.limit);
+      if (state.isExhausted) {
+        setShowFreeTierModal(true);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Global drag handler for Symbol Guide - attaches to window for smooth dragging
   useEffect(() => {
@@ -751,6 +782,13 @@ export default function App() {
       }
     } catch (e: unknown) {
       console.error("API call failed", e);
+
+      // Handle FreeTierExhaustedError - show modal instead of error
+      if (e instanceof FreeTierExhaustedError) {
+        setShowFreeTierModal(true);
+        setApiError(null); // Don't show error, modal handles it
+        return;
+      }
 
       // Handle ApiError with detailed status codes
       if (e instanceof ApiError) {
@@ -2497,6 +2535,33 @@ export default function App() {
         </div>
       )}
 
+      {/* Free Tier Badge */}
+      {isOnFreeTier() && freeTierRemaining !== null && !isImmersive && (
+        <div className={`max-w-4xl mx-auto px-3 md:px-4 pt-2`}>
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+            freeTierRemaining === 0
+              ? (isDarkMode ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700')
+              : freeTierRemaining <= 2
+                ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700')
+                : (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
+          }`}>
+            <Sparkles size={12} />
+            {freeTierRemaining === 0
+              ? 'Free searches used'
+              : `${freeTierRemaining} of ${freeTierLimit} free searches left today`
+            }
+            {freeTierRemaining <= 2 && freeTierRemaining > 0 && (
+              <button
+                onClick={() => setShowFreeTierModal(true)}
+                className={`ml-1 underline hover:no-underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}
+              >
+                Get unlimited
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main ref={scrollRef} className={`flex-1 overflow-y-auto transition-all duration-500 ${isImmersive ? 'pt-0' : 'pt-4'}`}>
         <div className={`max-w-4xl mx-auto px-3 md:px-4 pb-20 md:pb-32 transition-all duration-500 ${isImmersive ? 'max-w-none px-4 md:px-8' : ''}`}>
@@ -3814,6 +3879,67 @@ export default function App() {
               })()}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Free Tier Exhausted Modal */}
+      {showFreeTierModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowFreeTierModal(false)}>
+          <div
+            className={`relative w-full max-w-md mx-4 p-6 rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-6">
+              <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${isDarkMode ? 'bg-amber-900/50' : 'bg-amber-100'}`}>
+                <Sparkles className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} size={32} />
+              </div>
+              <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                You've used your {freeTierLimit} free searches!
+              </h2>
+              <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                Get unlimited searches by adding a free API key. It takes less than a minute.
+              </p>
+            </div>
+
+            <div className={`p-4 rounded-xl mb-6 ${isDarkMode ? 'bg-neutral-750 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+              <h3 className={`font-medium mb-3 ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>Quick Setup:</h3>
+              <ol className={`text-sm space-y-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                <li className="flex gap-2">
+                  <span className={`font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>1.</span>
+                  <span>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className={`underline ${isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}>openrouter.ai/keys</a></span>
+                </li>
+                <li className="flex gap-2">
+                  <span className={`font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>2.</span>
+                  <span>Sign up (free) and create an API key</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className={`font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>3.</span>
+                  <span>Paste the key in Settings (gear icon)</span>
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFreeTierModal(false)}
+                className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                    : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                }`}
+              >
+                Maybe Later
+              </button>
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors text-center"
+              >
+                Get Free Key →
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
