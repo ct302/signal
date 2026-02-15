@@ -221,10 +221,12 @@ const getProviderConfig = (): ProviderConfig => {
     }
   }
   // Default config without API key - user must provide their own
+  // When using proxy (production, no user key), use a free model by default
+  const defaultModel = shouldUseProxy() ? 'google/gemini-2.0-flash-exp:free' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',
-    model: '',
+    model: defaultModel,
     baseUrl: 'https://openrouter.ai/api/v1',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
