@@ -7,8 +7,9 @@ const FREE_TIER_MODELS = [
   'google/gemma-3-4b-it:free',
   'openrouter/free'
 ];
+// 400 = bad request (some free models don't support json_object response_format)
 // 404 = model not found on OpenRouter, treat as retryable to try next model
-const RETRYABLE_STATUSES = new Set([404, 429, 500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([400, 404, 429, 500, 502, 503, 504]);
 
 // ============================================
 // KV STORAGE (optional - falls back to in-memory)
@@ -121,9 +122,17 @@ function checkBurstLimit(ip) {
 // OPENROUTER REQUEST HELPER
 // ============================================
 
-async function tryOpenRouterRequest(model, messages, response_format, plugins, apiKey) {
+// Models known to NOT support response_format: { type: "json_object" }
+const NO_JSON_MODE_MODELS = new Set([
+  'openrouter/free'
+]);
+
+async function tryOpenRouterRequest(model, messages, response_format, plugins, apiKey, skipJsonMode) {
   const body = { model, messages };
-  if (response_format) body.response_format = response_format;
+  // Only add response_format if the model supports it and we haven't been told to skip
+  if (response_format && !skipJsonMode && !NO_JSON_MODE_MODELS.has(model)) {
+    body.response_format = response_format;
+  }
   if (plugins) body.plugins = plugins;
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -220,10 +229,12 @@ module.exports = async function handler(req, res) {
     var lastErrorStatus = 500;
     var lastErrorMessage = 'All free models are currently unavailable. Please try again in a moment.';
 
+    var skipJsonMode = false; // Track if we should stop sending response_format
+
     for (var j = 0; j < modelsToTry.length; j++) {
       var attemptModel = modelsToTry[j];
       try {
-        var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey);
+        var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
           // Success - increment usage and return
@@ -232,6 +243,14 @@ module.exports = async function handler(req, res) {
           res.setHeader('X-Free-Remaining', String(remaining));
           res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
           return res.status(200).json(result.data);
+        }
+
+        // If 400 and we sent response_format, retry SAME model without json mode first
+        if (result.status === 400 && response_format && !skipJsonMode) {
+          console.warn('OpenRouter 400 with json mode (' + attemptModel + ') - retrying without response_format');
+          skipJsonMode = true;
+          j--; // Retry same model index
+          continue;
         }
 
         // Non-retryable error - return immediately

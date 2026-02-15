@@ -639,7 +639,26 @@ export const sanitizeLatex = (text: string): string => {
 
   let result = text;
 
-  // 0. Fix \not patterns BEFORE any other processing
+  // 0a. Remove LaTeX line breaks (\\ or \\ with spaces) outside of math mode
+  // LLMs often generate "\\" as paragraph/line breaks in prose - these render as "\ \"
+  // Must be done BEFORE other processing to avoid partial matches
+  // Only remove \\ that are NOT inside $ delimiters (math mode)
+  const mathRegions: Array<{start: number; end: number}> = [];
+  let mathMatch: RegExpExecArray | null;
+  const mathFinder = /\$\$[\s\S]*?\$\$|\$[^$]*\$/g;
+  while ((mathMatch = mathFinder.exec(result)) !== null) {
+    mathRegions.push({ start: mathMatch.index, end: mathMatch.index + mathMatch[0].length });
+  }
+  // Replace \\ outside math mode with a space (they're just line breaks)
+  result = result.replace(/\\\\\s*/g, (match, offset) => {
+    // Check if this offset is inside any math region
+    for (const region of mathRegions) {
+      if (offset >= region.start && offset < region.end) return match; // Keep it
+    }
+    return ' '; // Replace with space
+  });
+
+  // 0b. Fix \not patterns BEFORE any other processing
   // \not renders as "/" in KaTeX when malformed, convert to proper form
   // Handle both inside and outside math mode
 
