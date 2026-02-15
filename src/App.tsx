@@ -791,8 +791,24 @@ export default function App() {
       }
 
       // Handle ApiError with detailed status codes
-      if (e instanceof ApiError) {
-        switch (e.status) {
+      // Use duck typing as fallback for cases where instanceof might fail due to bundling
+      const apiError = e instanceof ApiError ? e : (
+        (e as any)?.status !== undefined ? e as ApiError : null
+      );
+
+      if (apiError) {
+        // Try to extract server error message from responseBody for better error messages
+        let serverMessage = '';
+        if (apiError.responseBody) {
+          try {
+            const body = JSON.parse(apiError.responseBody);
+            serverMessage = body.error || '';
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        switch (apiError.status) {
           case 401:
           case 403:
             setApiError("API key issue. Please check your API key in Settings.");
@@ -807,17 +823,20 @@ export default function App() {
           case 502:
           case 503:
           case 504:
-            setApiError("Server error. The API is temporarily unavailable - please try again.");
+            // Check if server provided a specific error message about configuration
+            if (serverMessage.toLowerCase().includes('not configured') || serverMessage.toLowerCase().includes('server not')) {
+              setApiError("Server not configured. Please add your own API key in Settings, or try again later.");
+            } else {
+              setApiError("Server error. The API is temporarily unavailable - please try again.");
+            }
             break;
           default:
-            setApiError(`Request failed (${e.status}): ${e.message.slice(0, 80)}`);
+            setApiError(`Request failed (${apiError.status}): ${apiError.message.slice(0, 80)}`);
         }
       } else {
         // Handle other errors (network, parsing, etc.)
         const errorMessage = (e as Error)?.message || "Unknown error occurred";
-        if (errorMessage.includes("API key")) {
-          setApiError("API key issue. Please check your API key in Settings.");
-        } else if (errorMessage.includes("Empty response")) {
+        if (errorMessage.includes("Empty response")) {
           setApiError("The model returned an empty response. It may be overloaded - try again.");
         } else if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorMessage.includes("Failed to fetch")) {
           setApiError("Network error. Please check your connection and try again.");
