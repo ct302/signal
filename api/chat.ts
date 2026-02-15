@@ -134,7 +134,7 @@ async function tryOpenRouterRequest(
   response_format: any,
   plugins: any,
   apiKey: string
-): Promise<{ ok: boolean; status: number; data: any }> {
+) {
   const body: Record<string, any> = { model, messages };
   if (response_format) body.response_format = response_format;
   if (plugins) body.plugins = plugins;
@@ -150,8 +150,13 @@ async function tryOpenRouterRequest(
     body: JSON.stringify(body)
   });
 
-  const data = await response.json();
-  return { ok: response.ok, status: response.status, data };
+  let data: any = {};
+  try {
+    data = await response.json();
+  } catch (e) {
+    data = { error: { message: 'Invalid response from AI provider' } };
+  }
+  return { ok: response.ok, status: response.status, data: data };
 }
 
 // ============================================
@@ -215,10 +220,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Build model attempt order: requested model first, then remaining free models
-    const modelsToTry = [model, ...FREE_TIER_MODELS.filter(m => m !== model)];
-    let lastError: { status: number; data: any } | null = null;
+    const modelsToTry = [model];
+    for (const m of FREE_TIER_MODELS) {
+      if (m !== model && modelsToTry.indexOf(m) === -1) modelsToTry.push(m);
+    }
+    let lastErrorStatus = 500;
+    let lastErrorMessage = 'All free models are currently unavailable. Please try again in a moment.';
 
-    for (const attemptModel of modelsToTry) {
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const attemptModel = modelsToTry[i];
       try {
         const result = await tryOpenRouterRequest(
           attemptModel, messages, response_format, plugins, apiKey
@@ -235,26 +245,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Non-retryable error - return immediately
         if (!RETRYABLE_STATUSES.has(result.status)) {
-          console.error(`OpenRouter error (${attemptModel}):`, result.status, result.data);
+          console.error('OpenRouter error (' + attemptModel + '):', result.status, result.data);
           return res.status(result.status).json({
-            error: result.data.error?.message || 'API request failed',
-            code: result.data.error?.code
+            error: (result.data && result.data.error && result.data.error.message) || 'API request failed',
+            code: (result.data && result.data.error && result.data.error.code) || undefined
           });
         }
 
         // Retryable error - log and try next model
-        console.warn(`OpenRouter error (${attemptModel}): ${result.status} - trying next model`);
-        lastError = { status: result.status, data: result.data };
+        console.warn('OpenRouter error (' + attemptModel + '): ' + result.status + ' - trying next model');
+        lastErrorStatus = result.status;
+        lastErrorMessage = (result.data && result.data.error && result.data.error.message) || 'Model unavailable';
       } catch (fetchError) {
-        console.warn(`OpenRouter fetch error (${attemptModel}):`, fetchError);
-        lastError = { status: 500, data: { error: { message: 'Network error' } } };
+        console.warn('OpenRouter fetch error (' + attemptModel + '):', fetchError);
+        lastErrorStatus = 500;
+        lastErrorMessage = 'Network error reaching AI provider';
       }
     }
 
     // All models failed
-    console.error('All free tier models failed:', lastError);
-    return res.status(lastError?.status || 500).json({
-      error: lastError?.data?.error?.message || 'All free models are currently unavailable. Please try again in a moment.',
+    console.error('All free tier models failed, last status:', lastErrorStatus);
+    return res.status(lastErrorStatus).json({
+      error: lastErrorMessage,
       code: 'ALL_MODELS_FAILED'
     });
 
