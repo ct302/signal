@@ -93,6 +93,81 @@ const getAvailableModel = (preferredModel: string): string => {
 };
 
 // ============================================
+// FREE TIER STATE MANAGEMENT
+// ============================================
+
+interface FreeTierState {
+  remaining: number | null;  // null = unknown (not using proxy)
+  limit: number;
+  isExhausted: boolean;
+}
+
+let freeTierState: FreeTierState = {
+  remaining: null,
+  limit: 5,
+  isExhausted: false
+};
+
+// Listeners for free tier state changes
+const freeTierListeners: Set<(state: FreeTierState) => void> = new Set();
+
+/**
+ * Get current free tier state
+ */
+export const getFreeTierState = (): FreeTierState => ({ ...freeTierState });
+
+/**
+ * Subscribe to free tier state changes
+ */
+export const subscribeToFreeTier = (listener: (state: FreeTierState) => void): (() => void) => {
+  freeTierListeners.add(listener);
+  return () => freeTierListeners.delete(listener);
+};
+
+/**
+ * Update free tier state from response headers
+ */
+const updateFreeTierFromResponse = (response: Response): void => {
+  const remaining = response.headers.get('X-Free-Remaining');
+  const limit = response.headers.get('X-Free-Limit');
+
+  if (remaining !== null) {
+    freeTierState = {
+      remaining: parseInt(remaining, 10),
+      limit: limit ? parseInt(limit, 10) : 5,
+      isExhausted: parseInt(remaining, 10) <= 0
+    };
+    // Notify listeners
+    freeTierListeners.forEach(listener => listener(freeTierState));
+  }
+};
+
+/**
+ * Check if user is on free tier (using proxy without own key)
+ */
+export const isOnFreeTier = (): boolean => {
+  return shouldUseProxy();
+};
+
+/**
+ * Reset free tier exhausted state (e.g., after user adds their own key)
+ */
+export const resetFreeTierState = (): void => {
+  freeTierState = { remaining: null, limit: 5, isExhausted: false };
+  freeTierListeners.forEach(listener => listener(freeTierState));
+};
+
+/**
+ * Custom error for free tier exhausted
+ */
+export class FreeTierExhaustedError extends Error {
+  constructor(message: string, public remaining: number = 0, public limit: number = 5) {
+    super(message);
+    this.name = 'FreeTierExhaustedError';
+  }
+}
+
+// ============================================
 // PRODUCTION PROXY DETECTION
 // ============================================
 
@@ -146,10 +221,12 @@ const getProviderConfig = (): ProviderConfig => {
     }
   }
   // Default config without API key - user must provide their own
+  // When using proxy (production, no user key), use a free model by default
+  const defaultModel = shouldUseProxy() ? 'google/gemini-2.0-flash-exp:free' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',
-    model: '',
+    model: defaultModel,
     baseUrl: 'https://openrouter.ai/api/v1',
     ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT
   };
@@ -290,11 +367,19 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
       },
       {
         // Use defaults from RATE_LIMIT_CONFIG
-        onRetry: (attempt, maxAttempts, waitMs, reason) => {
-          console.log(`[callApi] ${reason} - retrying ${attempt}/${maxAttempts} in ${Math.round(waitMs / 1000)}s`);
-        }
+        // Only log retries in development - suppress technical messages in production
+        onRetry: process.env.NODE_ENV !== 'production'
+          ? (attempt, maxAttempts, waitMs, reason) => {
+              console.log(`[callApi] ${reason} - retrying ${attempt}/${maxAttempts} in ${Math.round(waitMs / 1000)}s`);
+            }
+          : undefined
       }
     );
+
+    // Update free tier state from response headers (when using proxy)
+    if (shouldUseProxy()) {
+      updateFreeTierFromResponse(response);
+    }
 
     const data = await response.json();
     const result = extractResponseText(data, config);
@@ -310,6 +395,23 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
     return result;
 
   } catch (error) {
+    // Check for free tier exhausted error (403 with FREE_TIER_EXHAUSTED code)
+    if (error instanceof ApiError && error.status === 403 && error.responseBody) {
+      try {
+        const body = JSON.parse(error.responseBody);
+        if (body.code === 'FREE_TIER_EXHAUSTED') {
+          // Update free tier state
+          freeTierState = { remaining: 0, limit: body.limit || 5, isExhausted: true };
+          freeTierListeners.forEach(listener => listener(freeTierState));
+          // Throw specialized error
+          throw new FreeTierExhaustedError(body.error, 0, body.limit || 5);
+        }
+      } catch (parseError) {
+        if (parseError instanceof FreeTierExhaustedError) throw parseError;
+        // If parsing fails, continue with original error
+      }
+    }
+
     // Record failure for circuit breaker (only for rate limit or server errors)
     if (error instanceof ApiError && (error.status === 429 || error.status >= 500)) {
       recordFailure(effectiveModel);
@@ -563,12 +665,30 @@ export const fetchOllamaModels = async (endpoint?: string): Promise<OllamaModel[
 const getComplexityPrompt = (level: number, domain?: string): string => {
   switch (level) {
     case 5:
-      return `IMPORTANT: Write for a 5-year-old child.
-- Use ONLY simple words, short sentences, and fun comparisons
-- NO technical jargon, NO math notation, NO complex concepts
-- Make it playful, engaging, and memorable
-- TARGET LENGTH: 200-250 words for EACH explanation (tech and analogy)
-- Focus on WHY this matters and make it stick!`;
+      return `CRITICAL: TRUE ELI5 MODE - Explain like talking to a curious 5-year-old!
+
+ABSOLUTE BANS (violating these = failure):
+- NO formulas, equations, or math symbols ($, \\\\frac, \\\\sum, etc.)
+- NO technical jargon (algorithm, coefficient, derivative, modulus, vector, matrix, etc.)
+- NO acronyms or abbreviations users wouldn't know
+- NO chemical formulas (H2O is fine, C6H12O6 is NOT)
+- NO Greek letters (alpha, beta, sigma, etc.)
+- NO "imagine you're a scientist" framing - they're 5!
+
+REQUIRED STYLE:
+- Use words a kindergartener knows: big, small, fast, slow, push, pull, mix, share
+- Compare to things kids experience: toys, snacks, playground, family, animals, colors
+- Short sentences. One idea at a time.
+- Make it FUN and MEMORABLE - like a storybook explanation
+- Use "you" and "your" to make it personal
+
+GOOD EXAMPLES:
+- "Photosynthesis" → "Plants eat sunlight! They use sunshine to make their own food, like having a snack that's made of light."
+- "Gravity" → "Earth is like a big magnet for everything! It pulls you down so you don't float away."
+- "Encryption" → "It's like writing a secret message that only your best friend can read."
+
+TARGET LENGTH: 150-200 words for EACH explanation
+Remember: If a 5-year-old would say "huh?" - rewrite it simpler!`;
     case 100:
       return `IMPORTANT: This is ELI100 - the ADVANCED level for experts who want the FULL picture.
 
@@ -1079,19 +1199,26 @@ export const fetchDefinition = async (term: string, context: string, level: numb
     5: {
       name: "ELI5 (Explain like I'm 5)",
       words: "80-100 words",
-      style: `STRICT RULES FOR ELI5:
-- NO technical terms AT ALL. If you write "modulus", "congruent", "algorithm", "cryptography" - you've failed.
-- NO math notation or LaTeX
-- Use everyday language a non-expert would actually say
-- Be creative! Don't default to "imagine you're a child with toys"
-- Just explain it SIMPLY and CLEARLY
+      style: `TRUE ELI5 - Explain to a curious 5-year-old!
 
-GOOD ELI5 examples:
-- "Modular arithmetic" → "It's clock math. After 12 comes 1 again, not 13. Numbers wrap around."
-- "Neural network" → "A guessing machine that gets better by being told when it's wrong."
-- "Encryption" → "Scrambling a message so only the right person can unscramble it."
+BANNED (using these = failure):
+- NO formulas, equations, or math symbols
+- NO technical words (algorithm, coefficient, derivative, vector, etc.)
+- NO chemical formulas (except H2O)
+- NO Greek letters
 
-Make it click instantly. No textbook voice.`
+USE INSTEAD:
+- Simple words: big, small, fast, slow, mix, share, push, pull
+- Kid comparisons: toys, snacks, playground, animals, colors
+- Short sentences. One idea per sentence.
+- Make it FUN like a storybook!
+
+EXAMPLES:
+- "Modular arithmetic" → "Clock math! After 12 comes 1 again, not 13."
+- "Neural network" → "A guessing game that gets better when you tell it 'warmer' or 'colder'."
+- "Encryption" → "A secret code only your best friend knows how to read."
+
+Make it click instantly. If a 5-year-old would say "huh?" - simpler!`
     },
     50: {
       name: "Standard (General Audience)",
