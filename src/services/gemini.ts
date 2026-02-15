@@ -1149,33 +1149,45 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
  * Check input for ambiguity or typos with enhanced context detection
  */
 export const checkAmbiguity = async (text: string, contextType: string): Promise<AmbiguityResult> => {
-  const prompt = `Analyze user input for an analogy-based learning app: "${text}"
-Context type: ${contextType}
+  const prompt = `You are a search intent classifier for an analogy-based learning app. A user typed: "${text}"
+Context: This is a ${contextType} (either a topic they want to LEARN about, or an expert domain they already know).
 
-Your task:
-1. Check for TYPOS: If the input appears to be a misspelling, suggest corrections
-2. Check for AMBIGUITY: If the input could refer to multiple distinct things, list them with brief descriptions
+TASK: Determine if this input needs clarification before we can generate a good analogy. Check ALL of the following:
 
-IMPORTANT: For ambiguous inputs, format each option as "[Name] (brief description)" to help user choose.
+1. TYPOS & CASING: Fix misspellings and wrong capitalization of known terms.
+   - "SVd" → "SVD (Singular Value Decomposition)" (wrong case)
+   - "nfll" → "NFL (National Football League)" (misspelling)
+   - "basebal" → "Baseball (sport)" (misspelling)
+   - "machien learning" → "Machine Learning" (misspelling)
+   - "eigan values" → "Eigenvalues (linear algebra)" (misspelling)
 
-Examples of ambiguous inputs:
-- "King of Queens" → ["The King of Queens (TV sitcom with Kevin James)", "King (playing card rank in Queens deck)"]
-- "GOT" → ["Game of Thrones (HBO fantasy TV series)", "Got (English verb, past tense of 'get')"]
-- "Python" → ["Python (programming language)", "Python (snake species)"]
-- "Apex" → ["Apex Legends (video game)", "Apex (general term for peak/summit)"]
-- "Hamilton" → ["Hamilton (Broadway musical)", "Hamilton (founding father Alexander Hamilton)"]
+2. AMBIGUOUS TERMS: Could refer to multiple distinct, well-known things.
+   - "Python" → ["Python (programming language)", "Python (snake species)"]
+   - "Apex" → ["Apex Legends (battle royale video game)", "Apex (general term for peak/summit)"]
+   - "Hamilton" → ["Hamilton (Broadway musical by Lin-Manuel Miranda)", "Alexander Hamilton (founding father)"]
+   - "GOT" → ["Game of Thrones (HBO fantasy TV series)", "Got (past tense of get)"]
+   - "Mercury" → ["Mercury (planet)", "Mercury (element)", "Freddie Mercury (musician)"]
 
-Examples of typos:
-- "nfll" → options: ["NFL (National Football League)"]
-- "basebal" → options: ["Baseball (sport)"]
+3. COMPOUND TERMS WITH YEARS/NUMBERS: These are VERY often ambiguous — a year + topic can mean different things!
+   - "NFL 2002" → ["2002 NFL Season (the actual football season)", "NFL 2K2 / Madden 2002 (video game)", "Super Bowl XXXVI (2002 Super Bowl)"]
+   - "NBA 2024" → ["2023-24 NBA Season", "NBA 2K24 (video game)", "2024 NBA Draft"]
+   - "World Cup 2022" → ["2022 FIFA World Cup (tournament in Qatar)", "FIFA World Cup 2022 (video game)"]
+   - "Zelda 2023" → ["Tears of the Kingdom (2023 Zelda game)", "The Legend of Zelda (franchise overview)"]
 
-Only set isAmbiguous: true if:
-1. There's a likely typo that needs correction, OR
-2. The input genuinely refers to multiple well-known distinct things
+4. BROAD TOPICS: If the input is very broad, offer focused sub-areas.
+   - "Calculus" → ["Differential Calculus (derivatives, rates of change)", "Integral Calculus (areas, accumulation)", "Multivariable Calculus (3D, partial derivatives)"]
+   - "Chemistry" → ["Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry", "Biochemistry"]
 
-Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4 options with descriptions), "corrected": string (best guess), "emoji": string (relevant emoji) }
+RULES:
+- Set isAmbiguous: true if ANY of the above apply (typo, ambiguity, compound term, or broad topic)
+- Format each option as "[Specific Name] (brief clarifying description)"
+- Max 4 options, ordered by most likely interpretation first
+- "corrected" should be your best single guess if forced to pick one
+- For typos with only one obvious correction, still set isAmbiguous: true so user confirms
 
-Return ONLY valid JSON, no other text.`;
+Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4), "corrected": string (best guess), "emoji": string }
+
+Return ONLY valid JSON, no markdown, no explanation.`;
 
   try {
     const responseText = await callApi(prompt, { jsonMode: true });
