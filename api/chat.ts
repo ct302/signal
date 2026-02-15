@@ -2,12 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 5;
-const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free';
+const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite:free';
 const FREE_TIER_MODELS = [
-  'xiaomi/mimo-v2-flash:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'google/gemini-2.5-flash-lite:free',
+  'google/gemini-2.5-flash:free',
+  'deepseek/deepseek-v3.2-20251201:free',
+  'openrouter/free'
 ];
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 // ============================================
 // KV STORAGE (optional - falls back to in-memory)
@@ -123,6 +125,36 @@ function checkBurstLimit(ip: string): boolean {
 }
 
 // ============================================
+// OPENROUTER REQUEST HELPER
+// ============================================
+
+async function tryOpenRouterRequest(
+  model: string,
+  messages: any,
+  response_format: any,
+  plugins: any,
+  apiKey: string
+): Promise<{ ok: boolean; status: number; data: any }> {
+  const body: Record<string, any> = { model, messages };
+  if (response_format) body.response_format = response_format;
+  if (plugins) body.plugins = plugins;
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://signal-app.com',
+      'X-Title': 'Signal Analogy Engine'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  return { ok: response.ok, status: response.status, data };
+}
+
+// ============================================
 // REQUEST HANDLER
 // ============================================
 
@@ -182,39 +214,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Build and forward request to OpenRouter
-    const openRouterBody: Record<string, any> = { model, messages };
-    if (response_format) openRouterBody.response_format = response_format;
-    if (plugins) openRouterBody.plugins = plugins;
+    // Build model attempt order: requested model first, then remaining free models
+    const modelsToTry = [model, ...FREE_TIER_MODELS.filter(m => m !== model)];
+    let lastError: { status: number; data: any } | null = null;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://signal-app.com',
-        'X-Title': 'Signal Analogy Engine'
-      },
-      body: JSON.stringify(openRouterBody)
-    });
+    for (const attemptModel of modelsToTry) {
+      try {
+        const result = await tryOpenRouterRequest(
+          attemptModel, messages, response_format, plugins, apiKey
+        );
 
-    const data = await response.json();
+        if (result.ok) {
+          // Success - increment usage and return
+          const newUsage = await incrementDailyUsage(clientIP);
+          const remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
+          res.setHeader('X-Free-Remaining', remaining.toString());
+          res.setHeader('X-Free-Limit', FREE_TIER_DAILY_LIMIT.toString());
+          return res.status(200).json(result.data);
+        }
 
-    if (!response.ok) {
-      console.error('OpenRouter error:', response.status, data);
-      return res.status(response.status).json({
-        error: data.error?.message || 'API request failed',
-        code: data.error?.code
-      });
+        // Non-retryable error - return immediately
+        if (!RETRYABLE_STATUSES.has(result.status)) {
+          console.error(`OpenRouter error (${attemptModel}):`, result.status, result.data);
+          return res.status(result.status).json({
+            error: result.data.error?.message || 'API request failed',
+            code: result.data.error?.code
+          });
+        }
+
+        // Retryable error - log and try next model
+        console.warn(`OpenRouter error (${attemptModel}): ${result.status} - trying next model`);
+        lastError = { status: result.status, data: result.data };
+      } catch (fetchError) {
+        console.warn(`OpenRouter fetch error (${attemptModel}):`, fetchError);
+        lastError = { status: 500, data: { error: { message: 'Network error' } } };
+      }
     }
 
-    // Success - increment usage
-    const newUsage = await incrementDailyUsage(clientIP);
-    const remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
-    res.setHeader('X-Free-Remaining', remaining.toString());
-    res.setHeader('X-Free-Limit', FREE_TIER_DAILY_LIMIT.toString());
-
-    return res.status(200).json(data);
+    // All models failed
+    console.error('All free tier models failed:', lastError);
+    return res.status(lastError?.status || 500).json({
+      error: lastError?.data?.error?.message || 'All free models are currently unavailable. Please try again in a moment.',
+      code: 'ALL_MODELS_FAILED'
+    });
 
   } catch (error) {
     console.error('Proxy error:', error);

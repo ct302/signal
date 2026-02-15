@@ -5,22 +5,22 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // OpenRouter models - hardcoded selection
 export const OPENROUTER_MODELS = [
-  'xiaomi/mimo-v2-flash:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'google/gemini-2.5-flash-lite:free',
+  'google/gemini-2.5-flash:free',
+  'deepseek/deepseek-v3.2-20251201:free'
 ];
 
 // Fallback model chain for circuit breaker pattern
 // When primary model hits rate limit, try these in order
 export const OPENROUTER_FALLBACK_MODELS = [
-  'xiaomi/mimo-v2-flash:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'google/gemini-2.5-flash-lite:free',
+  'google/gemini-2.5-flash:free',
+  'deepseek/deepseek-v3.2-20251201:free'
 ];
 
 // Rate limit configuration
 export const RATE_LIMIT_CONFIG = {
-  maxRetries: 5,
+  maxRetries: 2,
   initialBackoffMs: 1000,
   maxBackoffMs: 32000,
   jitterFactor: 0.25, // ±25% jitter
