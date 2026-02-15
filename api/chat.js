@@ -1,13 +1,14 @@
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 5;
-const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite:free';
+const FREE_TIER_DEFAULT_MODEL = 'google/gemma-3-4b-it:free';
 const FREE_TIER_MODELS = [
-  'google/gemini-2.5-flash-lite:free',
-  'google/gemini-2.5-flash:free',
-  'deepseek/deepseek-v3.2-20251201:free',
+  'google/gemma-3-4b-it:free',
+  'meta-llama/llama-4-scout:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
   'openrouter/free'
 ];
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+// 404 = model not found on OpenRouter, treat as retryable to try next model
+const RETRYABLE_STATUSES = new Set([404, 429, 500, 502, 503, 504]);
 
 // ============================================
 // KV STORAGE (optional - falls back to in-memory)

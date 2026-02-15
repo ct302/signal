@@ -5,17 +5,17 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // OpenRouter models - hardcoded selection
 export const OPENROUTER_MODELS = [
-  'google/gemini-2.5-flash-lite:free',
-  'google/gemini-2.5-flash:free',
-  'deepseek/deepseek-v3.2-20251201:free'
+  'google/gemma-3-4b-it:free',
+  'meta-llama/llama-4-scout:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free'
 ];
 
 // Fallback model chain for circuit breaker pattern
 // When primary model hits rate limit, try these in order
 export const OPENROUTER_FALLBACK_MODELS = [
-  'google/gemini-2.5-flash-lite:free',
-  'google/gemini-2.5-flash:free',
-  'deepseek/deepseek-v3.2-20251201:free'
+  'google/gemma-3-4b-it:free',
+  'meta-llama/llama-4-scout:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free'
 ];
 
 // Rate limit configuration
