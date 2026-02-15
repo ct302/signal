@@ -3,19 +3,19 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // No default API keys - users must provide their own for security
 
-// OpenRouter models - hardcoded selection
+// OpenRouter models - hardcoded selection (larger models first for better quality)
 export const OPENROUTER_MODELS = [
-  'google/gemma-3-4b-it:free',
   'meta-llama/llama-4-scout:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free'
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'google/gemma-3-4b-it:free'
 ];
 
 // Fallback model chain for circuit breaker pattern
 // When primary model hits rate limit, try these in order
 export const OPENROUTER_FALLBACK_MODELS = [
-  'google/gemma-3-4b-it:free',
   'meta-llama/llama-4-scout:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free'
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'google/gemma-3-4b-it:free'
 ];
 
 // Rate limit configuration

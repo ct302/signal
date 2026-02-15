@@ -222,7 +222,7 @@ const getProviderConfig = (): ProviderConfig => {
   }
   // Default config without API key - user must provide their own
   // When using proxy (production, no user key), use a free model by default
-  const defaultModel = shouldUseProxy() ? 'google/gemma-3-4b-it:free' : '';
+  const defaultModel = shouldUseProxy() ? 'meta-llama/llama-4-scout:free' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',

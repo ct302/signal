@@ -1,10 +1,10 @@
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 5;
-const FREE_TIER_DEFAULT_MODEL = 'google/gemma-3-4b-it:free';
+const FREE_TIER_DEFAULT_MODEL = 'meta-llama/llama-4-scout:free';
 const FREE_TIER_MODELS = [
-  'google/gemma-3-4b-it:free',
   'meta-llama/llama-4-scout:free',
   'mistralai/mistral-small-3.1-24b-instruct:free',
+  'google/gemma-3-4b-it:free',
   'openrouter/free'
 ];
 // 404 = model not found on OpenRouter, treat as retryable to try next model
