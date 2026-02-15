@@ -2,6 +2,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "framework": "create-react-app",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@5.6.3"
+    }
+  },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" }
   ],
