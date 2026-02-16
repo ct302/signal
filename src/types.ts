@@ -451,4 +451,19 @@ export interface StudyGuideDetail {
   key_insight: string;         // Memorable one-liner for intuition tattooing
 }
 
+// ============================================
+// FONT PRESET TYPES
+// ============================================
+
+export interface FontPreset {
+  id: string;
+  name: string;
+  emoji: string;
+  fontFamily: string;       // CSS font-family value (with fallbacks)
+  fontWeight: number;        // Default weight for body text
+  letterSpacing: string;     // CSS letter-spacing value
+  lineHeightMultiplier: number; // Multiplied with base line-height
+  googleFontUrl?: string;    // CDN link to load, undefined = system font
+}
+
 export {};

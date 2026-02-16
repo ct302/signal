@@ -236,16 +236,16 @@ type AttentionMode = 'opacity' | 'size' | 'heatmap';
 
 // Heatmap color palette for visual hierarchy (Stages 2 & 3 - includes RED for keywords)
 const HEATMAP_COLORS = [
-  'bg-red-500/30 text-red-300',
-  'bg-orange-500/30 text-orange-300',
-  'bg-amber-500/30 text-amber-300',
-  'bg-yellow-500/30 text-yellow-300',
-  'bg-lime-500/30 text-lime-300',
-  'bg-green-500/30 text-green-300',
-  'bg-emerald-500/30 text-emerald-300',
-  'bg-teal-500/30 text-teal-300',
-  'bg-cyan-500/30 text-cyan-300',
-  'bg-blue-500/30 text-blue-300'
+  'bg-red-500/45 text-red-300',
+  'bg-orange-500/45 text-orange-300',
+  'bg-amber-500/45 text-amber-300',
+  'bg-yellow-500/45 text-yellow-300',
+  'bg-lime-500/45 text-lime-300',
+  'bg-green-500/45 text-green-300',
+  'bg-emerald-500/45 text-emerald-300',
+  'bg-teal-500/45 text-teal-300',
+  'bg-cyan-500/45 text-cyan-300',
+  'bg-blue-500/45 text-blue-300'
 ];
 
 const HEATMAP_COLORS_LIGHT = [
@@ -263,16 +263,16 @@ const HEATMAP_COLORS_LIGHT = [
 
 // Stage 1 heatmap colors - NO RED (red reserved for keyword highlighting in Stage 2/3)
 const HEATMAP_COLORS_STAGE1 = [
-  'bg-purple-500/30 text-purple-300',
-  'bg-violet-500/30 text-violet-300',
-  'bg-indigo-500/30 text-indigo-300',
-  'bg-blue-500/30 text-blue-300',
-  'bg-cyan-500/30 text-cyan-300',
-  'bg-teal-500/30 text-teal-300',
-  'bg-emerald-500/30 text-emerald-300',
-  'bg-green-500/30 text-green-300',
-  'bg-lime-500/30 text-lime-300',
-  'bg-yellow-500/30 text-yellow-300'
+  'bg-purple-500/45 text-purple-300',
+  'bg-violet-500/45 text-violet-300',
+  'bg-indigo-500/45 text-indigo-300',
+  'bg-blue-500/45 text-blue-300',
+  'bg-cyan-500/45 text-cyan-300',
+  'bg-teal-500/45 text-teal-300',
+  'bg-emerald-500/45 text-emerald-300',
+  'bg-green-500/45 text-green-300',
+  'bg-lime-500/45 text-lime-300',
+  'bg-yellow-500/45 text-yellow-300'
 ];
 
 const HEATMAP_COLORS_STAGE1_LIGHT = [

@@ -61,7 +61,8 @@ import {
   CompleteMasteryHistory,
   CachedDomainEnrichment,
   SymbolGuideEntry,
-  StudyGuideOutline
+  StudyGuideOutline,
+  FontPreset
 } from './types';
 
 // Constants
@@ -72,7 +73,9 @@ import {
   CONCEPT_BG_COLORS,
   MAX_TUTOR_HISTORY,
   QUICK_START_DOMAINS,
-  SYMBOL_GLOSSARY
+  SYMBOL_GLOSSARY,
+  FONT_PRESETS,
+  STORAGE_KEYS
 } from './constants';
 
 // Utils
@@ -114,7 +117,8 @@ import {
   MasteryMode,
   MasterySessionCache,
   StudyGuide,
-  SkeletonLoader
+  SkeletonLoader,
+  FontPicker
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -440,6 +444,39 @@ export default function App() {
   const [showIntuitionModal, setShowIntuitionModal] = useState(false); // Intuition Mode modal
   const [isStudyGuideMode, setIsStudyGuideMode] = useState(false);
   const [studyGuideCache, setStudyGuideCache] = useState<StudyGuideOutline | null>(null);
+
+  // Font Preset State
+  const [fontPreset, setFontPreset] = useState<FontPreset>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.FONT_PRESET);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const found = FONT_PRESETS.find(p => p.id === parsed.id);
+        if (found) return found;
+      }
+    } catch { /* ignore */ }
+    return FONT_PRESETS[0];
+  });
+  const [showFontPicker, setShowFontPicker] = useState(false);
+
+  // Font persistence and Google Font loading
+  useEffect(() => {
+    // Persist selection
+    localStorage.setItem(STORAGE_KEYS.FONT_PRESET, JSON.stringify({ id: fontPreset.id }));
+    // Load Google Font CSS if needed
+    if (fontPreset.googleFontUrl) {
+      const existingLink = document.getElementById('signal-custom-font') as HTMLLinkElement;
+      if (existingLink) {
+        existingLink.href = fontPreset.googleFontUrl;
+      } else {
+        const link = document.createElement('link');
+        link.id = 'signal-custom-font';
+        link.rel = 'stylesheet';
+        link.href = fontPreset.googleFontUrl;
+        document.head.appendChild(link);
+      }
+    }
+  }, [fontPreset]);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -1343,7 +1380,8 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (isStudyGuideMode) setIsStudyGuideMode(false);
+          if (showFontPicker) setShowFontPicker(false);
+          else if (isStudyGuideMode) setIsStudyGuideMode(false);
           else if (isMasteryMode) setIsMasteryMode(false);
           else if (isDualPaneMode) setIsDualPaneMode(false);
           else if (isConstellationMode) setIsConstellationMode(false);
@@ -1462,7 +1500,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode, showFontPicker]);
 
   // Noise generator for Study Mode (white, pink, brown noise)
   useEffect(() => {
@@ -2275,17 +2313,31 @@ export default function App() {
     }
     if (mode === 'heatmap') {
       if (isImportant) {
-        style.color = '#000';
         style.fontWeight = 600;
         style.padding = '0 2px';
         style.borderRadius = '4px';
-        if (!isIsomorphicMode) {
-          // Use pure weight-based intensity (higher weight = more highlight)
-          const intensity = Math.min(item.weight, 1);
-          style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
+        if (isDarkMode) {
+          // Fluorescent dark mode: bright white text with neon cyan-teal glow
+          style.color = '#fff';
+          if (!isIsomorphicMode) {
+            const intensity = Math.min(item.weight, 1);
+            // Cyan-to-teal fluorescent background, vivid on dark surfaces
+            style.backgroundColor = `hsla(${165 + intensity * 25}, 100%, ${45 + intensity * 15}%, ${0.25 + (intensity * 0.45)})`;
+            // Subtle neon glow on high-weight words
+            if (intensity > 0.7) {
+              style.textShadow = '0 0 6px rgba(0, 255, 200, 0.3)';
+            }
+          }
+        } else {
+          // Light mode: existing yellow-based heatmap
+          style.color = '#000';
+          if (!isIsomorphicMode) {
+            const intensity = Math.min(item.weight, 1);
+            style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
+          }
         }
       } else {
-        style.color = '#888';
+        style.color = isDarkMode ? '#555' : '#888';
       }
     }
 
@@ -2893,6 +2945,21 @@ export default function App() {
                         <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
                       </button>
                     )}
+                    {/* Font Preset Picker Toggle */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setShowFontPicker(!showFontPicker)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          showFontPicker
+                            ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50 shadow-lg shadow-indigo-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title={`Reading Font: ${fontPreset.name}`}
+                      >
+                        <span className="text-sm font-serif">Aa</span>
+                        <span className="hidden sm:inline">{fontPreset.emoji}</span>
+                      </button>
+                    )}
                     {/* Regenerating indicator */}
                     {isRegenerating && (
                       <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
@@ -2923,11 +2990,29 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Font Picker Panel */}
+                {showFontPicker && (
+                  <div className="px-4 pt-3">
+                    <FontPicker
+                      isDarkMode={isDarkMode}
+                      currentPreset={fontPreset}
+                      onSelectPreset={(preset) => {
+                        setFontPreset(preset);
+                      }}
+                      onClose={() => setShowFontPicker(false)}
+                    />
+                  </div>
+                )}
+
                 {/* Content Body + Footer - hidden when Study Guide is active */}
                 {!isStudyGuideMode ? (<>
                 <div
                   ref={contentRef}
                   className="p-6 md:p-8 relative select-text min-h-[400px]"
+                  style={{
+                    fontFamily: fontPreset.fontFamily,
+                    letterSpacing: fontPreset.letterSpacing,
+                  }}
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
@@ -3221,15 +3306,17 @@ export default function App() {
                 </div>
                 )}
                 </>) : (
-                  <StudyGuide
-                    topic={lastSubmittedTopic}
-                    domain={analogyDomain}
-                    domainEmoji={domainEmoji}
-                    isDarkMode={isDarkMode}
-                    onClose={() => setIsStudyGuideMode(false)}
-                    cachedOutline={studyGuideCache}
-                    onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
-                  />
+                  <div style={{ fontFamily: fontPreset.fontFamily, letterSpacing: fontPreset.letterSpacing }}>
+                    <StudyGuide
+                      topic={lastSubmittedTopic}
+                      domain={analogyDomain}
+                      domainEmoji={domainEmoji}
+                      isDarkMode={isDarkMode}
+                      onClose={() => setIsStudyGuideMode(false)}
+                      cachedOutline={studyGuideCache}
+                      onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
+                    />
+                  </div>
                 )}
               </div>
 

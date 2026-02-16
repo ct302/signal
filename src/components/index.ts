@@ -14,3 +14,4 @@ export * from './ProximityWarningModal';
 export * from './MasteryMode';
 export * from './StudyGuide';
 export * from './SkeletonLoader';
+export * from './FontPicker';

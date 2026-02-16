@@ -1,3 +1,5 @@
+import type { FontPreset } from '../types';
+
 // API Configuration - Now dynamic via ProviderConfig
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
@@ -216,7 +218,8 @@ export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Ar
 // Local storage keys
 export const STORAGE_KEYS = {
   HISTORY: 'signalHistory',
-  PROVIDER_CONFIG: 'signalProviderConfig'
+  PROVIDER_CONFIG: 'signalProviderConfig',
+  FONT_PRESET: 'signalFontPreset'
 };
 
 // Limits
@@ -381,3 +384,108 @@ export const CONCEPT_SYMBOL_HINTS: Record<string, string[]> = {
   'for all': ['∀'],
   'there exists': ['∃'],
 };
+
+// Font presets for learning customization
+
+export const FONT_PRESETS: FontPreset[] = [
+  {
+    id: 'clean',
+    name: 'Clean',
+    emoji: '✨',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    fontWeight: 400,
+    letterSpacing: 'normal',
+    lineHeightMultiplier: 1.0,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+  },
+  {
+    id: 'classic',
+    name: 'Classic',
+    emoji: '📖',
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.05,
+    // System font — no CDN needed
+  },
+  {
+    id: 'textbook',
+    name: 'Textbook',
+    emoji: '🎓',
+    fontFamily: "'Merriweather', Georgia, serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.08,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&display=swap',
+  },
+  {
+    id: 'friendly',
+    name: 'Friendly',
+    emoji: '😊',
+    fontFamily: "'Nunito', 'Segoe UI', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '0.02em',
+    lineHeightMultiplier: 1.05,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap',
+  },
+  {
+    id: 'playful',
+    name: 'Playful',
+    emoji: '🎨',
+    fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive",
+    fontWeight: 400,
+    letterSpacing: '0.03em',
+    lineHeightMultiplier: 1.1,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap',
+  },
+  {
+    id: 'focus',
+    name: 'Focus',
+    emoji: '🔬',
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
+    lineHeightMultiplier: 1.1,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap',
+  },
+  {
+    id: 'dyslexia',
+    name: 'Dyslexia-Friendly',
+    emoji: '♿',
+    fontFamily: "'OpenDyslexic', 'Comic Sans MS', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '0.05em',
+    lineHeightMultiplier: 1.15,
+    googleFontUrl: 'https://fonts.cdnfonts.com/css/opendyslexic',
+  },
+  {
+    id: 'elegant',
+    name: 'Elegant',
+    emoji: '🪶',
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.05,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap',
+  },
+  {
+    id: 'minimal',
+    name: 'Minimal',
+    emoji: '◻️',
+    fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
+    lineHeightMultiplier: 1.0,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap',
+  },
+  {
+    id: 'cozy',
+    name: 'Cozy',
+    emoji: '☕',
+    fontFamily: "'Literata', 'Palatino', serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.08,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Literata:wght@300;400;500;600;700&display=swap',
+  },
+];
