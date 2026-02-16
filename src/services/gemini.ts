@@ -700,35 +700,38 @@ Write as if you're an expert who deeply understands BOTH the technical concept A
 Your voice should sound like: "Just as [${domain || 'domain'} experts] intuitively [do X], this concept formalizes that same logic..."
 The ${domain || 'domain'} integration should feel NATURAL, not forced - like you're genuinely passionate about both fields.
 
-REQUIRED STRUCTURE FOR technical_explanation (400-500 words):
+REQUIRED STRUCTURE FOR technical_explanation (200-280 words MAX):
 
-1. FORMAL DEFINITION (1 paragraph)
-   - Precise mathematical/technical definition with proper LaTeX notation
-   - Key equations or formal relationships
-   - This IS the advanced level - use real math: $\\\\int$, $\\\\nabla$, $\\\\partial$, matrices, etc.
+IMPORTANT: Be CONCISE. Every sentence must earn its place. No filler, no repetition, no restating what was just said.
 
-2. DOMAIN-GROUNDED EXPLANATION (2 paragraphs)
-   - Explain the concept THROUGH THE LENS of ${domain || 'the chosen domain'}
-   - Show how ${domain || 'domain'} experts intuitively do what this concept formalizes
-   - Use ${domain || 'domain'} vocabulary naturally alongside technical terms
-   - Make the reader think "Oh, I already understand this from ${domain || 'my domain knowledge'}!"
+1. CORE DEFINITION (2-3 sentences)
+   - What is it? Give a precise, tight definition with key LaTeX notation.
+   - Include the essential equation or relationship if applicable.
 
-3. DEEPER INSIGHT - THE "AHA MOMENT" (1 paragraph)
-   - A NON-OBVIOUS connection or insight that rewards the advanced learner
-   - Something that makes an expert say "I never thought of it that way"
-   - Connect to broader patterns, historical context, or surprising applications
-   - This is what separates ELI100 from Wikipedia
+2. HOW IT WORKS (1 short paragraph)
+   - The key mechanism or process, explained clearly.
+   - Use ${domain || 'domain'} intuition to ground it: "Think of it like [domain analogy]..."
+   - DO NOT enumerate every property — focus on the ONE central insight.
 
-4. WHERE THIS LEADS (2-3 sentences)
-   - What concepts build on this? What doors does understanding this open?
-   - Give the learner a roadmap for going deeper
+3. WHY IT MATTERS (2-3 sentences)
+   - One practical application or deeper insight.
+   - What doors does understanding this open?
 
-QUALITY BAR: The explanation should feel like a conversation with a brilliant professor who happens to love ${domain || 'the domain'} - not a textbook, not a Wikipedia stub.`;
+WRITING RULES:
+- NEVER repeat information. If you said "A decomposes into B" don't say "This decomposition produces B" in the next sentence.
+- NEVER use filler phrases: "It is important to note that", "In other words", "Essentially", "Fundamentally"
+- Prefer SHORT sentences. Break up long compound sentences.
+- Use LaTeX ONLY for actual math expressions. Don't use LaTeX commands for normal words.
+- NEVER use \\n, \\\\, or line break commands in your output. Use normal paragraph spacing.
+
+QUALITY BAR: A brilliant professor explaining to a sharp grad student over coffee — clear, tight, no wasted words.`;
     default:
       return `Write for a general adult audience with some familiarity with the subject.
 - Balance clarity with technical accuracy
-- TARGET LENGTH: 280-330 words for EACH explanation (tech and analogy)
-- Include WHAT it is, WHY it matters, and a practical example`;
+- TARGET LENGTH: 150-220 words for EACH explanation (tech and analogy)
+- Be CONCISE - no filler phrases, no repetition. Every sentence adds new information.
+- Include WHAT it is, WHY it matters, and a practical example
+- Do NOT use \\n or \\\\ for line breaks. Use normal paragraph spacing.`;
   }
 };
 
@@ -822,7 +825,7 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. ${latexInstruction} This section is for the TECHNICAL side only - give real substance, not generic word salad.",
+  "technical_explanation": "CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - tight definition with key equation, (2) HOW - the core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler, no repetition. Every sentence must add new information. Do NOT use \\n or \\\\ for line breaks.",
   "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
   "segments": [
     {
@@ -913,13 +916,17 @@ ALLOWED LaTeX (use these ONLY):
 - Simple operators: $\\\\times$, $\\\\cdot$, $\\\\rightarrow$, $=$
 - Superscripts/subscripts: $x^2$, $a_n$
 
-FORBIDDEN (DO NOT USE):
-- \\\\array, \\\\matrix, \\\\begin, \\\\end (these are environments, not inline math)
-- \\\\tilde, \\\\hat, \\\\bar as standalone words (wrong: "a \\\\tilde of x")
+FORBIDDEN (DO NOT USE - THESE BREAK RENDERING):
+- \\\\array, \\\\matrix, \\\\begin, \\\\end (environments don't work inline)
+- \\\\tilde, \\\\hat, \\\\bar as standalone words
 - Complex nested environments
 - Any LaTeX command used as an English word
 - NEVER use \\\\in to mean "in" (write the word "in")
 - NEVER use \\\\to to mean "to" (write the word "to")
+- NEVER use \\\\square to mean "square" (write the word "square")
+- NEVER use \\n or \\\\n for line breaks (use normal paragraph spacing)
+- NEVER use \\\\\\\\ for line breaks (this renders as backslashes)
+- NEVER output Unicode math symbols directly (∈, □, ∑, →, etc.) — use either LaTeX inside $...$ or plain English
 
 EXAMPLES:
 - WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"

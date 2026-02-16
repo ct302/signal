@@ -439,14 +439,14 @@ export const fixUnicode = (text: string | null | undefined): string => {
 export const unescapeControlSequences = (text: string | null | undefined): string => {
   if (!text || typeof text !== 'string') return "";
   return text
-    // CRITICAL: Only match \n, \r, \t when NOT followed by a letter
-    // Otherwise we destroy LaTeX commands: \times -> " imes", \theta -> " heta",
-    // \nabla -> " abla", \nu -> " u", \rho -> " ho", \tau -> " au", etc.
-    .replace(/\\n(?![a-zA-Z])/g, ' ')   // \n but not \nabla, \neq, \nu, \neg, \not, etc.
-    .replace(/\\r(?![a-zA-Z])/g, ' ')   // \r but not \rho, \rangle, \rightarrow, etc.
-    .replace(/\\t(?![a-zA-Z])/g, ' ')   // \t but not \times, \theta, \tau, \text, \tilde, etc.
-    .replace(/\s{2,}/g, ' ')            // Collapse multiple spaces to single
-    .replace(/\\\\/g, '\\');            // Handle escaped backslashes
+    // CRITICAL: Only protect \n, \r, \t when followed by a LOWERCASE letter
+    // LaTeX commands are always lowercase: \nabla, \neq, \times, \theta, \rho, etc.
+    // But \nThe, \nA, \rX etc. are actual control sequences + uppercase word start
+    .replace(/\\n(?![a-z])/g, ' ')   // \n→space UNLESS followed by lowercase (preserves \nabla, \neq, \nu, etc.)
+    .replace(/\\r(?![a-z])/g, ' ')   // \r→space UNLESS followed by lowercase (preserves \rho, \rangle, etc.)
+    .replace(/\\t(?![a-z])/g, ' ')   // \t→space UNLESS followed by lowercase (preserves \times, \theta, etc.)
+    .replace(/\s{2,}/g, ' ')         // Collapse multiple spaces to single
+    .replace(/\\\\/g, '\\');         // Handle escaped backslashes
 };
 
 /**
