@@ -790,39 +790,42 @@ export default function App() {
         return;
       }
 
+      // Reassurance suffix for free tier users - failed searches don't count
+      const freeTierNote = isOnFreeTier() ? " This didn't count against your free searches." : "";
+
       // Handle ApiError with detailed status codes
       if (e instanceof ApiError) {
         switch (e.status) {
           case 401:
           case 403:
-            setApiError("API key issue. Please check your API key in Settings.");
+            setApiError("API key issue. Please check your API key in Settings." + freeTierNote);
             break;
           case 404:
-            setApiError("Model not found. Please check your model name in Settings.");
+            setApiError("Model not found. Please check your model name in Settings." + freeTierNote);
             break;
           case 429:
-            setApiError("Rate limited. The API is busy - please wait a moment and try again.");
+            setApiError("Rate limited. The API is busy - please wait a moment and try again." + freeTierNote);
             break;
           case 500:
           case 502:
           case 503:
           case 504:
-            setApiError("Server error. The API is temporarily unavailable - please try again.");
+            setApiError("Server error. The API is temporarily unavailable - please try again." + freeTierNote);
             break;
           default:
-            setApiError(`Request failed (${e.status}): ${e.message.slice(0, 80)}`);
+            setApiError(`Request failed (${e.status}): ${e.message.slice(0, 80)}` + freeTierNote);
         }
       } else {
         // Handle other errors (network, parsing, etc.)
         const errorMessage = (e as Error)?.message || "Unknown error occurred";
         if (errorMessage.includes("API key")) {
-          setApiError("API key issue. Please check your API key in Settings.");
+          setApiError("API key issue. Please check your API key in Settings." + freeTierNote);
         } else if (errorMessage.includes("Empty response")) {
-          setApiError("The model returned an empty response. It may be overloaded - try again.");
+          setApiError("The model returned an empty response. It may be overloaded - try again." + freeTierNote);
         } else if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorMessage.includes("Failed to fetch")) {
-          setApiError("Network error. Please check your connection and try again.");
+          setApiError("Network error. Please check your connection and try again." + freeTierNote);
         } else {
-          setApiError(`Request failed: ${errorMessage.slice(0, 100)}`);
+          setApiError(`Request failed: ${errorMessage.slice(0, 100)}` + freeTierNote);
         }
       }
     } finally {
