@@ -79,7 +79,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
@@ -1125,6 +1125,7 @@ export default function App() {
   const getConceptId = (word: string, map: ConceptMapItem[]): number => {
     const cleanedWord = cleanText(word).toLowerCase();
     if (cleanedWord.length < 3) return -1;
+    if (STOP_WORDS.has(cleanedWord)) return -1;
 
     let bestId = -1;
     let bestScore = 0; // Higher = better match
@@ -2402,7 +2403,8 @@ export default function App() {
     let heatmapColorClass = "";
     const isSelected = selectedTerm && cleanText(item.text).toLowerCase().includes(selectedTerm.toLowerCase());
 
-    if (isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
+    const wordClean = cleanText(item.text).toLowerCase();
+    if (isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0 && !STOP_WORDS.has(wordClean)) {
       segmentColorClass = CONCEPT_COLORS[item.conceptIndex % CONCEPT_COLORS.length];
       heatmapColorClass = CONCEPT_BG_COLORS[item.conceptIndex % CONCEPT_BG_COLORS.length];
     }
@@ -2526,7 +2528,6 @@ export default function App() {
     if ((!hasFullExplanation && !hasSegments) || isLoading) return;
 
     const allTokens: ProcessedWord[] = [];
-    let fallbackCounter = -1;
 
     // Select the appropriate full text based on view mode
     // Priority: Full explanation > Joined segments (fallback)
@@ -2550,9 +2551,10 @@ export default function App() {
     // Analogy/narrative should be pure prose - no LaTeX conversion
     let processedText: string;
     if (isTechnicalMode) {
-      // Technical mode: fix malformed LaTeX, then wrap bare commands
+      // Technical mode: fix malformed LaTeX, convert Unicode math to KaTeX, then wrap bare commands
       const sanitizedText = sanitizeLatex(textToParse);
-      processedText = wrapBareLatex(sanitizedText);
+      const latexConverted = convertUnicodeToLatex(sanitizedText);
+      processedText = wrapBareLatex(latexConverted);
     } else {
       // Analogy/narrative mode: pure prose, no LaTeX processing
       // Apply one final aggressive strip to catch anything that slipped through
@@ -2584,7 +2586,8 @@ export default function App() {
           // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
           const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
 
-          // Determine conceptIndex: prioritize entityId, then conceptMap, then fallback
+          // Determine conceptIndex: prioritize entityId, then conceptMap
+          // Only color words that match known concepts — no random fallback colors
           let cIdx: number | undefined;
           if (entityId !== undefined) {
             // Use entityId for consistent multi-word entity coloring
@@ -2593,9 +2596,6 @@ export default function App() {
             const mappedId = getConceptId(word, conceptMap);
             if (mappedId !== -1) {
               cIdx = mappedId;
-            } else if (weight > 0.6) {
-              fallbackCounter++;
-              cIdx = fallbackCounter;
             }
           }
           allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: cIdx, entityId });

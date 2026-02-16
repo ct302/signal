@@ -782,3 +782,66 @@ export const sanitizeLatex = (text: string): string => {
 
   return result;
 };
+
+/**
+ * Convert raw Unicode math symbols to $\command$ form for KaTeX rendering.
+ * Only used in technical mode — analogy mode uses stripMathSymbols() instead.
+ * Skips content already inside $...$ or $$...$$ delimiters.
+ */
+export const convertUnicodeToLatex = (text: string): string => {
+  if (!text) return "";
+
+  // Split on existing math regions — don't touch content already in math mode
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[^$]+\$)/g);
+
+  return parts.map(part => {
+    if (part.startsWith('$') && part.endsWith('$')) return part;
+
+    let result = part;
+
+    // Calculus operators
+    result = result.replace(/∇/g, '$\\nabla$');
+    result = result.replace(/∑/g, '$\\sum$');
+    result = result.replace(/∂/g, '$\\partial$');
+    result = result.replace(/∫/g, '$\\int$');
+    result = result.replace(/∬/g, '$\\iint$');
+    result = result.replace(/∮/g, '$\\oint$');
+    result = result.replace(/∏/g, '$\\prod$');
+
+    // Comparison / arithmetic
+    result = result.replace(/×/g, '$\\times$');
+    result = result.replace(/÷/g, '$\\div$');
+    result = result.replace(/±/g, '$\\pm$');
+    result = result.replace(/∞/g, '$\\infty$');
+    result = result.replace(/≈/g, '$\\approx$');
+    result = result.replace(/≠/g, '$\\neq$');
+    result = result.replace(/≤/g, '$\\leq$');
+    result = result.replace(/≥/g, '$\\geq$');
+    result = result.replace(/≡/g, '$\\equiv$');
+    result = result.replace(/∝/g, '$\\propto$');
+
+    // Set theory — remaining ∈ not already handled by sanitizeLatex prose rule
+    result = result.replace(/∈/g, '$\\in$');
+    result = result.replace(/∅/g, '$\\emptyset$');
+    result = result.replace(/⊂/g, '$\\subset$');
+    result = result.replace(/⊆/g, '$\\subseteq$');
+    result = result.replace(/∪/g, '$\\cup$');
+    result = result.replace(/∩/g, '$\\cap$');
+
+    // Logic
+    result = result.replace(/∀/g, '$\\forall$');
+    result = result.replace(/∃/g, '$\\exists$');
+
+    // Arrows
+    result = result.replace(/⇒/g, '$\\Rightarrow$');
+    result = result.replace(/⇔/g, '$\\Leftrightarrow$');
+    result = result.replace(/→/g, '$\\to$');
+    result = result.replace(/←/g, '$\\leftarrow$');
+
+    // Miscellaneous
+    result = result.replace(/⊕/g, '$\\oplus$');
+    result = result.replace(/⊗/g, '$\\otimes$');
+
+    return result;
+  }).join('');
+};
