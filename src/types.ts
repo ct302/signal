@@ -421,4 +421,34 @@ export interface CachedDomainEnrichment {
   enrichedAt: Date;            // When this was checked
 }
 
+// ============================================
+// STUDY GUIDE TYPES
+// ============================================
+
+export type StudyGuideDepth = 'core' | 'complete';
+
+export interface StudyGuideConcept {
+  id: number;
+  tech_term: string;           // e.g., "The Agent"
+  analogy_term: string;        // e.g., "The Quarterback (Kurt Warner)"
+  one_liner: string;           // 1-sentence hook blending both domains
+  category?: string;           // Optional grouping: "Core Components", "Training Loop", etc.
+}
+
+export interface StudyGuideOutline {
+  topic: string;
+  domain: string;
+  depth: StudyGuideDepth;
+  concepts: StudyGuideConcept[];
+  generated_at: string;
+}
+
+export interface StudyGuideDetail {
+  concept_id: number;
+  tech_explanation: string;    // 2-3 sentences, pure technical
+  analogy_explanation: string; // 2-3 sentences, through domain lens with specific references
+  why_it_maps: string;         // 1-2 sentences, structural connection
+  key_insight: string;         // Memorable one-liner for intuition tattooing
+}
+
 export {};

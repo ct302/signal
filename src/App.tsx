@@ -60,7 +60,8 @@ import {
   ProximityResult,
   CompleteMasteryHistory,
   CachedDomainEnrichment,
-  SymbolGuideEntry
+  SymbolGuideEntry,
+  StudyGuideOutline
 } from './types';
 
 // Constants
@@ -112,6 +113,7 @@ import {
   ProximityWarningModal,
   MasteryMode,
   MasterySessionCache,
+  StudyGuide,
   SkeletonLoader
 } from './components';
 
@@ -436,6 +438,8 @@ export default function App() {
   const [selectedMasteryEntry, setSelectedMasteryEntry] = useState<CompleteMasteryHistory | null>(null);
   const [masterySessionCache, setMasterySessionCache] = useState<MasterySessionCache | null>(null);
   const [showIntuitionModal, setShowIntuitionModal] = useState(false); // Intuition Mode modal
+  const [isStudyGuideMode, setIsStudyGuideMode] = useState(false);
+  const [studyGuideCache, setStudyGuideCache] = useState<StudyGuideOutline | null>(null);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
@@ -875,6 +879,9 @@ export default function App() {
     setCachedDomainEnrichment(null);
     // Clear mastery session cache when domain changes
     setMasterySessionCache(null);
+    // Clear study guide cache when domain changes
+    setStudyGuideCache(null);
+    setIsStudyGuideMode(false);
 
     // Look up emoji from quick start domains first
     const quickStartMatch = QUICK_START_DOMAINS.find(
@@ -1336,7 +1343,8 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (isMasteryMode) setIsMasteryMode(false);
+          if (isStudyGuideMode) setIsStudyGuideMode(false);
+          else if (isMasteryMode) setIsMasteryMode(false);
           else if (isDualPaneMode) setIsDualPaneMode(false);
           else if (isConstellationMode) setIsConstellationMode(false);
           else if (showShortcutsLegend) setShowShortcutsLegend(false);
@@ -1440,6 +1448,11 @@ export default function App() {
           if (!hasStarted || isLoading) return;
           setIsMasteryMode(!isMasteryMode);
           break;
+        case 'y':
+          // Toggle study guide mode
+          if (!hasStarted || isLoading) return;
+          setIsStudyGuideMode(!isStudyGuideMode);
+          break;
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
@@ -1449,7 +1462,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale, viewMode, isBulletMode]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode]);
 
   // Noise generator for Study Mode (white, pink, brown noise)
   useEffect(() => {
@@ -1904,6 +1917,10 @@ export default function App() {
     // Mastery mode state - clear cached session when content changes
     setIsMasteryMode(false);
     setMasterySessionCache(null);
+
+    // Study guide state - clear when content changes
+    setIsStudyGuideMode(false);
+    setStudyGuideCache(null);
   };
 
   // Legacy reset function for backwards compatibility
@@ -2788,6 +2805,21 @@ export default function App() {
                         <span className="hidden sm:inline">Mastery</span>
                       </button>
                     )}
+                    {/* Study Guide Button */}
+                    {hasStarted && (
+                      <button
+                        onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isStudyGuideMode
+                            ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50 shadow-lg shadow-teal-500/20' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50 shadow-lg shadow-teal-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Generate Study Guide (Y)"
+                      >
+                        <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">Guide</span>
+                      </button>
+                    )}
                     {/* Intuition Mode Button - Opens modal with 3 memorable one-liners */}
                     {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
                       <button
@@ -2811,6 +2843,9 @@ export default function App() {
                           setMasterySessionCache(null);
                           // Close mastery mode if open
                           setIsMasteryMode(false);
+                          // Clear study guide cache on reroll
+                          setStudyGuideCache(null);
+                          setIsStudyGuideMode(false);
                           // Regenerate content for current topic
                           fetchAnalogy(lastSubmittedTopic);
                         }}
@@ -4305,6 +4340,21 @@ export default function App() {
           cachedState={masterySessionCache}
           onStateChange={setMasterySessionCache}
         />
+      )}
+
+      {/* Study Guide */}
+      {isStudyGuideMode && hasStarted && lastSubmittedTopic && (
+        <div className="mt-4 mx-4 md:mx-0">
+          <StudyGuide
+            topic={lastSubmittedTopic}
+            domain={analogyDomain}
+            domainEmoji={domainEmoji}
+            isDarkMode={isDarkMode}
+            onClose={() => setIsStudyGuideMode(false)}
+            cachedOutline={studyGuideCache}
+            onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
+          />
+        </div>
       )}
 
       {/* Intuition Mode Modal - 3 memorable one-liners */}

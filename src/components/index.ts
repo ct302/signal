@@ -12,4 +12,5 @@ export * from './ConstellationMode';
 export * from './IsomorphicDualPane';
 export * from './ProximityWarningModal';
 export * from './MasteryMode';
+export * from './StudyGuide';
 export * from './SkeletonLoader';

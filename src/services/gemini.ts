@@ -1,7 +1,7 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
 import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
 import { stripMathSymbols } from '../utils/text';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment, StudyGuideConcept, StudyGuideOutline, StudyGuideDetail, StudyGuideDepth } from '../types';
 
 // ============================================
 // CIRCUIT BREAKER PATTERN
@@ -2521,3 +2521,167 @@ const getDefaultMasterySummary = (topic: string, domain: string) => ({
   coreIntuition: `Demonstrated understanding of ${topic} through ${domain} analogies.`,
   uniqueApproach: 'Applied personal knowledge to explain complex concepts.'
 });
+
+// ============================================
+// STUDY GUIDE GENERATION
+// ============================================
+
+/**
+ * Generate a study guide outline — a full topic decomposition mapped through the user's expert domain.
+ * Phase 1 of 2: produces the outline with one-liners (fast, cheap — 1 API call).
+ * Phase 2 (expandStudyGuideConcept) expands individual sections on demand.
+ */
+export const generateStudyGuideOutline = async (
+  topic: string,
+  domain: string,
+  depth: StudyGuideDepth = 'core',
+  cachedDomainEnrichment?: CachedDomainEnrichment
+): Promise<StudyGuideOutline | null> => {
+  const shortDomain = getShortDomain(domain);
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const conceptCount = depth === 'core' ? '8-10' : '25-40';
+  const categoryInstruction = depth === 'complete'
+    ? `Group concepts into logical categories (e.g., "Core Components", "Training Loop", "Advanced Concepts"). Include a "category" field for each concept.`
+    : `Do NOT include a "category" field — just list the concepts in logical learning order.`;
+
+  const prompt = `You are a study guide architect. Your job is to decompose the technical topic "${topic}" into its sub-concepts and map EACH one to a hyper-specific element of the expert domain "${domain}".
+
+TASK: Create a study guide with ${conceptCount} concept mappings.
+
+CRITICAL RULES FOR DOMAIN REFERENCES:
+- Every analogy_term MUST be hyper-specific to "${shortDomain}" — use REAL names, REAL events, REAL scenarios
+- BAD: "The Quarterback (a football player)" — too generic
+- GOOD: "The Quarterback (Kurt Warner)" — specific real person
+- BAD: "A defensive play" — too vague
+- GOOD: "The Tampa 2 Cover Defense (Monte Kiffin's signature scheme)" — specific and real
+- The ${shortDomain} fan reading this should immediately recognize every reference
+- Each one_liner must blend BOTH the technical meaning AND the domain reference in a single punchy sentence
+
+${categoryInstruction}
+
+${needsWebSearch ? `USE WEB SEARCH to verify real names, events, and facts about "${domain}". Every domain reference must be historically accurate.` : ''}
+
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "concepts": [
+    {
+      "id": 1,
+      "tech_term": "The technical sub-concept name",
+      "analogy_term": "The specific ${shortDomain} element (with real name/event)",
+      "one_liner": "A single punchy sentence that tattoos the intuition by blending both domains"${depth === 'complete' ? ',\n      "category": "Category Name"' : ''}
+    }
+  ]
+}`;
+
+  const searchPromptText = needsWebSearch
+    ? `USE WEB SEARCH to find REAL facts about "${domain}" — specific names, events, dates, scores. Every ${shortDomain} reference must be verifiable.`
+    : undefined;
+
+  try {
+    const text = await callApi(prompt, {
+      jsonMode: true,
+      webSearch: needsWebSearch,
+      searchPrompt: searchPromptText
+    });
+    const result = safeJsonParse(text);
+
+    if (result && result.concepts && Array.isArray(result.concepts)) {
+      // Ensure each concept has an id
+      const concepts: StudyGuideConcept[] = result.concepts.map((c: any, i: number) => ({
+        id: c.id || i + 1,
+        tech_term: c.tech_term || `Concept ${i + 1}`,
+        analogy_term: c.analogy_term || shortDomain,
+        one_liner: c.one_liner || '',
+        ...(c.category ? { category: c.category } : {})
+      }));
+
+      return {
+        topic,
+        domain,
+        depth,
+        concepts,
+        generated_at: new Date().toISOString()
+      };
+    }
+
+    console.error('[generateStudyGuideOutline] Invalid response structure:', result);
+    return null;
+  } catch (error) {
+    console.error('[generateStudyGuideOutline] Failed:', error);
+    throw error; // Let the component handle the error (show message, don't count against free tier)
+  }
+};
+
+/**
+ * Expand a single study guide concept into full detail.
+ * Phase 2 of 2: triggered on-demand when user clicks to expand an accordion section.
+ */
+export const expandStudyGuideConcept = async (
+  concept: StudyGuideConcept,
+  topic: string,
+  domain: string,
+  cachedDomainEnrichment?: CachedDomainEnrichment
+): Promise<StudyGuideDetail | null> => {
+  const shortDomain = getShortDomain(domain);
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const prompt = `You are expanding a study guide entry for someone learning "${topic}" through the lens of "${domain}".
+
+CONCEPT TO EXPAND:
+- Technical term: "${concept.tech_term}"
+- Domain mapping: "${concept.analogy_term}"
+- One-liner: "${concept.one_liner}"
+
+Write 4 pieces:
+
+1. tech_explanation: 2-3 clear sentences explaining "${concept.tech_term}" technically. No jargon soup — explain it like the reader is smart but new to this.
+
+2. analogy_explanation: 2-3 sentences explaining this concept THROUGH "${concept.analogy_term}" using hyper-specific ${shortDomain} references. Use REAL names, REAL events, REAL scenarios. The ${shortDomain} fan should feel at home.
+
+3. why_it_maps: 1-2 sentences explaining the STRUCTURAL reason this mapping works. WHY does "${concept.tech_term}" behave like "${concept.analogy_term}"? What shared structure makes this click?
+
+4. key_insight: ONE memorable sentence — the "tattoo" insight that makes this concept stick forever. It should blend both domains.
+
+${needsWebSearch ? `USE WEB SEARCH to verify facts about "${domain}" — real names, real events, real stats.` : ''}
+
+Return ONLY this JSON:
+{
+  "concept_id": ${concept.id},
+  "tech_explanation": "...",
+  "analogy_explanation": "...",
+  "why_it_maps": "...",
+  "key_insight": "..."
+}`;
+
+  const searchPromptText = needsWebSearch
+    ? `Search for real facts about "${concept.analogy_term}" in the context of "${domain}".`
+    : undefined;
+
+  try {
+    const text = await callApi(prompt, {
+      jsonMode: true,
+      webSearch: needsWebSearch,
+      searchPrompt: searchPromptText
+    });
+    const result = safeJsonParse(text);
+
+    if (result) {
+      return {
+        concept_id: concept.id,
+        tech_explanation: result.tech_explanation || 'Technical explanation unavailable.',
+        analogy_explanation: result.analogy_explanation || 'Domain explanation unavailable.',
+        why_it_maps: result.why_it_maps || 'Structural mapping explanation unavailable.',
+        key_insight: result.key_insight || concept.one_liner
+      };
+    }
+
+    console.error('[expandStudyGuideConcept] Invalid response:', result);
+    return null;
+  } catch (error) {
+    console.error('[expandStudyGuideConcept] Failed:', error);
+    throw error;
+  }
+};
