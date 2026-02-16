@@ -98,7 +98,13 @@ export const sanitizeRawApiResponse = (rawText: string): string => {
     cleaned = cleaned.replace(/\\not\s*/g, 'not ');
 
     // Remove orphaned LaTeX commands (backslash followed by letters)
-    cleaned = cleaned.replace(/\\[a-zA-Z]+/g, '');
+    // Handle both single and double-escaped forms (\\cdot and \cdot)
+    cleaned = cleaned.replace(/\\{1,2}[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+    // Nuclear: remove any Unicode math symbols that individual rules missed
+    cleaned = cleaned.replace(/[\u2200-\u22FF\u27C0-\u27EF\u2980-\u29FF]/g, ' ');
+    // Remove stray curly braces and dollar signs
+    cleaned = cleaned.replace(/[{}$]/g, '');
 
     // Clean up multiple spaces
     cleaned = cleaned.replace(/\s{2,}/g, ' ');
@@ -392,6 +398,29 @@ export const stripMathSymbols = (text: string): string => {
 
   // Remove any remaining LaTeX commands that slipped through
   result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+  // ============================================================
+  // NUCLEAR FALLBACK - Catch ANY remaining math-like patterns
+  // These handle malformed/hybrid patterns the individual rules miss
+  // ============================================================
+
+  // Remove any remaining Unicode math operator blocks (U+2200-U+22FF, U+27C0-U+27EF, U+2980-U+29FF)
+  result = result.replace(/[\u2200-\u22FF\u27C0-\u27EF\u2980-\u29FF]/g, ' ');
+
+  // Remove any remaining combining diacritical marks used in math (U+0300-U+036F)
+  result = result.replace(/[\u0300-\u036F]/g, '');
+
+  // Remove stray backslash-word patterns that survived (e.g., \cdot, \mathbf, \frac)
+  result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+  // Remove stray curly braces left after LaTeX removal
+  result = result.replace(/[{}]/g, '');
+
+  // Remove orphaned dollar signs
+  result = result.replace(/\$/g, '');
+
+  // Remove stray backslashes
+  result = result.replace(/\\/g, '');
 
   // ============================================================
   // FINAL CLEANUP

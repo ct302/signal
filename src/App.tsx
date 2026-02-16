@@ -2454,14 +2454,20 @@ export default function App() {
       processedText = wrapBareLatex(sanitizedText);
     } else {
       // Analogy/narrative mode: pure prose, no LaTeX processing
-      processedText = textToParse;
+      // Apply one final aggressive strip to catch anything that slipped through
+      processedText = stripMathSymbols(textToParse);
     }
 
-    const parts = processedText.split(LATEX_REGEX);
+    // Only split on LaTeX patterns in technical mode
+    // Analogy text is pure prose — splitting on LATEX_REGEX would incorrectly
+    // extract \word patterns as LaTeX tokens and render garbled math
+    const parts = isTechnicalMode
+      ? processedText.split(LATEX_REGEX)
+      : [processedText]; // Single chunk, no LaTeX extraction
 
     parts.forEach(part => {
       if (!part) return;
-      const isLatex = part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1);
+      const isLatex = isTechnicalMode && (part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1));
 
       if (isLatex) {
         allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });

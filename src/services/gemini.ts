@@ -993,6 +993,14 @@ CORRECT APPROACH:
 
 If you catch yourself writing ANY symbol in the analogy, STOP and rewrite using ONLY plain English words.
 
+STRUCTURAL ENFORCEMENT FOR ANALOGY TEXT:
+Before finalizing each analogy field, mentally scan it character by character:
+- If ANY character is not a standard English letter, number, punctuation mark (.,;:!?'"-), or whitespace, REWRITE the sentence
+- The analogy text must pass this test: could a sports journalist who has NEVER studied math have written this?
+- Specifically: the characters ∇ ∮ ∬ ∫ ∂ ∈ ∑ → ← ↔ should NEVER appear in ANY analogy field
+- Specifically: backslash (\\) should NEVER appear in ANY analogy field — it indicates LaTeX leaked in
+- If you find yourself writing a formula or equation, STOP and describe the CONCEPT using only ${shortDomain} language
+
 CRITICAL: STORY vs TERMINOLOGY SOUP
 
 You MUST write a NARRATIVE STORY with characters, setting, conflict, and resolution.
