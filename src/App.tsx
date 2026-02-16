@@ -2923,7 +2923,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Content Body */}
+                {/* Content Body + Footer - hidden when Study Guide is active */}
+                {!isStudyGuideMode ? (<>
                 <div
                   ref={contentRef}
                   className="p-6 md:p-8 relative select-text min-h-[400px]"
@@ -3219,10 +3220,21 @@ export default function App() {
                   </div>
                 </div>
                 )}
+                </>) : (
+                  <StudyGuide
+                    topic={lastSubmittedTopic}
+                    domain={analogyDomain}
+                    domainEmoji={domainEmoji}
+                    isDarkMode={isDarkMode}
+                    onClose={() => setIsStudyGuideMode(false)}
+                    cachedOutline={studyGuideCache}
+                    onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
+                  />
+                )}
               </div>
 
               {/* Insight Takeaway */}
-              {contextData && (
+              {!isStudyGuideMode && contextData && (
                 <ContextCard
                   contextData={contextData}
                   isDarkMode={isDarkMode}
@@ -3230,7 +3242,7 @@ export default function App() {
               )}
 
               {/* Follow-up Section */}
-              {showFollowUp && (
+              {!isStudyGuideMode && showFollowUp && (
                 <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
                   {/* Header with minimize and history buttons */}
                   <div className="flex items-center justify-between mb-3">
@@ -3376,7 +3388,8 @@ export default function App() {
                 </div>
               )}
 
-              {/* Action Buttons */}
+              {/* Action Buttons - hidden when Study Guide is active */}
+              {!isStudyGuideMode && (
               <div className="flex flex-wrap gap-2 justify-center">
                 <button
                   onClick={() => setShowFollowUp(!showFollowUp)}
@@ -3410,6 +3423,7 @@ export default function App() {
                   </button>
                 )}
               </div>
+              )}
             </div>
           )}
 
@@ -4340,21 +4354,6 @@ export default function App() {
           cachedState={masterySessionCache}
           onStateChange={setMasterySessionCache}
         />
-      )}
-
-      {/* Study Guide */}
-      {isStudyGuideMode && hasStarted && lastSubmittedTopic && (
-        <div className="mt-4 mx-4 md:mx-0">
-          <StudyGuide
-            topic={lastSubmittedTopic}
-            domain={analogyDomain}
-            domainEmoji={domainEmoji}
-            isDarkMode={isDarkMode}
-            onClose={() => setIsStudyGuideMode(false)}
-            cachedOutline={studyGuideCache}
-            onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
-          />
-        </div>
       )}
 
       {/* Intuition Mode Modal - 3 memorable one-liners */}
