@@ -534,6 +534,64 @@ export default function App() {
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
 
+  // Build entity lookup from concept_map for multi-word term grouping
+  // Words from the same concept (e.g., "vector" and "calculus" from "vector calculus") share an entityId
+  const buildConceptEntityLookup = (concepts: ConceptMapItem[]): { tech: EntityWordLookup; analogy: EntityWordLookup } => {
+    const techLookup: EntityWordLookup = {};
+    const analogyLookup: EntityWordLookup = {};
+
+    // Sort by term length descending — longer (more specific) terms claim words first
+    const sorted = [...concepts].sort((a, b) =>
+      Math.max(b.tech_term.length, b.analogy_term.length) - Math.max(a.tech_term.length, a.analogy_term.length)
+    );
+
+    sorted.forEach(concept => {
+      const techPhrase = cleanText(concept.tech_term).toLowerCase();
+      const analogyPhrase = cleanText(concept.analogy_term).toLowerCase();
+
+      techPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)).forEach(word => {
+        if (!techLookup[word]) {
+          techLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
+        }
+      });
+
+      analogyPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)).forEach(word => {
+        if (!analogyLookup[word]) {
+          analogyLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
+        }
+      });
+    });
+
+    return { tech: techLookup, analogy: analogyLookup };
+  };
+
+  // Detect consecutive capitalized words (proper nouns) and group them with shared entityIds
+  // Catches player names ("Tom Brady"), team names ("New England Patriots"), etc. not in concept_map
+  const detectProperNounPhrases = (text: string, existingLookup: EntityWordLookup): EntityWordLookup => {
+    const lookup: EntityWordLookup = {};
+    let nextId = 1000; // High offset to avoid collision with concept IDs
+
+    const regex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const phrase = match[1];
+      const words = phrase.split(/\s+/);
+      const phraseLower = phrase.toLowerCase();
+
+      // Skip if all words already covered by concept-map lookup
+      if (words.every(w => existingLookup[w.toLowerCase()])) continue;
+
+      const phraseId = nextId++;
+      words.forEach(word => {
+        const low = word.toLowerCase();
+        if (low.length > 2 && !existingLookup[low] && !lookup[low]) {
+          lookup[low] = { weight: 0.85, entityId: phraseId, fullEntity: phraseLower };
+        }
+      });
+    }
+    return lookup;
+  };
+
   // Load content from API response
   const loadContent = (data: any, topicName: string) => {
     const technicalExplanation = findContext(data, ["technical_explanation", "technicalExplanation", "original", "technical"]);
@@ -543,6 +601,9 @@ export default function App() {
     const importanceMapArray = findContext(data, ["importance_map", "importanceMap"]);
     const context = findContext(data, ["context"]);
     const synthesis = findContext(data, ["synthesis"]);
+
+    // Will be populated from concept_map multi-word terms, used by entity lookup merge below
+    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup } | null = null;
 
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
@@ -610,6 +671,10 @@ export default function App() {
           return true;
         });
       setConceptMap(validMappings);
+
+      // Build entity lookup from concept_map multi-word terms
+      // This ensures "vector" + "calculus" → same entityId, "Tom" + "Brady" → same entityId
+      conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
     }
 
     if (importanceMapArray && Array.isArray(importanceMapArray)) {
@@ -671,9 +736,26 @@ export default function App() {
         analogy: analogyResult.processed
       });
 
+      // Detect proper noun phrases in analogy text (player names, team names, etc.)
+      const analogyText = analogyExplanation || '';
+      const properNounLookup = detectProperNounPhrases(analogyText, conceptEntityLookupRef?.analogy || {});
+
+      // Layer: concept-map (base) → proper nouns → attention-map (top priority)
+      const baseAnalogyLookup = { ...(conceptEntityLookupRef?.analogy || {}), ...properNounLookup };
+
       setEntityLookup({
-        tech: techResult.lookup,
-        analogy: analogyResult.lookup
+        tech: { ...(conceptEntityLookupRef?.tech || {}), ...techResult.lookup },
+        analogy: { ...baseAnalogyLookup, ...analogyResult.lookup }
+      });
+    } else if (conceptEntityLookupRef) {
+      // No attention map from LLM, but we still have concept-map-based lookup
+      const analogyText = analogyExplanation || '';
+      const properNounLookup = detectProperNounPhrases(analogyText, conceptEntityLookupRef.analogy);
+
+      setAttentionMap(null);
+      setEntityLookup({
+        tech: conceptEntityLookupRef.tech,
+        analogy: { ...conceptEntityLookupRef.analogy, ...properNounLookup }
       });
     } else {
       setAttentionMap(null);
@@ -1042,13 +1124,32 @@ export default function App() {
 
   const getConceptId = (word: string, map: ConceptMapItem[]): number => {
     const cleanedWord = cleanText(word).toLowerCase();
+    if (cleanedWord.length < 3) return -1;
+
+    let bestId = -1;
+    let bestScore = 0; // Higher = better match
+
     for (const concept of map) {
-      if (cleanText(concept.tech_term).toLowerCase().includes(cleanedWord) ||
-          cleanedWord.includes(cleanText(concept.tech_term).toLowerCase())) return concept.id;
-      if (cleanText(concept.analogy_term).toLowerCase().includes(cleanedWord) ||
-          cleanedWord.includes(cleanText(concept.analogy_term).toLowerCase())) return concept.id;
+      const techTerm = cleanText(concept.tech_term).toLowerCase();
+      const analogyTerm = cleanText(concept.analogy_term).toLowerCase();
+
+      // Score 3: exact word match within term's words (highest priority)
+      // Score 2: term contains word as substring (medium)
+      // Score 1: word contains entire term as substring (lowest)
+      for (const term of [techTerm, analogyTerm]) {
+        if (term.split(/\s+/).some(w => w === cleanedWord)) {
+          if (3 > bestScore) {
+            bestId = concept.id;
+            bestScore = 3;
+          }
+        } else if (term.includes(cleanedWord) && cleanedWord.length > 3) {
+          if (2 > bestScore) { bestId = concept.id; bestScore = 2; }
+        } else if (cleanedWord.includes(term) && term.length > 3) {
+          if (1 > bestScore) { bestId = concept.id; bestScore = 1; }
+        }
+      }
     }
-    return -1;
+    return bestId;
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {

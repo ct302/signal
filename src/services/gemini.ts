@@ -859,10 +859,10 @@ REQUIRED JSON STRUCTURE (strict compliance):
   ],
   "attention_map": {
     "tech": [
-      {"word": "each significant word from technical_explanation", "weight": 0.0-1.0}
+      {"word": "significant word or multi-word phrase (keep compound concepts together: 'vector calculus' not 'vector','calculus'; keep proper nouns together: 'Tom Brady' not 'Tom','Brady')", "weight": 0.0-1.0}
     ],
     "analogy": [
-      {"word": "each significant word from analogy_explanation", "weight": 0.0-1.0}
+      {"word": "significant word or multi-word phrase (keep compound concepts together; keep names together: 'New England Patriots' not 'New','England','Patriots')", "weight": 0.0-1.0}
     ]
   },
   "context": {
