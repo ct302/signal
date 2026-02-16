@@ -439,11 +439,14 @@ export const fixUnicode = (text: string | null | undefined): string => {
 export const unescapeControlSequences = (text: string | null | undefined): string => {
   if (!text || typeof text !== 'string') return "";
   return text
-    .replace(/\\n/g, ' ')      // Convert \n to space (prose display, not code)
-    .replace(/\\r/g, ' ')      // Convert \r to space
-    .replace(/\\t/g, ' ')      // Convert \t to space
-    .replace(/\s{2,}/g, ' ')   // Collapse multiple spaces to single
-    .replace(/\\\\/g, '\\');   // Handle escaped backslashes
+    // CRITICAL: Only match \n, \r, \t when NOT followed by a letter
+    // Otherwise we destroy LaTeX commands: \times -> " imes", \theta -> " heta",
+    // \nabla -> " abla", \nu -> " u", \rho -> " ho", \tau -> " au", etc.
+    .replace(/\\n(?![a-zA-Z])/g, ' ')   // \n but not \nabla, \neq, \nu, \neg, \not, etc.
+    .replace(/\\r(?![a-zA-Z])/g, ' ')   // \r but not \rho, \rangle, \rightarrow, etc.
+    .replace(/\\t(?![a-zA-Z])/g, ' ')   // \t but not \times, \theta, \tau, \text, \tilde, etc.
+    .replace(/\s{2,}/g, ' ')            // Collapse multiple spaces to single
+    .replace(/\\\\/g, '\\');            // Handle escaped backslashes
 };
 
 /**
@@ -691,23 +694,23 @@ export const sanitizeLatex = (text: string): string => {
 
   // Fix \square used as the word "square" (common LLM mistake)
   // \square renders as □ (geometric square symbol) but LLM often means "square" as in "square roots"
-  // Pattern: "\square roots" or "□ roots" should be "square roots"
-  result = result.replace(/\\square\s+(?=roots?|root\b)/gi, 'square ');
-  result = result.replace(/□\s+(?=roots?|root\b)/gi, 'square ');
-  // Also handle standalone □ followed by common words (indicating prose context)
-  result = result.replace(/□\s+(?=of|the|a|an|is|are|in|to|for|and|or)\b/gi, 'square ');
-  // Handle \square not followed by math-related content - convert to word "square"
-  result = result.replace(/\\square(?=\s+[a-z])/gi, 'square');
+  // In technical explanations outside of $...$ math mode, □ and \square should become "square"
+  // Handle ALL occurrences of □ outside math mode - replace with word "square"
+  result = result.replace(/□/g, 'square');
+  // Handle \square outside math mode - convert to word "square"
+  // (Inside math mode it's fine as-is since KaTeX renders it properly)
+  result = result.replace(/\\square(?![{])/g, 'square');
 
   // Fix \in used as the word "in" outside of math context
   // \in renders as ∈ (element of) symbol, but in prose should be the word "in"
   // Only convert when followed by a space and lowercase word (not valid math like \int)
   result = result.replace(/\\in(?=\s+[a-z])/gi, 'in');
 
-  // Also fix already-rendered ∈ symbol when misused as prose "in" (followed by articles)
-  // This catches cases where LLM outputs ∈ directly instead of \in
-  // Pattern: "∈ the", "∈ a", "∈ an", "∈ this", etc. → "in the", etc.
-  result = result.replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1');
+  // Fix ∈ (element-of symbol) misused as the word "in" in prose
+  // LLMs sometimes output ∈ when they mean "in" — e.g., "technique ∈ linear algebra"
+  // In prose context (followed by a space and a lowercase letter/word), convert to "in"
+  // Valid math usage like $x ∈ S$ is inside $...$ and handled separately
+  result = result.replace(/∈\s+(?=[a-z])/gi, 'in ');
 
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
