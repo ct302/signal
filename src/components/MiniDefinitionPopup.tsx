@@ -79,7 +79,7 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
 
   return (
     <div
-      className={`mini-def-window absolute z-[210] bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl shadow-2xl transition-all duration-300 animate-in fade-in zoom-in flex flex-col ${
+      className={`mini-def-window absolute z-[210] bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl shadow-2xl transition-all duration-300 animate-in fade-in zoom-in flex flex-col signal-font ${
         isMobile ? 'rounded-t-2xl' : 'md:rounded-xl'
       }`}
       style={style}

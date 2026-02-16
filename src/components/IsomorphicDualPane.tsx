@@ -255,7 +255,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   }, [activeConcept]);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col">
+    <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col signal-font">
       {/* Header */}
       <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900">
         <div className="flex items-center gap-3 md:gap-4">

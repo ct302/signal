@@ -636,7 +636,7 @@ const StoryCard: React.FC<{
   // Fullscreen overlay when maximized
   if (isMaximized) {
     return (
-      <div className={`fixed inset-0 z-[100] overflow-auto ${isDarkMode ? 'bg-neutral-900' : 'bg-white'}`}>
+      <div className={`fixed inset-0 z-[100] overflow-auto signal-font ${isDarkMode ? 'bg-neutral-900' : 'bg-white'}`}>
         {/* Fullscreen Header */}
         <div className={`fixed top-0 left-0 right-0 z-[101] px-8 py-4 border-b ${isDarkMode ? 'bg-neutral-900/95 border-neutral-800 backdrop-blur-sm' : 'bg-white/95 border-neutral-200 backdrop-blur-sm'}`}>
           <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -2474,7 +2474,7 @@ export const MasteryMode: React.FC<MasteryModeProps> = ({
   const requiredKeywords = session.currentStage === 1 ? 0 : session.currentStage === 2 ? 3 : 6;
 
   return (
-    <div className={`fixed inset-0 z-[100] flex flex-col ${isDarkMode ? 'bg-neutral-950' : 'bg-neutral-50'}`}>
+    <div className={`fixed inset-0 z-[100] flex flex-col signal-font ${isDarkMode ? 'bg-neutral-950' : 'bg-neutral-50'}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-6 py-4 border-b ${isDarkMode ? 'border-neutral-800 bg-neutral-900' : 'border-neutral-200 bg-white'}`}>
         <div className="flex items-center gap-4">

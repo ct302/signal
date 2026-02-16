@@ -459,10 +459,13 @@ export default function App() {
   });
   const [showFontPicker, setShowFontPicker] = useState(false);
 
-  // Font persistence and Google Font loading
+  // Font persistence, CSS variables, and Google Font loading
   useEffect(() => {
     // Persist selection
     localStorage.setItem(STORAGE_KEYS.FONT_PRESET, JSON.stringify({ id: fontPreset.id }));
+    // Set CSS custom properties for global font inheritance (used by .signal-font class)
+    document.documentElement.style.setProperty('--signal-font-family', fontPreset.fontFamily);
+    document.documentElement.style.setProperty('--signal-letter-spacing', fontPreset.letterSpacing);
     // Load Google Font CSS if needed
     if (fontPreset.googleFontUrl) {
       const existingLink = document.getElementById('signal-custom-font') as HTMLLinkElement;
@@ -1167,10 +1170,12 @@ export default function App() {
     const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
 
     setMiniSelectedTerm(word);
-    const top = showAbove
+    const rawTop = showAbove
       ? rect.top + window.scrollY - popupMinHeight - 10
       : rect.bottom + window.scrollY + 10;
-    setMiniDefPosition({ top, left: rect.left + window.scrollX });
+    const clampedTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
+    const clampedLeft = Math.max(10, Math.min(window.innerWidth - 280, rect.left + window.scrollX));
+    setMiniDefPosition({ top: clampedTop, left: clampedLeft });
     fetchDefinition(word, defText, miniDefComplexity, true);
   };
 
@@ -1252,10 +1257,12 @@ export default function App() {
     // Clear the browser selection
     window.getSelection()?.removeAllRanges();
 
-    // Get position for the definition popup
+    // Get position for the definition popup, clamped to viewport
     const buttonPos = defineButtonPosition;
-    const popupTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
-    const popupLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
+    const rawTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
+    const rawLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
+    const popupTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
+    const popupLeft = Math.max(10, Math.min(window.innerWidth - 300, rawLeft));
 
     // Open definition popup
     if (defPosition && selectedTerm) {
@@ -3008,11 +3015,7 @@ export default function App() {
                 {!isStudyGuideMode ? (<>
                 <div
                   ref={contentRef}
-                  className="p-6 md:p-8 relative select-text min-h-[400px]"
-                  style={{
-                    fontFamily: fontPreset.fontFamily,
-                    letterSpacing: fontPreset.letterSpacing,
-                  }}
+                  className="p-6 md:p-8 relative select-text min-h-[400px] signal-font"
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
@@ -3306,7 +3309,7 @@ export default function App() {
                 </div>
                 )}
                 </>) : (
-                  <div style={{ fontFamily: fontPreset.fontFamily, letterSpacing: fontPreset.letterSpacing }}>
+                  <div className="signal-font">
                     <StudyGuide
                       topic={lastSubmittedTopic}
                       domain={analogyDomain}

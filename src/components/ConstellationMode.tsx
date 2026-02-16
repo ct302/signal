@@ -308,7 +308,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   }, [onFetchFoundationalMapping, domainName, topicName]);
 
   return (
-    <div className={`fixed inset-0 z-[80] flex flex-col ${
+    <div className={`fixed inset-0 z-[80] flex flex-col signal-font ${
       isDarkMode
         ? 'bg-gradient-to-br from-neutral-800 via-neutral-850 to-neutral-900'
         : 'bg-gradient-to-br from-slate-50 via-neutral-100 to-blue-50'

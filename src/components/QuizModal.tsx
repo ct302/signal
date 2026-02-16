@@ -101,7 +101,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
 
   return (
     <div
-      className="quiz-window fixed z-[200] flex flex-col"
+      className="quiz-window fixed z-[200] flex flex-col signal-font"
       style={{
         top: quizPos ? quizPos.top : '50%',
         left: quizPos ? quizPos.left : '50%',

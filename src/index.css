@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Signal font preset - inherits from CSS custom properties set by App.tsx */
+.signal-font {
+  font-family: var(--signal-font-family, system-ui, -apple-system, sans-serif);
+  letter-spacing: var(--signal-letter-spacing, normal);
+}
+
 /* Custom scrollbar styles */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

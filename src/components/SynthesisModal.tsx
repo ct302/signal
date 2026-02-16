@@ -39,7 +39,7 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
 }) => {
   return (
     <div
-      className="synthesis-window fixed z-[200] w-full max-w-lg px-4 flex flex-col cursor-move"
+      className="synthesis-window fixed z-[200] w-full max-w-lg px-4 flex flex-col cursor-move signal-font"
       style={{
         top: synthPos ? synthPos.top : '50%',
         left: synthPos ? synthPos.left : '50%',

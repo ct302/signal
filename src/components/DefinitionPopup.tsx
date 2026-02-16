@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react';
 import { Position, Size, ConceptMapItem, SymbolGuideEntry } from '../types';
 
 interface DefinitionPopupProps {
@@ -85,12 +85,18 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
       };
 
   return (
-    <div className="def-window fixed z-[200] flex flex-col" style={style}>
+    <div className="def-window fixed z-[200] flex flex-col signal-font" style={style}>
       <div
         className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none h-full ${
           isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
       >
+        {/* Drag grip indicator */}
+        {!isMobile && (
+          <div className="flex justify-center -mt-1 mb-0 text-neutral-600 pointer-events-none">
+            <GripHorizontal size={14} />
+          </div>
+        )}
         {/* Header */}
         <div
           onMouseDown={(e) => onStartDrag(e, 'def')}
@@ -172,10 +178,10 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                     className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-blue-300 font-mono">{symbol}</span>
-                      <span className="text-white font-medium">{name}</span>
+                      <span className="text-blue-300">{renderRichText(symbol, "text-blue-300")}</span>
+                      <span className="text-white font-medium">{renderRichText(name, "text-white")}</span>
                     </div>
-                    <div className="text-neutral-400 text-xs mt-0.5">{meaning}</div>
+                    <div className="text-neutral-400 text-xs mt-0.5">{renderRichText(meaning, "text-neutral-400")}</div>
                     {simple && (
                       <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
                     )}

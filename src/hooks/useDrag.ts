@@ -66,17 +66,22 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       if (isDraggingRef.current && dragTargetRef.current) {
         const newX = e.clientX - dragOffsetRef.current.x;
         const newY = e.clientY - dragOffsetRef.current.y;
+        // Clamp to viewport bounds — keep at least 100px visible vertically, 200px horizontally
+        const clampToViewport = (x: number, y: number) => ({
+          top: Math.max(0, Math.min(window.innerHeight - 100, y)),
+          left: Math.max(0, Math.min(window.innerWidth - 200, x)),
+        });
         if (dragTargetRef.current === 'def') {
-          setDefPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setDefPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'quiz') {
-          setQuizPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setQuizPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'synthesis') {
-          setSynthPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setSynthPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'mini') {
-          setMiniDefPosition({
-            top: Math.max(0, e.clientY - dragOffsetRef.current.y),
-            left: Math.max(0, e.clientX - dragOffsetRef.current.x)
-          });
+          setMiniDefPosition(clampToViewport(
+            e.clientX - dragOffsetRef.current.x,
+            e.clientY - dragOffsetRef.current.y
+          ));
         }
       }
 
