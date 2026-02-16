@@ -1,15 +1,23 @@
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 5;
-const FREE_TIER_DEFAULT_MODEL = 'meta-llama/llama-4-scout:free';
+
+// Primary model: cheap, reliable, paid model (~$0.001 per search)
+// Google Gemini 2.5 Flash Lite: $0.10/M in, $0.40/M out - fast, supports JSON mode
+const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
+
+// Fallback chain: try paid cheap models first, then free models as last resort
 const FREE_TIER_MODELS = [
-  'meta-llama/llama-4-scout:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free',
-  'google/gemma-3-4b-it:free',
-  'openrouter/free'
+  'google/gemini-2.5-flash-lite',        // Primary: cheap + reliable + fast
+  'google/gemini-2.0-flash-lite-001',    // Fallback 1: even cheaper
+  'meta-llama/llama-4-scout',            // Fallback 2: cheap paid Llama
+  'meta-llama/llama-4-scout:free',       // Fallback 3: free (unreliable)
+  'openrouter/free'                       // Last resort: auto-router
 ];
-// 400 = bad request (some free models don't support json_object response_format)
-// 404 = model not found on OpenRouter, treat as retryable to try next model
-const RETRYABLE_STATUSES = new Set([400, 404, 429, 500, 502, 503, 504]);
+
+// Statuses that should trigger trying the next model instead of returning error
+// 400 = bad request (json mode unsupported), 402 = payment/quota issue on free models
+// 404 = model not found, 429 = rate limit, 5xx = server errors
+const RETRYABLE_STATUSES = new Set([400, 402, 404, 429, 500, 502, 503, 504]);
 
 // ============================================
 // KV STORAGE (optional - falls back to in-memory)
@@ -192,7 +200,7 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required field: messages' });
     }
 
-    // Default to free model if none specified
+    // Default to our primary model if none specified or if a free model is requested
     if (!model || !model.trim()) {
       model = FREE_TIER_DEFAULT_MODEL;
     }
@@ -218,7 +226,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Build model attempt order: requested model first, then remaining free models
+    // Build model attempt order: requested model first, then remaining models
     var modelsToTry = [model];
     for (var i = 0; i < FREE_TIER_MODELS.length; i++) {
       if (FREE_TIER_MODELS[i] !== model && modelsToTry.indexOf(FREE_TIER_MODELS[i]) === -1) {
@@ -227,7 +235,7 @@ module.exports = async function handler(req, res) {
     }
 
     var lastErrorStatus = 500;
-    var lastErrorMessage = 'All free models are currently unavailable. Please try again in a moment.';
+    var lastErrorMessage = 'All models are currently unavailable. Please try again in a moment.';
 
     var skipJsonMode = false; // Track if we should stop sending response_format
 
@@ -237,7 +245,8 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // Success - increment usage and return
+          // SUCCESS - only now do we increment usage count
+          // Failed attempts do NOT count against the user's daily limit
           var newUsage = await incrementDailyUsage(clientIP);
           var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
           res.setHeader('X-Free-Remaining', String(remaining));
@@ -253,19 +262,21 @@ module.exports = async function handler(req, res) {
           continue;
         }
 
-        // Non-retryable error - return immediately
-        if (!RETRYABLE_STATUSES.has(result.status)) {
-          console.error('OpenRouter error (' + attemptModel + '):', result.status, result.data);
-          return res.status(result.status).json({
-            error: (result.data && result.data.error && result.data.error.message) || 'API request failed',
-            code: (result.data && result.data.error && result.data.error.code) || undefined
-          });
+        // Retryable error - log and try next model
+        if (RETRYABLE_STATUSES.has(result.status)) {
+          console.warn('OpenRouter retryable error (' + attemptModel + '): ' + result.status + ' - trying next model');
+          lastErrorStatus = result.status;
+          lastErrorMessage = (result.data && result.data.error && result.data.error.message) || 'Model unavailable';
+          continue;
         }
 
-        // Retryable error - log and try next model
-        console.warn('OpenRouter error (' + attemptModel + '): ' + result.status + ' - trying next model');
-        lastErrorStatus = result.status;
-        lastErrorMessage = (result.data && result.data.error && result.data.error.message) || 'Model unavailable';
+        // Non-retryable error - return immediately (but do NOT count usage)
+        console.error('OpenRouter non-retryable error (' + attemptModel + '):', result.status, result.data);
+        return res.status(result.status).json({
+          error: (result.data && result.data.error && result.data.error.message) || 'API request failed',
+          code: (result.data && result.data.error && result.data.error.code) || undefined
+        });
+
       } catch (fetchError) {
         console.warn('OpenRouter fetch error (' + attemptModel + '):', fetchError);
         lastErrorStatus = 500;
@@ -273,10 +284,10 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // All models failed
-    console.error('All free tier models failed, last status:', lastErrorStatus);
-    return res.status(lastErrorStatus).json({
-      error: lastErrorMessage,
+    // All models failed - do NOT count this against the user's limit
+    console.error('All demo tier models failed, last status:', lastErrorStatus);
+    return res.status(502).json({
+      error: 'All models are temporarily unavailable. Please try again in a moment. This attempt was not counted against your free searches.',
       code: 'ALL_MODELS_FAILED'
     });
 

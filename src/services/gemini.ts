@@ -221,8 +221,8 @@ const getProviderConfig = (): ProviderConfig => {
     }
   }
   // Default config without API key - user must provide their own
-  // When using proxy (production, no user key), use a free model by default
-  const defaultModel = shouldUseProxy() ? 'meta-llama/llama-4-scout:free' : '';
+  // When using proxy (production, no user key), use the demo tier model
+  const defaultModel = shouldUseProxy() ? 'google/gemini-2.5-flash-lite' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',
