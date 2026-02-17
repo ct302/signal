@@ -1170,6 +1170,104 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
 };
 
 /**
+ * Generate a semantic word→concept color map via a lightweight second-pass API call.
+ * The AI reads the generated explanation texts and the concept list, then returns
+ * which words belong to which concept — handling synonyms, abbreviations, and
+ * morphological variants that the rule-based stemming system misses.
+ *
+ * Returns null on any failure (never throws). Caller uses this as a non-blocking
+ * overlay on top of the existing fallback coloring system.
+ */
+export const generateSemanticColorMap = async (
+  technicalText: string,
+  analogyText: string,
+  conceptMap: ConceptMapItem[]
+): Promise<{ tech: Map<string, number>; analogy: Map<string, number> } | null> => {
+  try {
+    if (!conceptMap || conceptMap.length === 0 || (!technicalText && !analogyText)) return null;
+
+    const conceptList = conceptMap.map(c =>
+      `${c.id}: "${c.tech_term}" / "${c.analogy_term}"`
+    ).join('\n');
+
+    // Truncate texts to keep the request cheap and fast
+    const techSlice = (technicalText || '').slice(0, 1500);
+    const analSlice = (analogyText || '').slice(0, 1500);
+
+    const prompt = `You are a word-level concept tagger for a learning app. Given two explanation texts and a numbered concept list, identify which individual words from the texts belong to which concept.
+
+CONCEPTS:
+${conceptList}
+
+TECHNICAL TEXT:
+${techSlice}
+
+ANALOGY TEXT:
+${analSlice}
+
+For each concept, list the INDIVIDUAL words (lowercase, no punctuation) from both texts that semantically relate to that concept. Include:
+- The exact words from the concept name (e.g., "singular", "value", "decomposition")
+- Synonyms and abbreviations used in the text (e.g., "SVD", "factorize" for decomposition)
+- Morphological variants (e.g., "matrices" for "matrix", "decomposed" for "decomposition")
+- Domain-specific terms the text uses to explain that concept
+
+Return ONLY this JSON — no other text:
+{"concept_colors":[{"id":0,"tech_words":["word1","word2"],"analogy_words":["word3","word4"]},{"id":1,"tech_words":["word5"],"analogy_words":["word6"]}]}
+
+Rules:
+- All words lowercase, no punctuation
+- Each word belongs to at most ONE concept (pick the most relevant)
+- Skip common stop words (the, a, is, are, and, or, it, to, of, in, for, by, etc.)
+- Include 3-8 words per concept per text where applicable
+- If a concept isn't mentioned in a text, use an empty array for that text`;
+
+    const text = await callApi(prompt, { jsonMode: true });
+    const result = safeJsonParse(text);
+    if (!result || !Array.isArray(result.concept_colors)) return null;
+
+    // Build valid concept ID set for validation
+    const validIds = new Set(conceptMap.map(c => c.id));
+
+    const techMap = new Map<string, number>();
+    const analogyMap = new Map<string, number>();
+
+    for (const entry of result.concept_colors) {
+      const id = entry.id;
+      if (typeof id !== 'number' || !validIds.has(id)) continue;
+
+      if (Array.isArray(entry.tech_words)) {
+        for (const word of entry.tech_words) {
+          if (typeof word === 'string' && word.length > 1) {
+            const cleaned = word.toLowerCase().trim().replace(/[^a-z0-9'-]/g, '');
+            if (cleaned && !techMap.has(cleaned)) {
+              techMap.set(cleaned, id);
+            }
+          }
+        }
+      }
+      if (Array.isArray(entry.analogy_words)) {
+        for (const word of entry.analogy_words) {
+          if (typeof word === 'string' && word.length > 1) {
+            const cleaned = word.toLowerCase().trim().replace(/[^a-z0-9'-]/g, '');
+            if (cleaned && !analogyMap.has(cleaned)) {
+              analogyMap.set(cleaned, id);
+            }
+          }
+        }
+      }
+    }
+
+    // Only return if we got meaningful results
+    if (techMap.size === 0 && analogyMap.size === 0) return null;
+
+    return { tech: techMap, analogy: analogyMap };
+  } catch (e) {
+    console.warn('Semantic color map generation failed (non-critical):', e);
+    return null;
+  }
+};
+
+/**
  * Check input for ambiguity or typos with enhanced context detection
  */
 export const checkAmbiguity = async (text: string, contextType: string): Promise<AmbiguityResult> => {

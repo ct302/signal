@@ -100,6 +100,7 @@ import {
   subscribeToFreeTier,
   isOnFreeTier,
   FreeTierExhaustedError,
+  generateSemanticColorMap,
 } from './services';
 
 // Components
@@ -274,6 +275,7 @@ export default function App() {
   const [entityLookup, setEntityLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
   const [conceptLookup, setConceptLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
   const [multiWordPhraseLookup, setMultiWordPhraseLookup] = useState<{ tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } | null>(null);
+  const [semanticColorMap, setSemanticColorMap] = useState<{ tech: Map<string, number>; analogy: Map<string, number> } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
@@ -1069,6 +1071,18 @@ export default function App() {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
         setApiError(null); // Clear error on success
+
+        // Non-blocking: fire semantic color mapping in background
+        // Existing coloring serves as instant fallback while this loads
+        setSemanticColorMap(null);
+        const techText = findContext(parsed, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(parsed, ["analogy_explanation", "analogyExplanation", "analogy"]);
+        const cMap = findContext(parsed, ["concept_map", "conceptMap"]);
+        if (techText && analText && Array.isArray(cMap) && cMap.length > 0) {
+          generateSemanticColorMap(techText, analText, cMap)
+            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+            .catch(() => { /* Silent: fallback coloring already active */ });
+        }
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -1138,6 +1152,22 @@ export default function App() {
       const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (parsed) {
         loadContent(parsed, lastSubmittedTopic);
+
+        // Non-blocking: fire semantic color mapping in background
+        setSemanticColorMap(null);
+        const techText = findContext(parsed, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(parsed, ["analogy_explanation", "analogyExplanation", "analogy"]);
+        const cMap = findContext(parsed, ["concept_map", "conceptMap"]);
+        if (techText && analText && Array.isArray(cMap) && cMap.length > 0) {
+          generateSemanticColorMap(techText, analText, cMap)
+            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+            .catch(() => {});
+        }
+      } else {
+        // Parsing failed (safeJsonParse returned null) — show error and revert complexity
+        const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
+        setApiError("Regeneration failed — couldn't parse response. Please try again." + freeTierNote);
+        setMainComplexity(previousLevel);
       }
     } catch (e) {
       console.error("Regeneration failed", e);
@@ -2469,14 +2499,28 @@ export default function App() {
                 // use the phrase's entityId as conceptId so all words share the same color
                 const phraseOverrideId = phraseOverrides[j];
 
+                // Highest priority: AI semantic color map
+                let semanticConceptId: number | undefined;
+                if (semanticColorMap) {
+                  const semanticLookup = inferredIsAnalogy ? semanticColorMap.analogy : semanticColorMap.tech;
+                  const cleanedWord = word.replace(/[.,!?;:'"()\[\]{}]/g, '').trim().toLowerCase();
+                  if (cleanedWord) {
+                    const mapped = semanticLookup.get(cleanedWord);
+                    if (mapped !== undefined) semanticConceptId = mapped;
+                  }
+                }
+
                 let colorClassName = "";
                 const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
                 if (isColorMode && isImportant) {
-                  if (phraseOverrideId !== undefined) {
+                  if (semanticConceptId !== undefined) {
+                    // AI semantic map: highest quality, from second-pass API call
+                    colorClassName = activeColors[semanticConceptId % activeColors.length];
+                  } else if (phraseOverrideId !== undefined) {
                     // Multi-word phrase: all words get the compound concept's color
                     colorClassName = activeColors[phraseOverrideId % activeColors.length];
                   } else if (conceptId !== undefined) {
-                    // Concept-map terms: highest priority coloring
+                    // Concept-map terms: fallback coloring
                     colorClassName = activeColors[conceptId % activeColors.length];
                   } else if (entityId !== undefined) {
                     // Attention phrases + proper nouns: colored by their phrase group
@@ -2949,18 +2993,31 @@ export default function App() {
           }
           // Weight (bold/opacity), conceptId (concept_map color), entityId (attention/proper noun color)
           const { weight, conceptId, entityId: wordEntityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
-          // Multi-word phrase override: compound concepts share one color
-          // 1st priority: per-part phrase match (works when phrase is fully within this part)
-          // 2nd priority: raw-text pre-scan fallback (catches phrases broken by LaTeX splitting)
-          // 3rd priority: individual word conceptId from getWordAttention
+
+          // Concept coloring priority chain:
+          // 1st: AI semantic color map (highest quality — understands synonyms, abbreviations, context)
+          // 2nd: per-part phrase match (fast, works when phrase is fully within this part)
+          // 3rd: raw-text pre-scan fallback (catches phrases broken by LaTeX splitting)
+          // 4th: individual word conceptId from getWordAttention (rule-based fallback)
+          const cleanedForLookup = stripWordPunctuation(cleanText(word).toLowerCase());
+
+          // 1st priority: semantic color map
+          let semanticConceptId: number | undefined;
+          if (semanticColorMap) {
+            const semanticLookup = useAnalogyTerms ? semanticColorMap.analogy : semanticColorMap.tech;
+            const mapped = semanticLookup.get(cleanedForLookup);
+            if (mapped !== undefined) semanticConceptId = mapped;
+          }
+
+          // 2nd/3rd priority: phrase overrides
           let phraseOverrideId = phraseOverrides[tokenIdx];
           if (phraseOverrideId === undefined) {
-            const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
-            if (cleanedWord && phraseWordFallback[cleanedWord] !== undefined) {
-              phraseOverrideId = phraseWordFallback[cleanedWord];
+            if (cleanedForLookup && phraseWordFallback[cleanedForLookup] !== undefined) {
+              phraseOverrideId = phraseWordFallback[cleanedForLookup];
             }
           }
-          const finalConceptIndex = phraseOverrideId !== undefined ? phraseOverrideId : conceptId;
+
+          const finalConceptIndex = semanticConceptId ?? phraseOverrideId ?? conceptId;
           allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: finalConceptIndex, entityId: finalConceptIndex ?? wordEntityId });
         });
       }
@@ -2977,7 +3034,7 @@ export default function App() {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup, multiWordPhraseLookup, mainComplexity]);
+  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup, multiWordPhraseLookup, mainComplexity, semanticColorMap]);
 
   const modeLabel = getViewModeLabel();
 
