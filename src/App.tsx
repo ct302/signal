@@ -535,6 +535,12 @@ export default function App() {
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
 
+  /** Strip leading/trailing punctuation for word-level lookups.
+   *  Text tokens from split(/\s+/) retain punctuation ("matrix," "decomposition.") but
+   *  concept lookup keys are stored without punctuation. This normalizes before lookup. */
+  const stripWordPunctuation = (word: string): string =>
+    word.replace(/[.,!?;:'")\]}/]+$/g, '').replace(/^['"([{]+/g, '');
+
   // Build entity lookup from concept_map for multi-word term grouping
   // Words from the same concept (e.g., "vector" and "calculus" from "vector calculus") share an entityId
   const buildConceptEntityLookup = (concepts: ConceptMapItem[]): { tech: EntityWordLookup; analogy: EntityWordLookup } => {
@@ -1056,7 +1062,7 @@ export default function App() {
   // Weight: from entityLookup (attention data) → attentionMap → importanceMap → heuristics
   // ConceptId: from conceptLookup (concept_map ONLY) → getConceptId() fallback → undefined (no color)
   const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; conceptId: number | undefined } => {
-    const cleanedWord = cleanText(word).toLowerCase();
+    const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
 
     // === WEIGHT (from attention data — controls bold/opacity/size) ===
     let weight: number | undefined;
@@ -1135,7 +1141,7 @@ export default function App() {
   };
 
   const getConceptId = (word: string, map: ConceptMapItem[]): number => {
-    const cleanedWord = cleanText(word).toLowerCase();
+    const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
     if (cleanedWord.length < 3) return -1;
     if (STOP_WORDS.has(cleanedWord)) return -1;
 
