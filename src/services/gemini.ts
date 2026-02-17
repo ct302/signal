@@ -266,11 +266,12 @@ interface ApiCallOptions {
   webSearch?: boolean; // Enable OpenRouter web search plugin
   searchPrompt?: string; // Custom prompt for how to integrate web search results
   maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
+  countAsSearch?: boolean; // Default true. Set false for validation/supplementary calls that shouldn't decrement free tier credits.
 }
 
 // Build request body based on provider
 const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCallOptions = {}): object => {
-  const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3 } = options;
+  const { jsonMode = false, webSearch = false, searchPrompt, maxResults = 3, countAsSearch = true } = options;
 
   if (config.provider === 'ollama') {
     return {
@@ -287,6 +288,12 @@ const buildRequestBody = (prompt: string, config: ProviderConfig, options: ApiCa
     messages: [{ role: 'user', content: prompt }],
     ...(jsonMode && { response_format: { type: 'json_object' } })
   };
+
+  // Tell server proxy not to count this call against free tier quota
+  // Only the main generateAnalogy call should count as a "search"
+  if (!countAsSearch) {
+    body.skipUsageCount = true;
+  }
 
   // Add web search plugin when enabled (OpenRouter's built-in web search)
   // Pricing: $4 per 1000 results, with max_results: 8 = ~$0.032 per request
@@ -1205,7 +1212,7 @@ Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4)
 Return ONLY valid JSON, no markdown, no explanation.`;
 
   try {
-    const responseText = await callApi(prompt, { jsonMode: true });
+    const responseText = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(responseText);
     return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
   } catch {
@@ -1293,7 +1300,7 @@ SYMBOL_GUIDE RULES:
 Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    const response = await callApi(promptText);
+    const response = await callApi(promptText, { countAsSearch: false });
 
     // Try to parse as JSON
     try {
@@ -1348,7 +1355,7 @@ EXAMPLES OF GOOD RESPONSES:
 Return ONLY valid JSON: { "foundationalMapping": "Your 2-3 sentence explanation here" }`;
 
   try {
-    const response = await callApi(prompt, { jsonMode: true });
+    const response = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const parsed = safeJsonParse(response);
     if (parsed && parsed.foundationalMapping) {
       return { foundationalMapping: parsed.foundationalMapping };
@@ -1442,7 +1449,7 @@ Return ONLY this JSON:
   }
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(text);
     if (result) {
       result.difficulty = difficulty;
@@ -1465,7 +1472,7 @@ export const askTutor = async (
   const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short. IMPORTANT: Use plain text only - no mathematical symbols, Greek letters, or LaTeX. Write "cup" not ∪, "in" not ∈, "and" not ∧, "sum" not Σ.`;
 
   try {
-    const response = await callApi(prompt);
+    const response = await callApi(prompt, { countAsSearch: false });
     // Sanitize math symbols from response (∪ → and, ∈ → in, etc.)
     return stripMathSymbols(response);
   } catch {
@@ -1531,7 +1538,7 @@ Return ONLY this JSON (no markdown):
 {"isTooClose": true/false, "reason": "brief explanation if too close"}`;
 
   try {
-    const responseText = await callApi(prompt, { jsonMode: true });
+    const responseText = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(responseText);
 
     if (result?.isTooClose) {
@@ -1680,7 +1687,7 @@ Return ONLY this JSON (no markdown):
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(text);
 
     if (result?.keywords && Array.isArray(result.keywords)) {
@@ -1834,7 +1841,7 @@ Return ONLY this JSON (no markdown):
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(text);
 
     if (result?.definitions && Array.isArray(result.definitions)) {
@@ -1979,7 +1986,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(text);
 
     if (result) {
@@ -2332,7 +2339,8 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
       const storyContent = await callApi(prompt, {
         webSearch: true, // ALWAYS enable web search for Mastery Mode
         searchPrompt: searchPromptText,
-        maxResults: 8 // Fetch 8 sources for comprehensive factual grounding
+        maxResults: 8, // Fetch 8 sources for comprehensive factual grounding
+        countAsSearch: false
       });
 
       // Clean up the response
@@ -2464,7 +2472,7 @@ TUTOR GUIDELINES:
 Respond as the tutor (just the response, no "Tutor:" prefix):`;
 
   try {
-    const response = await callApi(prompt);
+    const response = await callApi(prompt, { countAsSearch: false });
     return response.trim();
   } catch (error) {
     console.error('Failed to generate chat response:', error);
@@ -2506,7 +2514,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true, countAsSearch: false });
     const result = safeJsonParse(text);
 
     if (result) {
@@ -2591,7 +2599,8 @@ Return ONLY this JSON (no markdown, no explanation):
     const text = await callApi(prompt, {
       jsonMode: true,
       webSearch: needsWebSearch,
-      searchPrompt: searchPromptText
+      searchPrompt: searchPromptText,
+      countAsSearch: false
     });
     const result = safeJsonParse(text);
 
@@ -2672,7 +2681,8 @@ Return ONLY this JSON:
     const text = await callApi(prompt, {
       jsonMode: true,
       webSearch: needsWebSearch,
-      searchPrompt: searchPromptText
+      searchPrompt: searchPromptText,
+      countAsSearch: false
     });
     const result = safeJsonParse(text);
 

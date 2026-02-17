@@ -195,6 +195,7 @@ module.exports = async function handler(req, res) {
     var messages = req.body && req.body.messages;
     var response_format = req.body && req.body.response_format;
     var plugins = req.body && req.body.plugins;
+    var skipUsageCount = req.body && req.body.skipUsageCount;
 
     if (!messages) {
       return res.status(400).json({ error: 'Missing required field: messages' });
@@ -245,12 +246,19 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // SUCCESS - only now do we increment usage count
-          // Failed attempts do NOT count against the user's daily limit
-          var newUsage = await incrementDailyUsage(clientIP);
-          var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
-          res.setHeader('X-Free-Remaining', String(remaining));
-          res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
+          // SUCCESS - only increment usage for counting calls (main search generation)
+          // Validation/supplementary calls (skipUsageCount=true) don't consume credits
+          if (!skipUsageCount) {
+            var newUsage = await incrementDailyUsage(clientIP);
+            var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
+            res.setHeader('X-Free-Remaining', String(remaining));
+            res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
+          } else {
+            var currentCount = await getDailyUsage(clientIP);
+            var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - currentCount);
+            res.setHeader('X-Free-Remaining', String(remaining));
+            res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
+          }
           return res.status(200).json(result.data);
         }
 
