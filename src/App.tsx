@@ -1123,6 +1123,7 @@ export default function App() {
     if (isRegenerating || isLoading || !lastSubmittedTopic) return;
     if (level === mainComplexity) return;
 
+    const previousLevel = mainComplexity;
     setMainComplexity(level);
     setIsRegenerating(true);
 
@@ -1133,6 +1134,24 @@ export default function App() {
       }
     } catch (e) {
       console.error("Regeneration failed", e);
+
+      // Handle FreeTierExhaustedError — show modal (same pattern as fetchAnalogy)
+      if (e instanceof FreeTierExhaustedError) {
+        setShowFreeTierModal(true);
+        setMainComplexity(previousLevel);
+        return;
+      }
+
+      // Handle other API errors — show user-facing feedback
+      if (e instanceof ApiError) {
+        const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
+        setApiError(`Regeneration failed (${e.status}).${freeTierNote} Please try again.`);
+      } else {
+        setApiError("Regeneration failed. Please try again.");
+      }
+
+      // Revert complexity since regeneration didn't succeed
+      setMainComplexity(previousLevel);
     } finally {
       setIsRegenerating(false);
     }
