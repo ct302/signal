@@ -748,8 +748,8 @@ export default function App() {
         tech: mainComplexity === 5
           ? stripMathSymbols(cleanText(fixUnicode(s.tech || s.technical || "")))
           : cleanText(fixUnicode(s.tech || s.technical || ""))
-              // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
-              .replace(/∈\s*(?=[a-z])/gi, 'in ')
+              // Fix ∈ when used as prose "in" — unconditional (bare Unicode ∈ should never appear in prose)
+              .replace(/\s*∈\s*/g, ' in ')
               // Fix △/▲ triangle symbols to word "triangle" in prose context
               .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
               // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
@@ -757,7 +757,9 @@ export default function App() {
               .replace(/(?<=\s|^)\/ot\b/gi, 'not')
               // Fix stray "/" between words that should be "not"
               .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
-              .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
+              .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not ')
+              // Generic: slash immediately before a word = LaTeX artifact (e.g., "/obvious" → "obvious")
+              .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, ''),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || ""))),
@@ -777,8 +779,13 @@ export default function App() {
           mainComplexity === 5
             ? stripMathSymbols(cleaned)
             : cleaned
-                .replace(/∈\s*(?=[a-z])/gi, 'in ')
+                .replace(/\s*∈\s*/g, ' in ')
                 .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+                // Fix slash artifacts from LaTeX conversion (e.g., "/obvious" → "obvious")
+                .replace(/(?<=\s|^)\/ust\b/gi, 'just')
+                .replace(/(?<=\s|^)\/ot\b/gi, 'not')
+                .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
+                .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, '')
         )
       );
     }
@@ -2875,6 +2882,28 @@ export default function App() {
 
     if (!textToParse) return;
 
+    // --- PRE-SCAN: Run phrase matching on the RAW text BEFORE LaTeX processing ---
+    // This catches multi-word phrases that would be broken by LATEX_REGEX splitting.
+    // E.g., "Singular Value Decomposition" may get split if LaTeX tokens appear mid-phrase.
+    // We build a word→entityId fallback map from the raw text's phrase matches.
+    const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
+    const phraseWordFallback: Record<string, number> = {};
+    if (multiWordPhraseLookup) {
+      const rawTokens = textToParse.split(/(\s+)/);
+      const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+      const rawOverrides = buildPhraseOverrides(rawTokens, phraseLookup);
+      // Build content-based fallback: cleaned word → entityId
+      // For ambiguous words (same word in multiple concepts), prefer the first match (longest phrase)
+      rawTokens.forEach((tok, idx) => {
+        if (rawOverrides[idx] !== undefined) {
+          const cleaned = stripWordPunctuation(cleanText(tok).toLowerCase());
+          if (cleaned && phraseWordFallback[cleaned] === undefined) {
+            phraseWordFallback[cleaned] = rawOverrides[idx];
+          }
+        }
+      });
+    }
+
     // Only apply LaTeX processing to technical text (and NOT in ELI5 mode)
     // Analogy/narrative should be pure prose - no LaTeX conversion
     let processedText: string;
@@ -2904,9 +2933,8 @@ export default function App() {
       if (isLatex) {
         allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });
       } else {
-        // Pre-scan for multi-word phrase matches (e.g., "matrix diagonalization" → one color)
+        // Per-part phrase scan (works when phrases aren't broken by LaTeX splitting)
         const tokens = part.split(/(\s+)/);
-        const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
         let phraseOverrides: Record<number, number> = {};
         if (multiWordPhraseLookup) {
           const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
@@ -2922,7 +2950,16 @@ export default function App() {
           // Weight (bold/opacity), conceptId (concept_map color), entityId (attention/proper noun color)
           const { weight, conceptId, entityId: wordEntityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
           // Multi-word phrase override: compound concepts share one color
-          const phraseOverrideId = phraseOverrides[tokenIdx];
+          // 1st priority: per-part phrase match (works when phrase is fully within this part)
+          // 2nd priority: raw-text pre-scan fallback (catches phrases broken by LaTeX splitting)
+          // 3rd priority: individual word conceptId from getWordAttention
+          let phraseOverrideId = phraseOverrides[tokenIdx];
+          if (phraseOverrideId === undefined) {
+            const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
+            if (cleanedWord && phraseWordFallback[cleanedWord] !== undefined) {
+              phraseOverrideId = phraseWordFallback[cleanedWord];
+            }
+          }
           const finalConceptIndex = phraseOverrideId !== undefined ? phraseOverrideId : conceptId;
           allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: finalConceptIndex, entityId: finalConceptIndex ?? wordEntityId });
         });
