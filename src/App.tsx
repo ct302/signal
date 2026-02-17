@@ -270,6 +270,7 @@ export default function App() {
   const [importanceMap, setImportanceMap] = useState<ImportanceMapItem[]>([]);
   const [attentionMap, setAttentionMap] = useState<AttentionMap | null>(null);
   const [entityLookup, setEntityLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
+  const [conceptLookup, setConceptLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
@@ -569,7 +570,6 @@ export default function App() {
   // Catches player names ("Tom Brady"), team names ("New England Patriots"), etc. not in concept_map
   const detectProperNounPhrases = (text: string, existingLookup: EntityWordLookup): EntityWordLookup => {
     const lookup: EntityWordLookup = {};
-    let nextId = 1000; // High offset to avoid collision with concept IDs
 
     const regex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
     let match;
@@ -581,11 +581,10 @@ export default function App() {
       // Skip if all words already covered by concept-map lookup
       if (words.every(w => existingLookup[w.toLowerCase()])) continue;
 
-      const phraseId = nextId++;
       words.forEach(word => {
         const low = word.toLowerCase();
         if (low.length > 2 && !existingLookup[low] && !lookup[low]) {
-          lookup[low] = { weight: 0.85, entityId: phraseId, fullEntity: phraseLower };
+          lookup[low] = { weight: 0.85, entityId: -1, fullEntity: phraseLower };
         }
       });
     }
@@ -675,6 +674,7 @@ export default function App() {
       // Build entity lookup from concept_map multi-word terms
       // This ensures "vector" + "calculus" → same entityId, "Tom" + "Brady" → same entityId
       conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
+      setConceptLookup(conceptEntityLookupRef);
     }
 
     if (importanceMapArray && Array.isArray(importanceMapArray)) {
@@ -691,45 +691,33 @@ export default function App() {
       const techAttention = Array.isArray(attentionMapData.tech) ? attentionMapData.tech : [];
       const analogyAttention = Array.isArray(attentionMapData.analogy) ? attentionMapData.analogy : [];
 
-      // Helper to process attention items and create entity lookup
-      const processAttentionItems = (items: any[], startEntityId: number): {
+      // Helper to process attention items — weight-only, NO sequential entityIds
+      // Colors come exclusively from conceptLookup (concept_map), not from attention_map
+      const processAttentionItems = (items: any[]): {
         processed: AttentionMapItem[];
-        lookup: EntityWordLookup;
-        nextEntityId: number;
+        weightLookup: EntityWordLookup;
       } => {
-        const lookup: EntityWordLookup = {};
-        let entityId = startEntityId;
+        const weightLookup: EntityWordLookup = {};
 
         const processed = items.map((item: any) => {
           const fullPhrase = cleanText(item.word || "").toLowerCase();
           const weight = typeof item.weight === 'number' ? item.weight : 0.5;
           const words = fullPhrase.split(/\s+/).filter(w => w.length > 0);
-          const currentEntityId = entityId++;
 
-          // Add each word in the phrase to the lookup
           words.forEach(word => {
-            // Only add if not already in lookup, or if this entity has higher weight
-            if (!lookup[word] || lookup[word].weight < weight) {
-              lookup[word] = {
-                weight,
-                entityId: currentEntityId,
-                fullEntity: fullPhrase
-              };
+            if (!weightLookup[word] || weightLookup[word].weight < weight) {
+              weightLookup[word] = { weight, entityId: -1, fullEntity: fullPhrase };
             }
           });
 
-          return {
-            word: fullPhrase,
-            weight,
-            entityId: currentEntityId
-          };
+          return { word: fullPhrase, weight, entityId: undefined };
         });
 
-        return { processed, lookup, nextEntityId: entityId };
+        return { processed, weightLookup };
       };
 
-      const techResult = processAttentionItems(techAttention, 0);
-      const analogyResult = processAttentionItems(analogyAttention, techResult.nextEntityId);
+      const techResult = processAttentionItems(techAttention);
+      const analogyResult = processAttentionItems(analogyAttention);
 
       setAttentionMap({
         tech: techResult.processed,
@@ -740,12 +728,11 @@ export default function App() {
       const analogyText = analogyExplanation || '';
       const properNounLookup = detectProperNounPhrases(analogyText, conceptEntityLookupRef?.analogy || {});
 
-      // Layer: concept-map (base) → proper nouns → attention-map (top priority)
-      const baseAnalogyLookup = { ...(conceptEntityLookupRef?.analogy || {}), ...properNounLookup };
-
+      // Weight lookup: concept baseline (weight 1.0) → proper nouns (0.85) → attention weights (top priority)
+      // entityId values here are -1 for non-concept words; concept words keep their concept.id
       setEntityLookup({
-        tech: { ...(conceptEntityLookupRef?.tech || {}), ...techResult.lookup },
-        analogy: { ...baseAnalogyLookup, ...analogyResult.lookup }
+        tech: { ...(conceptEntityLookupRef?.tech || {}), ...techResult.weightLookup },
+        analogy: { ...(conceptEntityLookupRef?.analogy || {}), ...properNounLookup, ...analogyResult.weightLookup }
       });
     } else if (conceptEntityLookupRef) {
       // No attention map from LLM, but we still have concept-map-based lookup
@@ -760,6 +747,7 @@ export default function App() {
     } else {
       setAttentionMap(null);
       setEntityLookup(null);
+      setConceptLookup(null);
     }
 
     if (context) {
@@ -1064,23 +1052,25 @@ export default function App() {
     triggerDomainEnrichment(finalDomain);
   };
 
-  // Returns both weight and entityId for consistent multi-word entity coloring
-  const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; entityId: number | undefined } => {
+  // Returns weight (for bold/opacity) and conceptId (for coloring) as SEPARATE channels
+  // Weight: from entityLookup (attention data) → attentionMap → importanceMap → heuristics
+  // ConceptId: from conceptLookup (concept_map ONLY) → getConceptId() fallback → undefined (no color)
+  const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; conceptId: number | undefined } => {
     const cleanedWord = cleanText(word).toLowerCase();
 
-    // Priority 1: Check entity lookup for multi-word entity support
+    // === WEIGHT (from attention data — controls bold/opacity/size) ===
+    let weight: number | undefined;
+
+    // Priority 1: Entity weight lookup (merged concept + attention weights)
     if (entityLookup) {
       const lookup = isAnalogy ? entityLookup.analogy : entityLookup.tech;
       if (lookup[cleanedWord]) {
-        return {
-          weight: lookup[cleanedWord].weight,
-          entityId: lookup[cleanedWord].entityId
-        };
+        weight = lookup[cleanedWord].weight;
       }
     }
 
-    // Priority 2: Check LLM-provided attention weights (single words)
-    if (attentionMap) {
+    // Priority 2: Direct attention map scan (single words)
+    if (weight === undefined && attentionMap) {
       const attentionList = isAnalogy ? attentionMap.analogy : attentionMap.tech;
       const attentionEntry = attentionList.find(item =>
         item.word === cleanedWord ||
@@ -1088,33 +1078,55 @@ export default function App() {
         cleanedWord.includes(item.word)
       );
       if (attentionEntry) {
-        return { weight: attentionEntry.weight, entityId: attentionEntry.entityId };
+        weight = attentionEntry.weight;
       }
     }
 
-    // Fallback: Use heuristics if no attention map or word not found
-    if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) {
-      return { weight: 0.1, entityId: undefined };
+    // Priority 3: Heuristic fallbacks
+    if (weight === undefined) {
+      if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) {
+        weight = 0.1;
+      } else {
+        const terms = isAnalogy
+          ? map.map(c => cleanText(c.analogy_term).toLowerCase())
+          : map.map(c => cleanText(c.tech_term).toLowerCase());
+
+        if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) {
+          weight = 1.0;
+        } else {
+          const importanceEntry = impMap.find(m =>
+            cleanText(m.term).toLowerCase().includes(cleanedWord) ||
+            cleanedWord.includes(cleanText(m.term).toLowerCase())
+          );
+          if (importanceEntry) {
+            weight = importanceEntry.importance;
+          } else if (cleanedWord.length > 6) {
+            weight = 0.55;
+          } else {
+            weight = 0.3;
+          }
+        }
+      }
     }
 
-    const terms = isAnalogy
-      ? map.map(c => cleanText(c.analogy_term).toLowerCase())
-      : map.map(c => cleanText(c.tech_term).toLowerCase());
+    // === CONCEPT ID (from concept_map ONLY — controls color) ===
+    let conceptId: number | undefined;
 
-    if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) {
-      return { weight: 1.0, entityId: undefined };
+    // Priority 1: Concept lookup (built from concept_map terms only)
+    if (conceptLookup) {
+      const cLookup = isAnalogy ? conceptLookup.analogy : conceptLookup.tech;
+      if (cLookup[cleanedWord]) {
+        conceptId = cLookup[cleanedWord].entityId;
+      }
     }
 
-    const importanceEntry = impMap.find(m =>
-      cleanText(m.term).toLowerCase().includes(cleanedWord) ||
-      cleanedWord.includes(cleanText(m.term).toLowerCase())
-    );
-    if (importanceEntry) {
-      return { weight: importanceEntry.importance, entityId: undefined };
+    // Priority 2: getConceptId scored matching fallback
+    if (conceptId === undefined) {
+      const mappedId = getConceptId(word, map);
+      if (mappedId !== -1) conceptId = mappedId;
     }
 
-    if (cleanedWord.length > 6) return { weight: 0.55, entityId: undefined };
-    return { weight: 0.3, entityId: undefined };
+    return { weight, conceptId };
   };
 
   // Backward-compatible wrapper that just returns weight
@@ -1984,6 +1996,7 @@ export default function App() {
     setImportanceMap([]);
     setAttentionMap(null);
     setEntityLookup(null);
+    setConceptLookup(null);
     setProcessedWords([]);
     setTechnicalExplanation("");
     setAnalogyExplanation("");
@@ -2206,8 +2219,8 @@ export default function App() {
                 if (/^\s+$/.test(word)) return <span key={`${i}-${j}`}>{word}</span>;
 
                 const activeMap = customMap || conceptMap;
-                // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
-                const { weight, entityId } = getWordAttention(word, activeMap, importanceMap, false);
+                // Weight (bold/opacity) and conceptId (color) resolved independently
+                const { weight, conceptId } = getWordAttention(word, activeMap, importanceMap, false);
                 // Invert threshold: low slider = high bar, high slider = low bar
                 // At 100% (threshold >= 0.99), ALL words should be fully visible
                 const effectiveThreshold = 1.1 - currentThreshold;
@@ -2215,17 +2228,11 @@ export default function App() {
 
                 let colorClassName = "";
                 if (isColorMode && isImportant) {
-                  // Priority 1: Use entityId for consistent multi-word entity coloring
-                  if (entityId !== undefined) {
-                    colorClassName = CONCEPT_COLORS[entityId % CONCEPT_COLORS.length];
-                  } else {
-                    // Fallback: Use conceptId from concept map
-                    const conceptId = getConceptId(word, activeMap);
-                    if (conceptId !== -1) {
-                      colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
-                    } else if (weight > 0.6) {
-                      colorClassName = "text-neutral-500";
-                    }
+                  // Only concept_map terms get colored (5-8 semantic groups)
+                  if (conceptId !== undefined) {
+                    colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
+                  } else if (weight > 0.6) {
+                    colorClassName = "text-neutral-500";
                   }
                 }
 
@@ -2583,22 +2590,9 @@ export default function App() {
           }
           // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
           const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
-          // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
-          const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
-
-          // Determine conceptIndex: prioritize entityId, then conceptMap
-          // Only color words that match known concepts — no random fallback colors
-          let cIdx: number | undefined;
-          if (entityId !== undefined) {
-            // Use entityId for consistent multi-word entity coloring
-            cIdx = entityId;
-          } else {
-            const mappedId = getConceptId(word, conceptMap);
-            if (mappedId !== -1) {
-              cIdx = mappedId;
-            }
-          }
-          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: cIdx, entityId });
+          // Weight (bold/opacity) and conceptId (color) are resolved independently
+          const { weight, conceptId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
+          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: conceptId, entityId: conceptId });
         });
       }
     });
@@ -2614,7 +2608,7 @@ export default function App() {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation]);
+  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup]);
 
   const modeLabel = getViewModeLabel();
 
