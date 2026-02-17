@@ -2076,6 +2076,15 @@ export default function App() {
 
   const cycleViewMode = () => {
     if (isNarrativeMode) { setIsNarrativeMode(false); return; }
+    // Turn off Essence and Bullets when cycling modes
+    if (isFirstPrinciplesMode) {
+      setShowCondensedView(false);
+      setIsFirstPrinciplesMode(false);
+    }
+    if (isBulletMode) {
+      setIsBulletMode(false);
+      setActiveBulletIndex(null);
+    }
     if (viewMode === 'morph') setViewMode('nfl');
     else if (viewMode === 'nfl') setViewMode('tech');
     else setViewMode('morph');
