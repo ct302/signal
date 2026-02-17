@@ -4802,7 +4802,7 @@ export default function App() {
         />
       )}
 
-      {/* Intuition Mode Modal - 3 memorable one-liners */}
+      {/* Intuition Mode Modal - 3 memorable one-liners + domain mapping */}
       {showIntuitionModal && segments.length > 0 && segments[0].intuitions && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center"
@@ -4810,64 +4810,111 @@ export default function App() {
             if (e.target === e.currentTarget) setShowIntuitionModal(false);
           }}
         >
-          {/* Dark blue/black backdrop */}
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 opacity-95" />
+          {/* Frosted backdrop — readable background content */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
           {/* Modal content */}
-          <div className="relative max-w-lg w-full mx-4 p-6 rounded-2xl bg-slate-900/80 border border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/10">
+          <div className="relative max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto p-5 rounded-2xl bg-slate-900/90 border border-slate-600/30 shadow-2xl">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Lightbulb className="text-yellow-400" size={24} />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <Lightbulb className="text-yellow-400" size={22} />
                 <h2 className="text-lg font-bold text-white">
                   Core Intuitions
                 </h2>
               </div>
               <button
                 onClick={() => setShowIntuitionModal(false)}
-                className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
               >
-                <X size={20} className="text-neutral-400" />
+                <X size={18} className="text-neutral-400" />
               </button>
             </div>
 
-            {/* Intuitions List */}
-            <div className="space-y-4">
+            {/* Intuitions List — compact */}
+            <div className="space-y-2.5">
               {segments[0].intuitions.map((intuition, idx) => (
                 <div
                   key={idx}
-                  className="group relative p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/30 transition-all"
+                  className="group relative px-3.5 py-3 rounded-xl bg-slate-800/40 border border-slate-700/40 hover:border-yellow-500/25 transition-all"
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center">
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex-shrink-0 w-5 h-5 mt-0.5 rounded-full bg-yellow-500/15 text-yellow-400 text-[10px] font-bold flex items-center justify-center">
                       {idx + 1}
                     </span>
-                    <p className="text-blue-100 text-base leading-relaxed italic flex-1">
-                      "{intuition}"
-                    </p>
+                    <div className="text-slate-200 text-sm leading-relaxed italic flex-1">
+                      {renderRichText(intuition, "text-slate-200")}
+                    </div>
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(intuition);
                         setCopiedId(`intuition-${idx}`);
                         setTimeout(() => setCopiedId(null), 2000);
                       }}
-                      className={`flex-shrink-0 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
+                      className={`flex-shrink-0 p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
                         copiedId === `intuition-${idx}`
                           ? 'bg-green-500 text-white opacity-100'
                           : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                       }`}
                       title="Copy"
                     >
-                      {copiedId === `intuition-${idx}` ? <Check size={14} /> : <Copy size={14} />}
+                      {copiedId === `intuition-${idx}` ? <Check size={12} /> : <Copy size={12} />}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
+            {/* Domain Mapping — homomorphic narrative bridge */}
+            {conceptMap.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-700/40">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">{domainEmoji}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-400/80">
+                    {analogyDomain} Translation
+                  </span>
+                </div>
+                <div className="px-3.5 py-3 rounded-xl bg-amber-950/20 border border-amber-800/20">
+                  <p className="text-sm leading-relaxed text-amber-100/90">
+                    {(() => {
+                      // Build a compressed narrative mapping from the concept map
+                      const mappings = conceptMap.slice(0, 4).map(c => {
+                        const tech = cleanText(c.tech_term);
+                        const analogy = cleanText(c.analogy_term);
+                        return `${tech} → ${analogy}`;
+                      });
+                      const narratives = conceptMap
+                        .filter(c => c.narrative_mapping)
+                        .slice(0, 2)
+                        .map(c => cleanText(c.narrative_mapping));
+
+                      if (narratives.length > 0) {
+                        return narratives.join(' ');
+                      }
+                      // Fallback: synthesize from mappings
+                      return `In ${analogyDomain} terms: ${mappings.join(', ')}.`;
+                    })()}
+                  </p>
+                  {/* Compact term map */}
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {conceptMap.slice(0, 5).map((c, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-slate-800/60 border border-slate-700/30"
+                      >
+                        <span className="text-slate-400">{cleanText(c.tech_term)}</span>
+                        <span className="text-amber-500/70">≅</span>
+                        <span className="text-amber-300/80">{cleanText(c.analogy_term)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Footer hint */}
-            <p className="mt-6 text-center text-xs text-slate-500">
-              Low-complexity insights — easy to remember, powerful to share
+            <p className="mt-4 text-center text-[10px] text-slate-500/70">
+              Kolmogorov-compressed insights — minimal description, maximum understanding
             </p>
           </div>
         </div>
