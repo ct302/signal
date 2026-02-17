@@ -70,7 +70,9 @@ import {
   STOP_WORDS,
   LATEX_REGEX,
   CONCEPT_COLORS,
+  CONCEPT_COLORS_DARK,
   CONCEPT_BG_COLORS,
+  CONCEPT_BG_COLORS_DARK,
   MAX_TUTOR_HISTORY,
   QUICK_START_DOMAINS,
   SYMBOL_GLOSSARY,
@@ -2318,13 +2320,14 @@ export default function App() {
                 const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
 
                 let colorClassName = "";
+                const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
                 if (isColorMode && isImportant) {
                   if (conceptId !== undefined) {
                     // Concept-map terms: highest priority coloring
-                    colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
+                    colorClassName = activeColors[conceptId % activeColors.length];
                   } else if (entityId !== undefined) {
                     // Attention phrases + proper nouns: colored by their phrase group
-                    colorClassName = CONCEPT_COLORS[entityId % CONCEPT_COLORS.length];
+                    colorClassName = activeColors[entityId % activeColors.length];
                   }
                   // Uncategorized words (no conceptId, no entityId) stay default text color
                 }
@@ -2509,8 +2512,10 @@ export default function App() {
       ? item.conceptIndex
       : (item.entityId !== undefined && item.entityId >= 0) ? item.entityId : undefined;
     if (isIsomorphicMode && colorSourceId !== undefined && !STOP_WORDS.has(wordClean)) {
-      segmentColorClass = CONCEPT_COLORS[colorSourceId % CONCEPT_COLORS.length];
-      heatmapColorClass = CONCEPT_BG_COLORS[colorSourceId % CONCEPT_BG_COLORS.length];
+      const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
+      const activeBgColors = isDarkMode ? CONCEPT_BG_COLORS_DARK : CONCEPT_BG_COLORS;
+      segmentColorClass = activeColors[colorSourceId % activeColors.length];
+      heatmapColorClass = activeBgColors[colorSourceId % activeBgColors.length];
     }
 
     if (mode === 'opacity') {
@@ -2531,9 +2536,10 @@ export default function App() {
         style.padding = '0 2px';
         style.borderRadius = '4px';
         if (isDarkMode) {
-          // Fluorescent dark mode: bright white text with neon cyan-teal glow
-          style.color = '#fff';
+          // Fluorescent dark mode
           if (!isIsomorphicMode) {
+            // Non-isomorphic: bright white text with neon cyan-teal glow
+            style.color = '#fff';
             const intensity = Math.min(item.weight, 1);
             // Cyan-to-teal fluorescent background, vivid on dark surfaces
             style.backgroundColor = `hsla(${165 + intensity * 25}, 100%, ${45 + intensity * 15}%, ${0.25 + (intensity * 0.45)})`;
@@ -2542,10 +2548,11 @@ export default function App() {
               style.textShadow = '0 0 6px rgba(0, 255, 200, 0.3)';
             }
           }
+          // Isomorphic mode: let Tailwind dark colors handle text (don't force white)
         } else {
           // Light mode: existing yellow-based heatmap
-          style.color = '#000';
           if (!isIsomorphicMode) {
+            style.color = '#000';
             const intensity = Math.min(item.weight, 1);
             style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
           }

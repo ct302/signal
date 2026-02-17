@@ -61,18 +61,32 @@ export const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s
 // LaTeX command regex for wrapping - comprehensive list including accents and dots
 export const LATEX_CMD_REGEX = /\\(frac|dfrac|tfrac|lim|limsup|liminf|sum|int|iint|iiint|oint|prod|sqrt|cdot|times|div|pm|mp|leq|geq|ll|gg|neq|approx|sim|simeq|cong|equiv|propto|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|Xi|Upsilon|left|right|big|Big|bigg|Bigg|text|mathrm|mathbf|mathcal|mathbb|mathit|mathsf|boldsymbol|textbf|textrm|vec|hat|widehat|bar|overline|underline|dot|ddot|dddot|tilde|widetilde|acute|grave|breve|check|ring|overbrace|underbrace|prime|backprime|circ|bullet|star|forall|exists|nexists|subset|supset|subseteq|supseteq|cup|cap|bigcup|bigcap|in|notin|ni|land|lor|neg|lnot|implies|iff|oplus|ominus|otimes|oslash|odot|dots|ldots|cdots|vdots|ddots|quad|qquad|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|exp|det|dim|gcd|ker|hom|arg|deg|max|min|sup|inf|langle|rangle|lfloor|rfloor|lceil|rceil|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|Leftrightarrow|mapsto|uparrow|downarrow|Uparrow|Downarrow|nearrow|searrow|swarrow|nwarrow|hookrightarrow|hookleftarrow|parallel|perp|mid|angle|triangle|square|diamond|emptyset|varnothing|aleph|hbar|ell|wp|Re|Im|binom|tbinom|dbinom|stackrel|overset|underset|phantom|operatorname|begin|end|matrix|pmatrix|bmatrix|vmatrix|cases|array|aligned)/;
 
-// Concept colors for isomorphic mapping
+// Concept colors for isomorphic mapping — light mode
 export const CONCEPT_COLORS = [
   'text-red-600', 'text-blue-600', 'text-emerald-600', 'text-purple-600',
   'text-orange-600', 'text-cyan-600', 'text-pink-600', 'text-lime-600',
   'text-indigo-600', 'text-rose-600', 'text-teal-600', 'text-amber-600'
 ];
 
-// Background colors with opacity - works well in both light and dark modes
+// Concept colors for dark mode — fluorescent/bright variants that pop on dark backgrounds
+export const CONCEPT_COLORS_DARK = [
+  'text-red-400', 'text-blue-400', 'text-emerald-400', 'text-purple-400',
+  'text-orange-400', 'text-cyan-400', 'text-pink-400', 'text-lime-400',
+  'text-indigo-400', 'text-rose-400', 'text-teal-400', 'text-amber-400'
+];
+
+// Background colors with opacity — light mode
 export const CONCEPT_BG_COLORS = [
   'bg-red-500/20', 'bg-blue-500/20', 'bg-emerald-500/20', 'bg-purple-500/20',
   'bg-orange-500/20', 'bg-cyan-500/20', 'bg-pink-500/20', 'bg-lime-500/20',
   'bg-indigo-500/20', 'bg-rose-500/20', 'bg-teal-500/20', 'bg-amber-500/20'
+];
+
+// Background colors for dark mode — more saturated/vivid against dark surfaces
+export const CONCEPT_BG_COLORS_DARK = [
+  'bg-red-500/30', 'bg-blue-500/30', 'bg-emerald-500/30', 'bg-purple-500/30',
+  'bg-orange-500/30', 'bg-cyan-500/30', 'bg-pink-500/30', 'bg-lime-500/30',
+  'bg-indigo-500/30', 'bg-rose-500/30', 'bg-teal-500/30', 'bg-amber-500/30'
 ];
 
 // Quick start domains - full list (randomized subset shown to users)
