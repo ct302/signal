@@ -97,7 +97,8 @@ import {
   getFreeTierState,
   subscribeToFreeTier,
   isOnFreeTier,
-  FreeTierExhaustedError
+  FreeTierExhaustedError,
+  confirmSearchUsage
 } from './services';
 
 // Components
@@ -897,6 +898,7 @@ export default function App() {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
         setApiError(null); // Clear error on success
+        confirmSearchUsage(); // Only count against free tier on successful search
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -965,6 +967,7 @@ export default function App() {
       const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (parsed) {
         loadContent(parsed, lastSubmittedTopic);
+        confirmSearchUsage(); // Only count against free tier on successful search
       }
     } catch (e) {
       console.error("Regeneration failed", e);

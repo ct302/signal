@@ -260,6 +260,34 @@ const buildApiUrl = (config: ProviderConfig): string => {
   return `${baseUrl}/chat/completions`;
 };
 
+/**
+ * Confirm a successful search and decrement the free tier counter.
+ * Called by the client ONLY after generateAnalogy returns a valid parsed result.
+ * This prevents failed/errored searches from consuming free credits.
+ */
+export const confirmSearchUsage = async (): Promise<void> => {
+  if (!shouldUseProxy()) return; // Only applies to free-tier proxy users
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmUsage: true })
+    });
+    if (res.ok) {
+      // Update remaining count from response headers
+      const remaining = res.headers.get('X-Free-Remaining');
+      const limit = res.headers.get('X-Free-Limit');
+      if (remaining !== null) {
+        window.dispatchEvent(new CustomEvent('free-tier-update', {
+          detail: { remaining: parseInt(remaining), limit: parseInt(limit || '5') }
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to confirm search usage:', e);
+  }
+};
+
 // Options for API calls
 interface ApiCallOptions {
   jsonMode?: boolean;
@@ -1162,7 +1190,8 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
   const text = await callApi(prompt, {
     jsonMode: true,
     webSearch: needsWebSearch,
-    searchPrompt: searchPromptText
+    searchPrompt: searchPromptText,
+    countAsSearch: false  // Don't count on HTTP success; client confirms after successful parse
   });
   return safeJsonParse(text);
 };

@@ -191,6 +191,15 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    // Handle search usage confirmation — client confirms after successful parse
+    if (req.body && req.body.confirmUsage) {
+      var newUsage = await incrementDailyUsage(clientIP);
+      var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
+      res.setHeader('X-Free-Remaining', String(remaining));
+      res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
+      return res.status(200).json({ confirmed: true, remaining: remaining });
+    }
+
     var model = req.body && req.body.model;
     var messages = req.body && req.body.messages;
     var response_format = req.body && req.body.response_format;
