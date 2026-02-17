@@ -100,7 +100,6 @@ import {
   subscribeToFreeTier,
   isOnFreeTier,
   FreeTierExhaustedError,
-  confirmSearchUsage
 } from './services';
 
 // Components
@@ -962,7 +961,6 @@ export default function App() {
         loadContent(parsed, confirmedTopic);
         saveToHistory(parsed, confirmedTopic, analogyDomain);
         setApiError(null); // Clear error on success
-        confirmSearchUsage(); // Only count against free tier on successful search
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -977,7 +975,7 @@ export default function App() {
       }
 
       // Reassurance suffix for free tier users - failed searches don't count
-      const freeTierNote = isOnFreeTier() ? " This didn't count against your free searches." : "";
+      const freeTierNote = isOnFreeTier() ? " This may not have counted against your free tier." : "";
 
       // Handle ApiError with detailed status codes
       if (e instanceof ApiError) {
@@ -1031,7 +1029,6 @@ export default function App() {
       const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (parsed) {
         loadContent(parsed, lastSubmittedTopic);
-        confirmSearchUsage(); // Only count against free tier on successful search
       }
     } catch (e) {
       console.error("Regeneration failed", e);
@@ -2825,16 +2822,16 @@ export default function App() {
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
             freeTierRemaining === 0
               ? (isDarkMode ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700')
-              : freeTierRemaining <= 2
+              : freeTierRemaining <= 8
                 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700')
                 : (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
           }`}>
             <Sparkles size={12} />
             {freeTierRemaining === 0
               ? 'Free searches used'
-              : `${freeTierRemaining} of ${freeTierLimit} free searches left today`
+              : `~${Math.ceil(freeTierRemaining / 5)} free searches left today`
             }
-            {freeTierRemaining <= 2 && freeTierRemaining > 0 && (
+            {freeTierRemaining <= 8 && freeTierRemaining > 0 && (
               <button
                 onClick={() => setShowFreeTierModal(true)}
                 className={`ml-1 underline hover:no-underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}
@@ -4241,7 +4238,7 @@ export default function App() {
                 <Sparkles className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} size={32} />
               </div>
               <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                You've used your {freeTierLimit} free searches!
+                You've reached the free daily limit!
               </h2>
               <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
                 Get unlimited searches by adding a free API key. It takes less than a minute.

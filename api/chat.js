@@ -1,5 +1,5 @@
 // Free tier configuration
-const FREE_TIER_DAILY_LIMIT = 5;
+const FREE_TIER_DAILY_LIMIT = 25;
 
 // Primary model: cheap, reliable, paid model (~$0.001 per search)
 // Google Gemini 2.5 Flash Lite: $0.10/M in, $0.40/M out - fast, supports JSON mode
@@ -48,6 +48,11 @@ async function getKV() {
 const memoryUsageStore = new Map();
 
 function getClientIP(req) {
+  // Prefer x-real-ip (set by Vercel's edge network, not spoofable by clients)
+  const realIP = req.headers['x-real-ip'];
+  if (realIP) return realIP.trim();
+
+  // Fallback to x-forwarded-for (spoofable via curl, but better than nothing)
   const forwarded = req.headers['x-forwarded-for'];
   const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded ? forwarded.split(',')[0] : 'unknown');
   return ip.trim();
@@ -191,20 +196,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Handle search usage confirmation — client confirms after successful parse
-    if (req.body && req.body.confirmUsage) {
-      var newUsage = await incrementDailyUsage(clientIP);
-      var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
-      res.setHeader('X-Free-Remaining', String(remaining));
-      res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
-      return res.status(200).json({ confirmed: true, remaining: remaining });
-    }
-
     var model = req.body && req.body.model;
     var messages = req.body && req.body.messages;
     var response_format = req.body && req.body.response_format;
     var plugins = req.body && req.body.plugins;
-    var skipUsageCount = req.body && req.body.skipUsageCount;
 
     if (!messages) {
       return res.status(400).json({ error: 'Missing required field: messages' });
@@ -255,19 +250,11 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // SUCCESS - only increment usage for counting calls (main search generation)
-          // Validation/supplementary calls (skipUsageCount=true) don't consume credits
-          if (!skipUsageCount) {
-            var newUsage = await incrementDailyUsage(clientIP);
-            var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
-            res.setHeader('X-Free-Remaining', String(remaining));
-            res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
-          } else {
-            var currentCount = await getDailyUsage(clientIP);
-            var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - currentCount);
-            res.setHeader('X-Free-Remaining', String(remaining));
-            res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
-          }
+          // Always count successful API calls — no client-controlled bypass
+          var newUsage = await incrementDailyUsage(clientIP);
+          var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
+          res.setHeader('X-Free-Remaining', String(remaining));
+          res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
           return res.status(200).json(result.data);
         }
 
