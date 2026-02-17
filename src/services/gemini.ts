@@ -669,11 +669,14 @@ const getComplexityPrompt = (level: number, domain?: string): string => {
 
 ABSOLUTE BANS (violating these = failure):
 - NO formulas, equations, or math symbols ($, \\\\frac, \\\\sum, etc.)
+- NO set notation or Unicode math symbols (∈, ∪, ⊂, ∀, ∃, →, ⟹, ≤, ≥, ≠, ∞, ∂, ∇, etc.)
+  Write "in" not ∈, "for all" not ∀, "leads to" not →, "less than" not ≤
 - NO technical jargon (algorithm, coefficient, derivative, modulus, vector, matrix, etc.)
 - NO acronyms or abbreviations users wouldn't know
 - NO chemical formulas (H2O is fine, C6H12O6 is NOT)
-- NO Greek letters (alpha, beta, sigma, etc.)
+- NO Greek letters (alpha, beta, sigma, etc.) — not even spelled out in technical context
 - NO "imagine you're a scientist" framing - they're 5!
+- NO LaTeX notation of any kind — not even inline $x$
 
 REQUIRED STYLE:
 - Use words a kindergartener knows: big, small, fast, slow, push, pull, mix, share
@@ -799,9 +802,9 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
     : ''; // No web search for general domains - use LLM knowledge
 
   // LaTeX instruction depends on whether topic is STEM-related
-  const latexInstruction = topicIsSTEM
+  const latexInstruction = (topicIsSTEM && complexity !== 5)
     ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
-    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧.';
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂, ∀, ∃), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧, "for all" not ∀.';
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 

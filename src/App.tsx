@@ -628,6 +628,50 @@ export default function App() {
     return { tech: techLookup, analogy: analogyLookup, multiWordPhrases: { tech: techPhrases, analogy: analogyPhrases } };
   };
 
+  // Shared helper: pre-scan a token array for multi-word phrase matches
+  // Returns a map of tokenIndex → entityId for words that are part of a compound concept
+  // Used by BOTH renderAttentiveText and processedWords effect to ensure consistent coloring
+  const buildPhraseOverrides = (
+    tokens: string[],
+    phraseLookup: Record<string, MultiWordPhrase[]>
+  ): Record<number, number> => {
+    const overrides: Record<number, number> = {};
+    // Extract non-whitespace tokens with their indices for lookahead
+    const wordTokens: { word: string; idx: number }[] = [];
+    tokens.forEach((t, idx) => {
+      if (t && !/^\s+$/.test(t)) wordTokens.push({ word: t, idx });
+    });
+    for (let wi = 0; wi < wordTokens.length; wi++) {
+      const cleaned = stripWordPunctuation(cleanText(wordTokens[wi].word).toLowerCase());
+      const stemmed = stemWord(cleaned);
+      const candidates = phraseLookup[cleaned] || phraseLookup[stemmed] || [];
+      for (const candidate of candidates) {
+        // Check if next N words match the phrase
+        if (wi + candidate.words.length > wordTokens.length) continue;
+        let matches = true;
+        for (let k = 0; k < candidate.words.length; k++) {
+          const tokenCleaned = stripWordPunctuation(cleanText(wordTokens[wi + k].word).toLowerCase());
+          const tokenStemmed = stemWord(tokenCleaned);
+          const phraseWord = candidate.words[k];
+          const phraseStemmed = stemWord(phraseWord);
+          if (tokenCleaned !== phraseWord && tokenStemmed !== phraseStemmed && tokenCleaned !== phraseStemmed && tokenStemmed !== phraseWord) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          // Override all words in this phrase to use the same entityId
+          for (let k = 0; k < candidate.words.length; k++) {
+            overrides[wordTokens[wi + k].idx] = candidate.entityId;
+          }
+          wi += candidate.words.length - 1; // skip matched words
+          break; // longest match first (already sorted)
+        }
+      }
+    }
+    return overrides;
+  };
+
   // Merge entity lookups preserving concept_map entityIds (>= 0) from being overwritten
   // When attention_map has the same word as concept_map, keep concept's entityId but take higher weight
   const mergePreservingConceptIds = (
@@ -700,19 +744,20 @@ export default function App() {
 
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
-        // Tech text: keep most math symbols but fix common prose-context issues
-        // Must aggressively fix symbols that shouldn't appear in readable prose
-        tech: cleanText(fixUnicode(s.tech || s.technical || ""))
-          // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
-          .replace(/∈\s*(?=[a-z])/gi, 'in ')
-          // Fix △/▲ triangle symbols to word "triangle" in prose context
-          .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
-          // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
-          .replace(/(?<=\s|^)\/ust\b/gi, 'just')
-          .replace(/(?<=\s|^)\/ot\b/gi, 'not')
-          // Fix stray "/" between words that should be "not"
-          .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
-          .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
+        // Tech text: ELI5 strips ALL math symbols; normal mode fixes common prose-context issues
+        tech: mainComplexity === 5
+          ? stripMathSymbols(cleanText(fixUnicode(s.tech || s.technical || "")))
+          : cleanText(fixUnicode(s.tech || s.technical || ""))
+              // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
+              .replace(/∈\s*(?=[a-z])/gi, 'in ')
+              // Fix △/▲ triangle symbols to word "triangle" in prose context
+              .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+              // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
+              .replace(/(?<=\s|^)\/ust\b/gi, 'just')
+              .replace(/(?<=\s|^)\/ot\b/gi, 'not')
+              // Fix stray "/" between words that should be "not"
+              .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
+              .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || ""))),
@@ -726,11 +771,14 @@ export default function App() {
     // Store full explanations (250+ words each) - these are the main content
     // Apply unescapeControlSequences to convert literal \n sequences to actual newlines
     if (technicalExplanation) {
+      const cleaned = cleanText(fixUnicode(technicalExplanation));
       setTechnicalExplanation(
         unescapeControlSequences(
-          cleanText(fixUnicode(technicalExplanation))
-            .replace(/∈\s*(?=[a-z])/gi, 'in ')
-            .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          mainComplexity === 5
+            ? stripMathSymbols(cleaned)
+            : cleaned
+                .replace(/∈\s*(?=[a-z])/gi, 'in ')
+                .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
         )
       );
     }
@@ -2368,46 +2416,13 @@ export default function App() {
                 return <span key={i}>{segment}</span>;
               }
             } else {
-              // Pre-scan for multi-word phrase matches to override per-word coloring
-              // e.g., "divergence theorem" should share one color even if individually they match different concepts
+              // Pre-scan for multi-word phrase matches using shared helper
               const tokens = segment.split(/(\s+)/);
-              const phraseOverrides: Record<number, number> = {}; // tokenIndex → entityId override
+              const inferredIsAnalogy = isAnalogyVisualMode || isNarrativeMode;
+              let phraseOverrides: Record<number, number> = {};
               if (multiWordPhraseLookup) {
-                const inferredIsAnalogy = isAnalogyVisualMode || isNarrativeMode;
                 const phraseLookup = inferredIsAnalogy ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
-                // Extract just the non-whitespace tokens with their indices for lookahead
-                const wordTokens: { word: string; idx: number }[] = [];
-                tokens.forEach((t, idx) => {
-                  if (t && !/^\s+$/.test(t)) wordTokens.push({ word: t, idx });
-                });
-                for (let wi = 0; wi < wordTokens.length; wi++) {
-                  const cleaned = stripWordPunctuation(cleanText(wordTokens[wi].word).toLowerCase());
-                  const stemmed = stemWord(cleaned);
-                  const candidates = phraseLookup[cleaned] || phraseLookup[stemmed] || [];
-                  for (const candidate of candidates) {
-                    // Check if next N words match the phrase
-                    if (wi + candidate.words.length > wordTokens.length) continue;
-                    let matches = true;
-                    for (let k = 0; k < candidate.words.length; k++) {
-                      const tokenCleaned = stripWordPunctuation(cleanText(wordTokens[wi + k].word).toLowerCase());
-                      const tokenStemmed = stemWord(tokenCleaned);
-                      const phraseWord = candidate.words[k];
-                      const phraseStemmed = stemWord(phraseWord);
-                      if (tokenCleaned !== phraseWord && tokenStemmed !== phraseStemmed && tokenCleaned !== phraseStemmed && tokenStemmed !== phraseWord) {
-                        matches = false;
-                        break;
-                      }
-                    }
-                    if (matches) {
-                      // Override all words in this phrase to use the same entityId
-                      for (let k = 0; k < candidate.words.length; k++) {
-                        phraseOverrides[wordTokens[wi + k].idx] = candidate.entityId;
-                      }
-                      wi += candidate.words.length - 1; // skip matched words
-                      break; // longest match first (already sorted)
-                    }
-                  }
-                }
+                phraseOverrides = buildPhraseOverrides(tokens, phraseLookup);
               }
 
               return tokens.map((word, j) => {
@@ -2841,45 +2856,56 @@ export default function App() {
 
     if (!textToParse) return;
 
-    // Only apply LaTeX processing to technical text
+    // Only apply LaTeX processing to technical text (and NOT in ELI5 mode)
     // Analogy/narrative should be pure prose - no LaTeX conversion
     let processedText: string;
-    if (isTechnicalMode) {
-      // Technical mode: fix malformed LaTeX, convert Unicode math to KaTeX, then wrap bare commands
+    if (isTechnicalMode && mainComplexity !== 5) {
+      // Technical mode (non-ELI5): fix malformed LaTeX, convert Unicode math to KaTeX, then wrap bare commands
       const sanitizedText = sanitizeLatex(textToParse);
       const latexConverted = convertUnicodeToLatex(sanitizedText);
       processedText = wrapBareLatex(latexConverted);
     } else {
-      // Analogy/narrative mode: pure prose, no LaTeX processing
+      // Analogy/narrative mode OR ELI5 tech mode: pure prose, no LaTeX processing
       // Apply one final aggressive strip to catch anything that slipped through
       processedText = stripMathSymbols(textToParse);
     }
 
-    // Only split on LaTeX patterns in technical mode
+    // Only split on LaTeX patterns in technical mode (and NOT in ELI5)
     // Analogy text is pure prose — splitting on LATEX_REGEX would incorrectly
     // extract \word patterns as LaTeX tokens and render garbled math
-    const parts = isTechnicalMode
+    const hasLatex = isTechnicalMode && mainComplexity !== 5;
+    const parts = hasLatex
       ? processedText.split(LATEX_REGEX)
       : [processedText]; // Single chunk, no LaTeX extraction
 
     parts.forEach(part => {
       if (!part) return;
-      const isLatex = isTechnicalMode && (part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1));
+      const isLatex = hasLatex && (part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1));
 
       if (isLatex) {
         allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });
       } else {
-        part.split(/(\s+)/).forEach(word => {
+        // Pre-scan for multi-word phrase matches (e.g., "matrix diagonalization" → one color)
+        const tokens = part.split(/(\s+)/);
+        const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
+        let phraseOverrides: Record<number, number> = {};
+        if (multiWordPhraseLookup) {
+          const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+          phraseOverrides = buildPhraseOverrides(tokens, phraseLookup);
+        }
+
+        tokens.forEach((word, tokenIdx) => {
           if (!word) return;
           if (/^\s+$/.test(word)) {
             allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex: 0 });
             return;
           }
-          // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
-          const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
           // Weight (bold/opacity), conceptId (concept_map color), entityId (attention/proper noun color)
           const { weight, conceptId, entityId: wordEntityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
-          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: conceptId, entityId: conceptId ?? wordEntityId });
+          // Multi-word phrase override: compound concepts share one color
+          const phraseOverrideId = phraseOverrides[tokenIdx];
+          const finalConceptIndex = phraseOverrideId !== undefined ? phraseOverrideId : conceptId;
+          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: finalConceptIndex, entityId: finalConceptIndex ?? wordEntityId });
         });
       }
     });
@@ -2895,7 +2921,7 @@ export default function App() {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup]);
+  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup, multiWordPhraseLookup, mainComplexity]);
 
   const modeLabel = getViewModeLabel();
 
