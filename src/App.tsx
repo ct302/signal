@@ -3045,8 +3045,8 @@ export default function App() {
                         <span className="hidden sm:inline">Story</span>
                       </button>
                     )}
-                    {/* Bullet Point Mode - Only in Tech Lock */}
-                    {hasStarted && viewMode === 'tech' && (
+                    {/* Bullet Point Mode - Available in Tech and Morph modes */}
+                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && (
                       <button
                         onClick={() => {
                           if (!isBulletMode) {
@@ -3055,6 +3055,10 @@ export default function App() {
                             if (isFirstPrinciplesMode) {
                               setShowCondensedView(false);
                               setIsFirstPrinciplesMode(false);
+                            }
+                            // Auto-switch to tech mode — bullets render in expert view
+                            if (viewMode === 'morph') {
+                              setViewMode('tech');
                             }
                           }
                           setIsBulletMode(!isBulletMode);

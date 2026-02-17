@@ -216,7 +216,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
 
             {showBridge && (
               <div className="mt-2 px-3 py-2.5 rounded-lg bg-blue-50/70 border border-blue-100 text-sm text-blue-800 leading-relaxed">
-                {quizData.analogyBridge.hint}
+                {renderRichText(quizData.analogyBridge.hint, "text-blue-800")}
               </div>
             )}
           </div>
@@ -258,7 +258,7 @@ export const QuizModal: React.FC<QuizModalProps> = ({
                   {showBridge && quizData.analogyBridge?.optionHints?.[idx] && !quizFeedback && (
                     <div className="text-xs text-blue-500 mt-1.5 italic flex items-center gap-1">
                       <span>{domainEmoji}</span>
-                      <span>{quizData.analogyBridge.optionHints[idx]}</span>
+                      <span>{renderRichText(quizData.analogyBridge.optionHints[idx], "text-blue-500")}</span>
                     </div>
                   )}
                 </div>
