@@ -1184,17 +1184,22 @@ export const generateSemanticColorMap = async (
   conceptMap: ConceptMapItem[]
 ): Promise<{ tech: Map<string, number>; analogy: Map<string, number> } | null> => {
   try {
-    if (!conceptMap || conceptMap.length === 0 || (!technicalText && !analogyText)) return null;
-
-    const conceptList = conceptMap.map(c =>
-      `${c.id}: "${c.tech_term}" / "${c.analogy_term}"`
-    ).join('\n');
+    if (!technicalText && !analogyText) return null;
 
     // Truncate texts to keep the request cheap and fast
     const techSlice = (technicalText || '').slice(0, 1500);
     const analSlice = (analogyText || '').slice(0, 1500);
 
-    const prompt = `You are a word-level concept tagger for a learning app. Given two explanation texts and a numbered concept list, identify which individual words from the texts belong to which concept.
+    const hasConceptMap = conceptMap && conceptMap.length > 0;
+
+    let prompt: string;
+    if (hasConceptMap) {
+      // Mode 1: Concept map exists — tag words to known concepts
+      const conceptList = conceptMap.map(c =>
+        `${c.id}: "${c.tech_term}" / "${c.analogy_term}"`
+      ).join('\n');
+
+      prompt = `You are a word-level concept tagger for a learning app. Given two explanation texts and a numbered concept list, identify which individual words from the texts belong to which concept.
 
 CONCEPTS:
 ${conceptList}
@@ -1220,13 +1225,40 @@ Rules:
 - Skip common stop words (the, a, is, are, and, or, it, to, of, in, for, by, etc.)
 - Include 3-8 words per concept per text where applicable
 - If a concept isn't mentioned in a text, use an empty array for that text`;
+    } else {
+      // Mode 2: No concept map — identify concepts AND tag words in one shot
+      prompt = `You are a concept identifier and word-level tagger for a learning app. Given a technical explanation and its analogy, identify 5-10 key concepts, then tag which words belong to each concept.
+
+TECHNICAL TEXT:
+${techSlice}
+
+ANALOGY TEXT:
+${analSlice}
+
+Step 1: Identify 5-10 KEY CONCEPTS from the technical text (important ideas, entities, processes).
+Step 2: For each concept, find the INDIVIDUAL words (lowercase, no punctuation) in BOTH texts that relate to it.
+
+Return ONLY this JSON — no other text:
+{"concept_colors":[{"id":0,"tech_words":["word1","word2"],"analogy_words":["word3","word4"]},{"id":1,"tech_words":["word5"],"analogy_words":["word6"]}]}
+
+Rules:
+- Use sequential IDs starting from 0
+- All words lowercase, no punctuation
+- Each word belongs to at most ONE concept (pick the most relevant)
+- Skip common stop words (the, a, is, are, and, or, it, to, of, in, for, by, etc.)
+- Include 3-8 words per concept per text where applicable
+- Group multi-word terms together: tag each word of "singular value decomposition" under the same concept
+- In the analogy text, find the CORRESPONDING words that map to the same concept`;
+    }
 
     const text = await callApi(prompt, { jsonMode: true });
     const result = safeJsonParse(text);
     if (!result || !Array.isArray(result.concept_colors)) return null;
 
     // Build valid concept ID set for validation
-    const validIds = new Set(conceptMap.map(c => c.id));
+    const validIds = hasConceptMap
+      ? new Set(conceptMap.map(c => c.id))
+      : new Set(result.concept_colors.map((c: any) => c.id).filter((id: any) => typeof id === 'number'));
 
     const techMap = new Map<string, number>();
     const analogyMap = new Map<string, number>();

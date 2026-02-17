@@ -1074,12 +1074,13 @@ export default function App() {
 
         // Non-blocking: fire semantic color mapping in background
         // Existing coloring serves as instant fallback while this loads
+        // Works even when concept_map is missing (free tier) — AI identifies concepts from text
         setSemanticColorMap(null);
         const techText = findContext(parsed, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(parsed, ["analogy_explanation", "analogyExplanation", "analogy"]);
         const cMap = findContext(parsed, ["concept_map", "conceptMap"]);
-        if (techText && analText && Array.isArray(cMap) && cMap.length > 0) {
-          generateSemanticColorMap(techText, analText, cMap)
+        if (techText || analText) {
+          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
             .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
             .catch(() => { /* Silent: fallback coloring already active */ });
         }
@@ -1154,12 +1155,13 @@ export default function App() {
         loadContent(parsed, lastSubmittedTopic);
 
         // Non-blocking: fire semantic color mapping in background
+        // Works even when concept_map is missing (free tier) — AI identifies concepts from text
         setSemanticColorMap(null);
         const techText = findContext(parsed, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(parsed, ["analogy_explanation", "analogyExplanation", "analogy"]);
         const cMap = findContext(parsed, ["concept_map", "conceptMap"]);
-        if (techText && analText && Array.isArray(cMap) && cMap.length > 0) {
-          generateSemanticColorMap(techText, analText, cMap)
+        if (techText || analText) {
+          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
             .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
             .catch(() => {});
         }
