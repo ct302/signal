@@ -273,6 +273,7 @@ export default function App() {
   const [attentionMap, setAttentionMap] = useState<AttentionMap | null>(null);
   const [entityLookup, setEntityLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
   const [conceptLookup, setConceptLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
+  const [multiWordPhraseLookup, setMultiWordPhraseLookup] = useState<{ tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
@@ -546,9 +547,18 @@ export default function App() {
 
   // Build entity lookup from concept_map for multi-word term grouping
   // Words from the same concept (e.g., "vector" and "calculus" from "vector calculus") share an entityId
-  const buildConceptEntityLookup = (concepts: ConceptMapItem[]): { tech: EntityWordLookup; analogy: EntityWordLookup } => {
+  // Multi-word phrase entry: first word maps to the full phrase words + entity id
+  type MultiWordPhrase = { words: string[]; entityId: number };
+  type MultiWordPhraseLookup = Record<string, MultiWordPhrase[]>;
+
+  const buildConceptEntityLookup = (concepts: ConceptMapItem[]): {
+    tech: EntityWordLookup; analogy: EntityWordLookup;
+    multiWordPhrases: { tech: MultiWordPhraseLookup; analogy: MultiWordPhraseLookup };
+  } => {
     const techLookup: EntityWordLookup = {};
     const analogyLookup: EntityWordLookup = {};
+    const techPhrases: MultiWordPhraseLookup = {};
+    const analogyPhrases: MultiWordPhraseLookup = {};
 
     // Sort independently — tech terms by tech length, analogy terms by analogy length
     // Ensures "Singular Value Decomposition" (30 chars tech) claims "singular" before
@@ -558,7 +568,8 @@ export default function App() {
 
     techSorted.forEach(concept => {
       const techPhrase = cleanText(concept.tech_term).toLowerCase();
-      techPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)).forEach(word => {
+      const contentWords = techPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      contentWords.forEach(word => {
         if (!techLookup[word]) {
           techLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
         }
@@ -568,11 +579,26 @@ export default function App() {
           techLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
         }
       });
+      // Build multi-word phrase index (2+ content words)
+      // Uses ALL words (not just content words) so lookahead matches "divergence theorem" not just "divergence"
+      const allWords = techPhrase.split(/\s+/).filter(w => w.length > 0);
+      if (allWords.length >= 2) {
+        const firstWord = allWords[0];
+        if (!techPhrases[firstWord]) techPhrases[firstWord] = [];
+        techPhrases[firstWord].push({ words: allWords, entityId: concept.id });
+        // Also index by stemmed first word
+        const stemmedFirst = stemWord(firstWord);
+        if (stemmedFirst !== firstWord) {
+          if (!techPhrases[stemmedFirst]) techPhrases[stemmedFirst] = [];
+          techPhrases[stemmedFirst].push({ words: allWords, entityId: concept.id });
+        }
+      }
     });
 
     analogySorted.forEach(concept => {
       const analogyPhrase = cleanText(concept.analogy_term).toLowerCase();
-      analogyPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)).forEach(word => {
+      const contentWords = analogyPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      contentWords.forEach(word => {
         if (!analogyLookup[word]) {
           analogyLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
         }
@@ -581,9 +607,25 @@ export default function App() {
           analogyLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
         }
       });
+      // Build multi-word phrase index for analogy terms (e.g., "Deacon Palmer")
+      const allWords = analogyPhrase.split(/\s+/).filter(w => w.length > 0);
+      if (allWords.length >= 2) {
+        const firstWord = allWords[0];
+        if (!analogyPhrases[firstWord]) analogyPhrases[firstWord] = [];
+        analogyPhrases[firstWord].push({ words: allWords, entityId: concept.id });
+        const stemmedFirst = stemWord(firstWord);
+        if (stemmedFirst !== firstWord) {
+          if (!analogyPhrases[stemmedFirst]) analogyPhrases[stemmedFirst] = [];
+          analogyPhrases[stemmedFirst].push({ words: allWords, entityId: concept.id });
+        }
+      }
     });
 
-    return { tech: techLookup, analogy: analogyLookup };
+    // Sort phrase entries longest-first so "singular value decomposition" matches before "singular values"
+    for (const entries of Object.values(techPhrases)) entries.sort((a, b) => b.words.length - a.words.length);
+    for (const entries of Object.values(analogyPhrases)) entries.sort((a, b) => b.words.length - a.words.length);
+
+    return { tech: techLookup, analogy: analogyLookup, multiWordPhrases: { tech: techPhrases, analogy: analogyPhrases } };
   };
 
   // Merge entity lookups preserving concept_map entityIds (>= 0) from being overwritten
@@ -654,7 +696,7 @@ export default function App() {
     const synthesis = findContext(data, ["synthesis"]);
 
     // Will be populated from concept_map multi-word terms, used by entity lookup merge below
-    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup } | null = null;
+    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup; multiWordPhrases: { tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } } | null = null;
 
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
@@ -733,7 +775,8 @@ export default function App() {
       // Build entity lookup from concept_map multi-word terms
       // This ensures "vector" + "calculus" → same entityId, "Tom" + "Brady" → same entityId
       conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
-      setConceptLookup(conceptEntityLookupRef);
+      setConceptLookup({ tech: conceptEntityLookupRef.tech, analogy: conceptEntityLookupRef.analogy });
+      setMultiWordPhraseLookup(conceptEntityLookupRef.multiWordPhrases);
     }
 
     if (importanceMapArray && Array.isArray(importanceMapArray)) {
@@ -826,6 +869,7 @@ export default function App() {
       setAttentionMap(null);
       setEntityLookup(null);
       setConceptLookup(null);
+      setMultiWordPhraseLookup(null);
     }
 
     if (context) {
@@ -2324,7 +2368,49 @@ export default function App() {
                 return <span key={i}>{segment}</span>;
               }
             } else {
-              return segment.split(/(\s+)/).map((word, j) => {
+              // Pre-scan for multi-word phrase matches to override per-word coloring
+              // e.g., "divergence theorem" should share one color even if individually they match different concepts
+              const tokens = segment.split(/(\s+)/);
+              const phraseOverrides: Record<number, number> = {}; // tokenIndex → entityId override
+              if (multiWordPhraseLookup) {
+                const inferredIsAnalogy = isAnalogyVisualMode || isNarrativeMode;
+                const phraseLookup = inferredIsAnalogy ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+                // Extract just the non-whitespace tokens with their indices for lookahead
+                const wordTokens: { word: string; idx: number }[] = [];
+                tokens.forEach((t, idx) => {
+                  if (t && !/^\s+$/.test(t)) wordTokens.push({ word: t, idx });
+                });
+                for (let wi = 0; wi < wordTokens.length; wi++) {
+                  const cleaned = stripWordPunctuation(cleanText(wordTokens[wi].word).toLowerCase());
+                  const stemmed = stemWord(cleaned);
+                  const candidates = phraseLookup[cleaned] || phraseLookup[stemmed] || [];
+                  for (const candidate of candidates) {
+                    // Check if next N words match the phrase
+                    if (wi + candidate.words.length > wordTokens.length) continue;
+                    let matches = true;
+                    for (let k = 0; k < candidate.words.length; k++) {
+                      const tokenCleaned = stripWordPunctuation(cleanText(wordTokens[wi + k].word).toLowerCase());
+                      const tokenStemmed = stemWord(tokenCleaned);
+                      const phraseWord = candidate.words[k];
+                      const phraseStemmed = stemWord(phraseWord);
+                      if (tokenCleaned !== phraseWord && tokenStemmed !== phraseStemmed && tokenCleaned !== phraseStemmed && tokenStemmed !== phraseWord) {
+                        matches = false;
+                        break;
+                      }
+                    }
+                    if (matches) {
+                      // Override all words in this phrase to use the same entityId
+                      for (let k = 0; k < candidate.words.length; k++) {
+                        phraseOverrides[wordTokens[wi + k].idx] = candidate.entityId;
+                      }
+                      wi += candidate.words.length - 1; // skip matched words
+                      break; // longest match first (already sorted)
+                    }
+                  }
+                }
+              }
+
+              return tokens.map((word, j) => {
                 if (!word) return null;
                 if (/^\s+$/.test(word)) return <span key={`${i}-${j}`}>{word}</span>;
 
@@ -2338,10 +2424,17 @@ export default function App() {
                 const effectiveThreshold = 1.1 - currentThreshold;
                 const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
 
+                // Multi-word phrase override: if this word is part of a known compound concept,
+                // use the phrase's entityId as conceptId so all words share the same color
+                const phraseOverrideId = phraseOverrides[j];
+
                 let colorClassName = "";
                 const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
                 if (isColorMode && isImportant) {
-                  if (conceptId !== undefined) {
+                  if (phraseOverrideId !== undefined) {
+                    // Multi-word phrase: all words get the compound concept's color
+                    colorClassName = activeColors[phraseOverrideId % activeColors.length];
+                  } else if (conceptId !== undefined) {
                     // Concept-map terms: highest priority coloring
                     colorClassName = activeColors[conceptId % activeColors.length];
                   } else if (entityId !== undefined) {

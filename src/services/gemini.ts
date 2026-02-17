@@ -825,13 +825,17 @@ ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - tight definition with key equation, (2) HOW - the core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler, no repetition. Every sentence must add new information. Do NOT use \\n or \\\\ for line breaks.",
-  "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
+  "technical_explanation": "${complexity === 5
+    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows — big, small, fast, slow, push, pull, mix, share. NO jargon, NO formulas, NO Greek letters, NO equations. Compare everything to toys, snacks, playgrounds, building blocks, animals. One idea per sentence. Make it FUN like a storybook. Do NOT use \\n or \\\\ for line breaks.`
+    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - tight definition with key equation, (2) HOW - the core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler, no repetition. Every sentence must add new information. Do NOT use \\n or \\\\ for line breaks.`}",
+  "analogy_explanation": "${complexity === 5
+    ? `A fun, SHORT story from ${shortDomain} that a kid would love hearing at bedtime (1-2 paragraphs, 100-150 words MAX). Use simple words only. Make it feel like a storybook, NOT a textbook. Through this story, the kid understands the idea without any hard words. ZERO technical terms.`
+    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)`}",
   "segments": [
     {
-      "tech": "A single sentence or concept from the technical explanation",
-      "analogy": "The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms",
-      "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon",
+      "tech": "${complexity === 5 ? 'A super simple sentence about the idea using kid-friendly words only' : 'A single sentence or concept from the technical explanation'}",
+      "analogy": "${complexity === 5 ? `The matching ${shortDomain} story moment — simple words only, fun and memorable` : `The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms`}",
+      "narrative": "${complexity === 5 ? `A fun story bit (1-2 sentences) with ${shortDomain} references a kid would enjoy` : `A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon`}",
       "intuitions": [
         "First memorable one-liner (under 12 words). Format: '[Tech concept] is like [${shortDomain} analogy]'",
         "Second memorable one-liner - different angle or metaphor on the same concept",
@@ -842,11 +846,11 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "concept_map": [
     {
       "id": 0,
-      "tech_term": "technical term from tech text",
+      "tech_term": "${complexity === 5 ? 'Simple name for the idea (use the easiest word possible)' : 'technical term from tech text'}",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
-      "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
-      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
-      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).",
+      "six_word_definition": "${complexity === 5 ? 'EXACTLY six simple words a kid would understand explaining what this thing IS' : 'EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)'}",
+      "narrative_mapping": "${complexity === 5 ? `A fun 1-2 sentence story connecting the idea to ${shortDomain} using simple words a kid knows` : `2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.`}",
+      "causal_explanation": "${complexity === 5 ? 'Simple explanation of WHY these two things are alike — use words like because, just like, same as' : `First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).`}",
       "why_it_matters": {
         "connection": "One sentence explaining WHY these two concepts structurally connect—what shared pattern or mechanism links them (not just THAT they connect, but WHY).",
         "importance": "One sentence explaining WHY understanding the specific link between THIS tech_term and THIS analogy_term unlocks deeper understanding. Be SPECIFIC: name what concepts become easier, what confusion it prevents, or what capability it enables. NEVER use generic phrases like 'this is foundational', 'key bridge', or 'cornerstone concept'.",
