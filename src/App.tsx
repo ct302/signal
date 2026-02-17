@@ -2444,7 +2444,7 @@ export default function App() {
     const sentenceText = sentenceWords
       .filter(w => !w.isSpace && !w.isLatex)
       .map(w => w.text.toLowerCase().replace(/[^a-z]/g, ''))
-      .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
 
     if (sentenceText.length === 0) return null;
 
@@ -2457,8 +2457,14 @@ export default function App() {
       const segWords = seg.tech.toLowerCase()
         .replace(/[^a-z\s]/g, '')
         .split(/\s+/)
-        .filter(w => w.length > 3 && !STOP_WORDS.has(w));
-      const shared = segWords.filter(sw => sentenceText.some(st => st.includes(sw) || sw.includes(st)));
+        .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      if (segWords.length === 0) continue;
+      // Count shared words (substring match in either direction)
+      const shared = segWords.filter(sw => sentenceText.some(st =>
+        st.includes(sw) || sw.includes(st) ||
+        // Stem-like: match if either word starts with the other's first 4+ chars
+        (sw.length >= 4 && st.length >= 4 && (st.startsWith(sw.slice(0, 4)) || sw.startsWith(st.slice(0, 4))))
+      ));
       const score = shared.length / Math.max(Math.min(segWords.length, sentenceText.length), 1);
       if (score > bestScore) {
         bestScore = score;
@@ -2466,22 +2472,36 @@ export default function App() {
       }
     }
 
-    if (bestSegment && bestScore > 0.12) {
+    if (bestSegment && bestScore > 0.08) {
       return {
         analogy: bestSegment.analogy,
         intuition: bestSegment.intuitions?.[0]
       };
     }
 
-    // Fallback: match against conceptMap tech_term
+    // Fallback: match against conceptMap tech_term or analogy_term
     for (let i = 0; i < conceptMap.length; i++) {
       const techLower = cleanText(conceptMap[i].tech_term).toLowerCase().replace(/[^a-z\s]/g, '');
       const techWords = techLower.split(/\s+/).filter(w => w.length > 2);
-      if (techWords.some(tw => sentenceText.some(st => st.includes(tw)))) {
+      if (techWords.some(tw => sentenceText.some(st => st.includes(tw) || tw.includes(st)))) {
         return {
           analogy: conceptMap[i].narrative_mapping || `${conceptMap[i].analogy_term} — the ${analogyDomain} equivalent of ${conceptMap[i].tech_term}`,
           color: CONCEPT_COLORS[i % CONCEPT_COLORS.length]
         };
+      }
+    }
+
+    // Last resort: pick the segment closest to this bullet's position in the list
+    if (segments.length > 0) {
+      const sentences = groupWordsIntoSentences(processedWords);
+      const bulletIdx = sentences.findIndex(s => s === sentenceWords);
+      if (bulletIdx >= 0) {
+        const ratio = bulletIdx / Math.max(sentences.length - 1, 1);
+        const segIdx = Math.min(Math.floor(ratio * segments.length), segments.length - 1);
+        const seg = segments[segIdx];
+        if (seg?.analogy) {
+          return { analogy: seg.analogy, intuition: seg.intuitions?.[0] };
+        }
       }
     }
 
@@ -3478,39 +3498,29 @@ export default function App() {
                               </span>
                             </li>
                             {/* Inline analogy tooltip - slides open below clicked bullet */}
-                            {isActiveBullet && (
-                              <li className="list-none" style={{ marginTop: '-4px', marginBottom: '4px' }}>
+                            {isActiveBullet && bulletMatch && (
+                              <li className="list-none">
                                 <div
-                                  className={`ml-8 mr-2 px-4 py-3 rounded-lg border-l-[3px] transition-all ${
+                                  className={`mx-auto my-1 px-3 py-2 rounded-md text-center max-w-[90%] ${
                                     isDarkMode
-                                      ? 'bg-amber-950/30 border border-amber-800/40 border-l-amber-500/60'
-                                      : 'bg-amber-50/80 border border-amber-200 border-l-amber-400'
+                                      ? 'bg-amber-950/30 border border-amber-800/30'
+                                      : 'bg-amber-50/90 border border-amber-200/80'
                                   }`}
                                   style={{ animation: 'fadeIn 0.2s ease-out' }}
                                 >
-                                  {bulletMatch ? (
-                                    <>
-                                      <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                                        isDarkMode ? 'text-amber-400/80' : 'text-amber-600'
-                                      }`}>
-                                        <span>{domainEmoji}</span>
-                                        <span>In {analogyDomain} Terms</span>
-                                      </div>
-                                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
-                                         style={{ fontSize: `${0.9 * textScale}rem` }}>
-                                        {bulletMatch.analogy}
-                                      </p>
-                                      {bulletMatch.intuition && (
-                                        <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-amber-300/70' : 'text-amber-700/80'}`}
-                                           style={{ fontSize: `${0.8 * textScale}rem` }}>
-                                          💡 "{bulletMatch.intuition}"
-                                        </p>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <p className={`text-sm italic ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}
-                                       style={{ fontSize: `${0.85 * textScale}rem` }}>
-                                      Tap individual words for their domain mappings
+                                  <span className={`text-xs font-semibold uppercase tracking-wider ${
+                                    isDarkMode ? 'text-amber-400/70' : 'text-amber-600/80'
+                                  }`}>
+                                    {domainEmoji} {analogyDomain}
+                                  </span>
+                                  <p className={`mt-1 leading-snug ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+                                     style={{ fontSize: `${0.875 * textScale}rem` }}>
+                                    {bulletMatch.analogy}
+                                  </p>
+                                  {bulletMatch.intuition && (
+                                    <p className={`mt-1.5 text-xs italic ${isDarkMode ? 'text-amber-300/60' : 'text-amber-700/70'}`}
+                                       style={{ fontSize: `${0.78 * textScale}rem` }}>
+                                      💡 {bulletMatch.intuition}
                                     </p>
                                   )}
                                 </div>
