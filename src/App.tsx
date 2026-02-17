@@ -79,7 +79,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
@@ -561,11 +561,20 @@ export default function App() {
         if (!techLookup[word]) {
           techLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
         }
+        // Store stemmed form so morphological variants (matrix/matrices) match
+        const stemmed = stemWord(word);
+        if (stemmed !== word && !techLookup[stemmed]) {
+          techLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
+        }
       });
 
       analogyPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)).forEach(word => {
         if (!analogyLookup[word]) {
           analogyLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
+        }
+        const stemmed = stemWord(word);
+        if (stemmed !== word && !analogyLookup[stemmed]) {
+          analogyLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
         }
       });
     });
@@ -1066,6 +1075,7 @@ export default function App() {
   // ConceptId: from conceptLookup (concept_map ONLY) → getConceptId() fallback → undefined (no color)
   const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; conceptId: number | undefined } => {
     const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
+    const stemmedWord = stemWord(cleanedWord);
 
     // === WEIGHT (from attention data — controls bold/opacity/size) ===
     let weight: number | undefined;
@@ -1075,6 +1085,8 @@ export default function App() {
       const lookup = isAnalogy ? entityLookup.analogy : entityLookup.tech;
       if (lookup[cleanedWord]) {
         weight = lookup[cleanedWord].weight;
+      } else if (lookup[stemmedWord]) {
+        weight = lookup[stemmedWord].weight;
       }
     }
 
@@ -1126,6 +1138,8 @@ export default function App() {
       const cLookup = isAnalogy ? conceptLookup.analogy : conceptLookup.tech;
       if (cLookup[cleanedWord]) {
         conceptId = cLookup[cleanedWord].entityId;
+      } else if (cLookup[stemmedWord]) {
+        conceptId = cLookup[stemmedWord].entityId;
       }
     }
 
@@ -1147,6 +1161,7 @@ export default function App() {
     const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
     if (cleanedWord.length < 3) return -1;
     if (STOP_WORDS.has(cleanedWord)) return -1;
+    const stemmedWord = stemWord(cleanedWord);
 
     let bestId = -1;
     let bestScore = 0; // Higher = better match
@@ -1155,11 +1170,11 @@ export default function App() {
       const techTerm = cleanText(concept.tech_term).toLowerCase();
       const analogyTerm = cleanText(concept.analogy_term).toLowerCase();
 
-      // Score 3: exact word match within term's words (highest priority)
+      // Score 3: exact word match or stemmed match within term's words (highest priority)
       // Score 2: term contains word as substring (medium)
       // Score 1: word contains entire term as substring (lowest)
       for (const term of [techTerm, analogyTerm]) {
-        if (term.split(/\s+/).some(w => w === cleanedWord)) {
+        if (term.split(/\s+/).some(w => w === cleanedWord || stemWord(w) === stemmedWord)) {
           if (3 > bestScore) {
             bestId = concept.id;
             bestScore = 3;

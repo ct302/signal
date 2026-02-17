@@ -449,6 +449,92 @@ export const cleanText = (text: string | null | undefined): string => {
 };
 
 /**
+ * Irregular plural forms common in math/science/technical vocabulary.
+ * Maps plural → singular base form so both sides resolve to the same key.
+ */
+const IRREGULAR_STEMS: ReadonlyMap<string, string> = new Map([
+  // Latin -ix/-ices
+  ['matrices', 'matrix'], ['vertices', 'vertex'], ['indices', 'index'],
+  ['appendices', 'appendix'],
+  // Latin -is/-es
+  ['axes', 'axis'], ['bases', 'basis'], ['analyses', 'analysis'],
+  ['hypotheses', 'hypothesis'], ['theses', 'thesis'], ['syntheses', 'synthesis'],
+  ['parentheses', 'parenthesis'], ['ellipses', 'ellipsis'], ['crises', 'crisis'],
+  // Latin -us/-i
+  ['radii', 'radius'], ['nuclei', 'nucleus'], ['foci', 'focus'],
+  ['loci', 'locus'], ['stimuli', 'stimulus'], ['fungi', 'fungus'],
+  // Latin -um/-a
+  ['data', 'datum'], ['spectra', 'spectrum'], ['strata', 'stratum'],
+  ['media', 'medium'], ['criteria', 'criterion'], ['phenomena', 'phenomenon'],
+  // Greek -on/-a
+  ['automata', 'automaton'],
+  // -f/-ves
+  ['halves', 'half'], ['leaves', 'leaf'], ['selves', 'self'],
+  ['wolves', 'wolf'], ['knives', 'knife'], ['lives', 'life'],
+  // Other
+  ['formulae', 'formula'], ['larvae', 'larva'],
+  ['children', 'child'], ['mice', 'mouse'], ['dice', 'die'],
+]);
+
+/**
+ * Lightweight morphological stemmer for concept color matching.
+ * Reduces English words to a canonical stem so morphological variants
+ * (matrix/matrices, vector/vectors, value/values) map to the same concept color.
+ *
+ * NOT a general-purpose stemmer — optimized for technical/scientific vocabulary.
+ * Both storage and query sides must use this function for consistent matching.
+ */
+export const stemWord = (word: string): string => {
+  if (!word || word.length < 3) return word;
+
+  const lower = word.toLowerCase();
+
+  // Layer 1: Irregular forms lookup
+  const irregular = IRREGULAR_STEMS.get(lower);
+  if (irregular) return irregular;
+
+  // Layer 2: Suffix stripping (first match wins, most specific first)
+  let stem = lower;
+
+  if (stem.length > 4 && stem.endsWith('ies')) {
+    stem = stem.slice(0, -3) + 'y';                         // boundaries → boundary
+  } else if (stem.length > 5 && stem.endsWith('sses')) {
+    stem = stem.slice(0, -2);                                // masses → mass
+  } else if (stem.length > 4 && stem.endsWith('xes')) {
+    stem = stem.slice(0, -2);                                // indexes → index
+  } else if (stem.length > 5 && stem.endsWith('ches')) {
+    stem = stem.slice(0, -2);                                // batches → batch
+  } else if (stem.length > 5 && stem.endsWith('shes')) {
+    stem = stem.slice(0, -2);                                // meshes → mesh
+  } else if (stem.length > 5 && stem.endsWith('ing')) {
+    const base = stem.slice(0, -3);
+    // Doubled final consonant: mapping → mapp → map
+    stem = (base.length > 2 && base[base.length - 1] === base[base.length - 2])
+      ? base.slice(0, -1)
+      : base;
+  } else if (stem.length > 4 && stem.endsWith('ed') && !stem.endsWith('eed')) {
+    const base = stem.slice(0, -2);
+    // Doubled final consonant: mapped → mapp → map
+    stem = (base.length > 2 && base[base.length - 1] === base[base.length - 2])
+      ? base.slice(0, -1)
+      : base;
+  } else if (stem.length > 4 && stem.endsWith('ly')) {
+    stem = stem.slice(0, -2);                                // linearly → linear
+  } else if (stem.length > 3 && stem.endsWith('s')
+             && !stem.endsWith('ss') && !stem.endsWith('us') && !stem.endsWith('is')) {
+    stem = stem.slice(0, -1);                                // vectors → vector
+  }
+
+  // Layer 3: Final -e normalization
+  // Ensures "compute" and "computing" both → "comput"
+  if (stem.length > 3 && stem.endsWith('e')) {
+    stem = stem.slice(0, -1);
+  }
+
+  return stem;
+};
+
+/**
  * Fix unicode escape sequences in text
  */
 export const fixUnicode = (text: string | null | undefined): string => {
