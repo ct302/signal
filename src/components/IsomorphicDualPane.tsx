@@ -134,11 +134,40 @@ const generateIsomorphicInsight = (
   return { structural, transferTip };
 };
 
+// Extract a short structural label from causal_explanation for bridge display
+const extractBridgeLabel = (
+  causalExplanation: string,
+  techTerm: string,
+  analogyTerm: string,
+  importance: number,
+  index: number
+): string => {
+  if (causalExplanation) {
+    // Try to get first clause (before " — ", " - ", ", ", or first sentence)
+    const cleaned = causalExplanation
+      .replace(/^(both|they|this|it|the)\s+/i, '') // Strip weak openers
+      .replace(/["""]/g, '');
+    const clause = cleaned.split(/\s*[—–\-]\s*|\.\s+|,\s+/)[0]?.trim();
+    if (clause && clause.length > 5 && clause.length < 60) {
+      // Capitalize first letter
+      return clause.charAt(0).toUpperCase() + clause.slice(1);
+    }
+  }
+  // Fallback based on importance tier
+  const labels = importance > 0.7
+    ? ['Same core mechanic', 'Structural equivalent', 'Identical architecture', 'Parallel systems']
+    : importance > 0.4
+      ? ['Same organizing principle', 'Shared pattern', 'Parallel logic', 'Common framework']
+      : ['Same vocabulary', 'Matching intuition', 'Shared concept', 'Parallel idea'];
+  return labels[index % labels.length];
+};
+
 interface IsomorphicDualPaneProps {
   conceptMap: ConceptMapItem[];
   importanceMap: ImportanceMapItem[];
   isDarkMode: boolean;
   analogyDomain: string;
+  domainEmoji?: string;
   onClose: () => void;
 }
 
@@ -182,6 +211,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   importanceMap,
   isDarkMode,
   analogyDomain,
+  domainEmoji = '',
   onClose
 }) => {
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
@@ -416,33 +446,84 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         </div>
                       )}
 
-                      {/* Pulsing connection indicator */}
-                      <div className="text-center">
-                        <div
-                          className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center animate-pulse"
-                          style={{ backgroundColor: color + '30', boxShadow: `0 0 25px ${color}40` }}
-                        >
-                          <Zap size={24} style={{ color }} />
-                        </div>
+                      {/* Structure Bridge Diagram */}
+                      {(() => {
+                        const bridgeLabel = extractBridgeLabel(concept.causal_explanation || '', techTerm, analogyTerm, importance, index);
+                        const importancePct = Math.round(importance * 100);
+                        return (
+                          <div className="bridge-stagger">
+                            {/* Two-node bridge layout */}
+                            <div className="flex items-stretch gap-0 my-2">
+                              {/* Tech Node */}
+                              <div
+                                className={`flex-1 rounded-xl p-3 border-l-4 bridge-node-left ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
+                                style={{ borderLeftColor: color, boxShadow: `0 0 12px ${color}15` }}
+                              >
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className={`text-[10px] uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Technical</span>
+                                </div>
+                                <p className="text-sm font-semibold" style={{ color }}>{techTerm}</p>
+                                {sixWordDef && (
+                                  <p className={`text-[11px] italic mt-1 leading-snug ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    "{sixWordDef}"
+                                  </p>
+                                )}
+                                {/* Mini importance ring */}
+                                <div className="flex items-center gap-1.5 mt-2">
+                                  <div
+                                    className="w-5 h-5 rounded-full flex-shrink-0"
+                                    style={{
+                                      background: `conic-gradient(${color} ${importance * 360}deg, ${isDarkMode ? '#404040' : '#e5e5e5'} ${importance * 360}deg)`
+                                    }}
+                                  >
+                                    <div className={`w-3 h-3 rounded-full m-1 ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`} />
+                                  </div>
+                                  <span className={`text-[10px] font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
+                                </div>
+                              </div>
 
-                        <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                          maps to
-                        </p>
+                              {/* Bridge connector */}
+                              <div className="flex flex-col items-center justify-center w-10 flex-shrink-0 bridge-node-center">
+                                <div className="flex-1 w-px" style={{ borderLeft: `2px dashed ${color}40` }} />
+                                <div
+                                  className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse"
+                                  style={{ backgroundColor: color + '25', boxShadow: `0 0 12px ${color}30` }}
+                                >
+                                  <Zap size={13} style={{ color }} />
+                                </div>
+                                <div className="flex-1 w-px" style={{ borderLeft: `2px dashed ${color}40` }} />
+                              </div>
 
-                        {/* Importance bar */}
-                        <div className="mt-3 px-4 max-w-[180px] mx-auto">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Importance</span>
-                            <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
+                              {/* Analogy Node */}
+                              <div
+                                className={`flex-1 rounded-xl p-3 border-r-4 bridge-node-right ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
+                                style={{ borderRightColor: color, boxShadow: `0 0 12px ${color}15` }}
+                              >
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className={`text-[10px] uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{analogyDomain}</span>
+                                </div>
+                                <p className="text-sm font-semibold" style={{ color }}>
+                                  {domainEmoji && <span className="mr-1">{domainEmoji}</span>}
+                                  {analogyTerm}
+                                </p>
+                                <p className={`text-[11px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                  maps to {techTerm}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Bridge label pill */}
+                            <div className="text-center -mt-1 mb-1">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bridge-node-label ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-100 border border-neutral-200'}`}
+                              >
+                                <Sparkles size={10} style={{ color }} />
+                                <span className={isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}>{bridgeLabel}</span>
+                              </span>
+                            </div>
                           </div>
-                          <div className={`h-1.5 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{ width: `${importance * 100}%`, backgroundColor: color }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Expanded Content - Only when concept is clicked/selected */}
                       {isExpanded && (
@@ -630,6 +711,18 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         }
         .hover\\:scale-102:hover {
           transform: scale(1.02);
+        }
+        .bridge-stagger .bridge-node-left {
+          animation: fadeIn 0.3s ease-out both;
+        }
+        .bridge-stagger .bridge-node-center {
+          animation: fadeIn 0.3s ease-out 0.1s both;
+        }
+        .bridge-stagger .bridge-node-right {
+          animation: fadeIn 0.3s ease-out 0.2s both;
+        }
+        .bridge-stagger .bridge-node-label {
+          animation: fadeIn 0.3s ease-out 0.25s both;
         }
       `}</style>
     </div>

@@ -307,6 +307,7 @@ export default function App() {
   const [threshold, setThreshold] = useState(0.3);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isBulletMode, setIsBulletMode] = useState(false); // Bullet point mode for Tech Lock
+  const [activeBulletIndex, setActiveBulletIndex] = useState<number | null>(null); // Bullet analogy tooltip
   const [isNarrativeMode, setIsNarrativeMode] = useState(false);
   const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1); // Text scale multiplier
 
@@ -709,7 +710,14 @@ export default function App() {
           // Load the new fields for rich concept isomorphism display
           six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
           narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
-          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || "")
+          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || ""),
+          ...(c.why_it_matters || c.whyItMatters ? {
+            why_it_matters: {
+              connection: cleanText((c.why_it_matters || c.whyItMatters)?.connection || ""),
+              importance: cleanText((c.why_it_matters || c.whyItMatters)?.importance || ""),
+              critical: cleanText((c.why_it_matters || c.whyItMatters)?.critical || "")
+            }
+          } : {})
         }))
         .filter((c: { tech_term: string; analogy_term: string }) => {
           const techLower = c.tech_term.toLowerCase().trim();
@@ -1632,6 +1640,7 @@ export default function App() {
           if (!isNarrativeMode) {
             // Turning on Story - disable Bullets and Essence
             setIsBulletMode(false);
+            setActiveBulletIndex(null);
             if (isFirstPrinciplesMode) {
               setShowCondensedView(false);
               setIsFirstPrinciplesMode(false);
@@ -1988,6 +1997,7 @@ export default function App() {
     setIsViewingFromHistory(false);
     setHasStarted(false);
     setTopic("");
+    setActiveBulletIndex(null);
     setProcessedWords([]);
     setSegments([]);
     setTechnicalExplanation("");
@@ -2044,6 +2054,7 @@ export default function App() {
       // Transition INTO first principles (mutually exclusive with Story and Bullets)
       setIsNarrativeMode(false);
       setIsBulletMode(false);
+      setActiveBulletIndex(null);
       // If in Morph mode, switch to Tech mode so Essence view renders
       if (viewMode === 'morph') {
         setViewMode('tech');
@@ -2086,6 +2097,7 @@ export default function App() {
     setAttentionMap(null);
     setEntityLookup(null);
     setConceptLookup(null);
+    setActiveBulletIndex(null);
     setProcessedWords([]);
     setTechnicalExplanation("");
     setAnalogyExplanation("");
@@ -2423,6 +2435,57 @@ export default function App() {
     }
 
     return sentences.filter(s => s.some(w => !w.isSpace)); // Filter empty sentences
+  };
+
+  // Find best matching analogy segment for a bullet sentence (keyword overlap scoring)
+  const findBestSegmentForSentence = (
+    sentenceWords: ProcessedWord[]
+  ): { analogy: string; intuition?: string; color?: string } | null => {
+    const sentenceText = sentenceWords
+      .filter(w => !w.isSpace && !w.isLatex)
+      .map(w => w.text.toLowerCase().replace(/[^a-z]/g, ''))
+      .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+
+    if (sentenceText.length === 0) return null;
+
+    // Score each segment by shared keyword overlap
+    let bestSegment: Segment | null = null;
+    let bestScore = 0;
+
+    for (const seg of segments) {
+      if (!seg.tech || !seg.analogy) continue;
+      const segWords = seg.tech.toLowerCase()
+        .replace(/[^a-z\s]/g, '')
+        .split(/\s+/)
+        .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+      const shared = segWords.filter(sw => sentenceText.some(st => st.includes(sw) || sw.includes(st)));
+      const score = shared.length / Math.max(Math.min(segWords.length, sentenceText.length), 1);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSegment = seg;
+      }
+    }
+
+    if (bestSegment && bestScore > 0.12) {
+      return {
+        analogy: bestSegment.analogy,
+        intuition: bestSegment.intuitions?.[0]
+      };
+    }
+
+    // Fallback: match against conceptMap tech_term
+    for (let i = 0; i < conceptMap.length; i++) {
+      const techLower = cleanText(conceptMap[i].tech_term).toLowerCase().replace(/[^a-z\s]/g, '');
+      const techWords = techLower.split(/\s+/).filter(w => w.length > 2);
+      if (techWords.some(tw => sentenceText.some(st => st.includes(tw)))) {
+        return {
+          analogy: conceptMap[i].narrative_mapping || `${conceptMap[i].analogy_term} — the ${analogyDomain} equivalent of ${conceptMap[i].tech_term}`,
+          color: CONCEPT_COLORS[i % CONCEPT_COLORS.length]
+        };
+      }
+    }
+
+    return null;
   };
 
   // Extract unique math symbols from content for glossary
@@ -3389,21 +3452,73 @@ export default function App() {
                         lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
                       }}
                     >
-                      {groupWordsIntoSentences(processedWords).map((sentence, sentenceIndex) => (
-                        <li
-                          key={sentenceIndex}
-                          className={`flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'}`}
-                        >
-                          <span className={`flex-shrink-0 mt-1.5 text-lg ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>•</span>
-                          <span className="flex-1 flex flex-wrap gap-x-1.5 gap-y-0.5 items-baseline">
-                            {sentence.map((word, wordIndex) => {
-                              // Skip rendering space tokens since we use gap for spacing
-                              if (word.isSpace) return null;
-                              return renderWord(word, sentenceIndex * 1000 + wordIndex);
-                            })}
-                          </span>
-                        </li>
-                      ))}
+                      {groupWordsIntoSentences(processedWords).map((sentence, sentenceIndex) => {
+                        const isActiveBullet = activeBulletIndex === sentenceIndex;
+                        const bulletMatch = isActiveBullet ? findBestSegmentForSentence(sentence) : null;
+                        return (
+                          <React.Fragment key={sentenceIndex}>
+                            <li
+                              className={`group flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors cursor-pointer hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'} ${isActiveBullet ? (isDarkMode ? 'bg-neutral-700/20' : 'bg-neutral-50') : ''}`}
+                              onClick={() => {
+                                // Don't trigger if user is selecting text
+                                if (window.getSelection()?.toString().trim()) return;
+                                setActiveBulletIndex(isActiveBullet ? null : sentenceIndex);
+                              }}
+                            >
+                              <span className={`flex-shrink-0 mt-1.5 text-lg transition-all ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>
+                                <span className="group-hover:hidden">•</span>
+                                <span className="hidden group-hover:inline">{domainEmoji || '•'}</span>
+                              </span>
+                              <span className="flex-1 flex flex-wrap gap-x-1.5 gap-y-0.5 items-baseline">
+                                {sentence.map((word, wordIndex) => {
+                                  // Skip rendering space tokens since we use gap for spacing
+                                  if (word.isSpace) return null;
+                                  return renderWord(word, sentenceIndex * 1000 + wordIndex);
+                                })}
+                              </span>
+                            </li>
+                            {/* Inline analogy tooltip - slides open below clicked bullet */}
+                            {isActiveBullet && (
+                              <li className="list-none" style={{ marginTop: '-4px', marginBottom: '4px' }}>
+                                <div
+                                  className={`ml-8 mr-2 px-4 py-3 rounded-lg border-l-[3px] transition-all ${
+                                    isDarkMode
+                                      ? 'bg-amber-950/30 border border-amber-800/40 border-l-amber-500/60'
+                                      : 'bg-amber-50/80 border border-amber-200 border-l-amber-400'
+                                  }`}
+                                  style={{ animation: 'fadeIn 0.2s ease-out' }}
+                                >
+                                  {bulletMatch ? (
+                                    <>
+                                      <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider mb-1.5 ${
+                                        isDarkMode ? 'text-amber-400/80' : 'text-amber-600'
+                                      }`}>
+                                        <span>{domainEmoji}</span>
+                                        <span>In {analogyDomain} Terms</span>
+                                      </div>
+                                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+                                         style={{ fontSize: `${0.9 * textScale}rem` }}>
+                                        {bulletMatch.analogy}
+                                      </p>
+                                      {bulletMatch.intuition && (
+                                        <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-amber-300/70' : 'text-amber-700/80'}`}
+                                           style={{ fontSize: `${0.8 * textScale}rem` }}>
+                                          💡 "{bulletMatch.intuition}"
+                                        </p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className={`text-sm italic ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}
+                                       style={{ fontSize: `${0.85 * textScale}rem` }}>
+                                      Tap individual words for their domain mappings
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
 
                       {/* Symbol Glossary - shows detected math symbols with explanations */}
                       {(() => {
@@ -4643,6 +4758,7 @@ export default function App() {
           importanceMap={importanceMap}
           isDarkMode={isDarkMode}
           analogyDomain={analogyDomain}
+          domainEmoji={domainEmoji}
           onClose={() => setIsDualPaneMode(false)}
         />
       )}
