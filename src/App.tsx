@@ -4810,40 +4810,53 @@ export default function App() {
             if (e.target === e.currentTarget) setShowIntuitionModal(false);
           }}
         >
-          {/* Frosted backdrop — readable background content */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          {/* Frosted backdrop */}
+          <div className={`absolute inset-0 backdrop-blur-sm ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`} />
 
-          {/* Modal content */}
-          <div className="relative max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto p-5 rounded-2xl bg-slate-900/90 border border-slate-600/30 shadow-2xl">
+          {/* Modal content — inherits reading font */}
+          <div
+            className={`relative max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto p-5 rounded-2xl shadow-2xl border ${
+              isDarkMode
+                ? 'bg-neutral-900 border-neutral-700'
+                : 'bg-white border-neutral-200'
+            }`}
+            style={{ fontFamily: 'var(--signal-font-family, inherit)', letterSpacing: 'var(--signal-letter-spacing, normal)' }}
+          >
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                <Lightbulb className="text-yellow-400" size={22} />
-                <h2 className="text-lg font-bold text-white">
+                <Lightbulb className="text-yellow-500" size={22} />
+                <h2 className={`text-lg font-bold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}>
                   Core Intuitions
                 </h2>
               </div>
               <button
                 onClick={() => setShowIntuitionModal(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'}`}
               >
-                <X size={18} className="text-neutral-400" />
+                <X size={18} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
               </button>
             </div>
 
-            {/* Intuitions List — compact */}
+            {/* Intuitions List */}
             <div className="space-y-2.5">
               {segments[0].intuitions.map((intuition, idx) => (
                 <div
                   key={idx}
-                  className="group relative px-3.5 py-3 rounded-xl bg-slate-800/40 border border-slate-700/40 hover:border-yellow-500/25 transition-all"
+                  className={`group relative px-3.5 py-3 rounded-xl border transition-all ${
+                    isDarkMode
+                      ? 'bg-neutral-800/50 border-neutral-700/50 hover:border-yellow-500/30'
+                      : 'bg-neutral-50 border-neutral-200 hover:border-yellow-400/50'
+                  }`}
                 >
                   <div className="flex items-start gap-2.5">
-                    <span className="flex-shrink-0 w-5 h-5 mt-0.5 rounded-full bg-yellow-500/15 text-yellow-400 text-[10px] font-bold flex items-center justify-center">
+                    <span className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                      isDarkMode ? 'bg-yellow-500/15 text-yellow-400' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
                       {idx + 1}
                     </span>
-                    <div className="text-slate-200 text-sm leading-relaxed italic flex-1">
-                      {renderRichText(intuition, "text-slate-200")}
+                    <div className={`text-sm leading-relaxed italic flex-1 ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                      {renderRichText(intuition, isDarkMode ? "text-neutral-200" : "text-neutral-700")}
                     </div>
                     <button
                       onClick={() => {
@@ -4854,7 +4867,9 @@ export default function App() {
                       className={`flex-shrink-0 p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
                         copiedId === `intuition-${idx}`
                           ? 'bg-green-500 text-white opacity-100'
-                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          : isDarkMode
+                            ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                            : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
                       }`}
                       title="Copy"
                     >
@@ -4867,22 +4882,22 @@ export default function App() {
 
             {/* Domain Mapping — homomorphic narrative bridge */}
             {conceptMap.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-700/40">
+              <div className={`mt-4 pt-4 border-t ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">{domainEmoji}</span>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-400/80">
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${
+                    isDarkMode ? 'text-amber-400/80' : 'text-amber-600'
+                  }`}>
                     {analogyDomain} Translation
                   </span>
                 </div>
-                <div className="px-3.5 py-3 rounded-xl bg-amber-950/20 border border-amber-800/20">
-                  <p className="text-sm leading-relaxed text-amber-100/90">
+                <div className={`px-3.5 py-3 rounded-xl border ${
+                  isDarkMode
+                    ? 'bg-amber-950/20 border-amber-800/20'
+                    : 'bg-amber-50/60 border-amber-200/60'
+                }`}>
+                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
                     {(() => {
-                      // Build a compressed narrative mapping from the concept map
-                      const mappings = conceptMap.slice(0, 4).map(c => {
-                        const tech = cleanText(c.tech_term);
-                        const analogy = cleanText(c.analogy_term);
-                        return `${tech} → ${analogy}`;
-                      });
                       const narratives = conceptMap
                         .filter(c => c.narrative_mapping)
                         .slice(0, 2)
@@ -4891,7 +4906,9 @@ export default function App() {
                       if (narratives.length > 0) {
                         return narratives.join(' ');
                       }
-                      // Fallback: synthesize from mappings
+                      const mappings = conceptMap.slice(0, 4).map(c => {
+                        return `${cleanText(c.tech_term)} → ${cleanText(c.analogy_term)}`;
+                      });
                       return `In ${analogyDomain} terms: ${mappings.join(', ')}.`;
                     })()}
                   </p>
@@ -4900,22 +4917,21 @@ export default function App() {
                     {conceptMap.slice(0, 5).map((c, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-slate-800/60 border border-slate-700/30"
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border ${
+                          isDarkMode
+                            ? 'bg-neutral-800/60 border-neutral-700/30'
+                            : 'bg-white border-neutral-200'
+                        }`}
                       >
-                        <span className="text-slate-400">{cleanText(c.tech_term)}</span>
-                        <span className="text-amber-500/70">≅</span>
-                        <span className="text-amber-300/80">{cleanText(c.analogy_term)}</span>
+                        <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>{cleanText(c.tech_term)}</span>
+                        <span className={isDarkMode ? 'text-amber-500/70' : 'text-amber-600/70'}>≅</span>
+                        <span className={isDarkMode ? 'text-amber-300/80' : 'text-amber-700'}>{cleanText(c.analogy_term)}</span>
                       </span>
                     ))}
                   </div>
                 </div>
               </div>
             )}
-
-            {/* Footer hint */}
-            <p className="mt-4 text-center text-[10px] text-slate-500/70">
-              Kolmogorov-compressed insights — minimal description, maximum understanding
-            </p>
           </div>
         </div>
       )}
