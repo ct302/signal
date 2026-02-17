@@ -172,7 +172,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             </button>
             {showGlossary && (
               <div className="mt-2 space-y-2">
-                {symbolGuide.map(({ symbol, name, meaning, simple }) => (
+                {symbolGuide.map(({ symbol, name, meaning, simple, formula }) => (
                   <div
                     key={symbol}
                     className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
@@ -182,6 +182,11 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                       <span className="text-white font-medium">{renderRichText(name, "text-white")}</span>
                     </div>
                     <div className="text-neutral-400 text-xs mt-0.5">{renderRichText(meaning, "text-neutral-400")}</div>
+                    {formula && (
+                      <div className="text-blue-300 text-xs mt-1 px-1.5 py-0.5 rounded bg-neutral-900/80">
+                        {renderRichText(formula, "text-blue-300")}
+                      </div>
+                    )}
                     {simple && (
                       <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
                     )}

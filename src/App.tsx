@@ -885,7 +885,8 @@ export default function App() {
         symbol: entry.symbol || "",
         name: entry.name || "",
         meaning: entry.meaning || "",
-        simple: entry.simple || ""
+        simple: entry.simple || "",
+        ...(entry.formula ? { formula: entry.formula } : {})
       })));
     } else {
       setSymbolGuide([]);
@@ -3844,6 +3845,8 @@ export default function App() {
           retryCount={quizRetryCount}
           maxRetries={MAX_QUIZ_RETRIES}
           questionNumber={quizQuestionNumber}
+          domain={analogyDomain}
+          domainEmoji={domainEmoji}
           onOptionClick={handleQuizOptionClick}
           onClose={() => setShowQuizModal(false)}
           onStartDrag={startDrag}
@@ -4175,30 +4178,42 @@ export default function App() {
                         {title}
                       </h3>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {symbols.map(({ symbol, name, meaning, simple }) => (
-                          <div
-                            key={symbol}
-                            className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
-                          >
-                            <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                              {symbol}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div>
-                                <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                  {name}
-                                </span>
-                                <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                                  — {meaning}
-                                </span>
+                        {symbols.map(({ symbol, name, meaning, simple, formula: hardcodedFormula }) => {
+                          // Look up API-generated formula (context-specific) — prefer over hardcoded
+                          const apiEntry = symbolGuide.find(sg => sg.symbol === symbol);
+                          const resolvedFormula = apiEntry?.formula || hardcodedFormula;
+
+                          return (
+                            <div
+                              key={symbol}
+                              className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                            >
+                              <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                {symbol}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div>
+                                  <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                    {name}
+                                  </span>
+                                  <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    — {meaning}
+                                  </span>
+                                </div>
+                                {/* Contextual formula — KaTeX rendered */}
+                                {resolvedFormula && (
+                                  <div className={`text-sm mt-1.5 px-2 py-1 rounded ${isDarkMode ? 'bg-neutral-800/80 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
+                                    {renderRichText(resolvedFormula, isDarkMode ? 'text-blue-300' : 'text-blue-700')}
+                                  </div>
+                                )}
+                                {/* Simple explanation */}
+                                <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                  💡 {simple}
+                                </p>
                               </div>
-                              {/* Simple explanation */}
-                              <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                                💡 {simple}
-                              </p>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

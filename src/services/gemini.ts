@@ -902,7 +902,8 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "symbol": "the symbol exactly as written (e.g., 'A', 'λ', '∫', 'f(x)')",
       "name": "Context-specific name for THIS topic (e.g., 'Coordinate Ring' not 'Matrix A' if A represents a ring)",
       "meaning": "What this symbol represents in THIS specific context",
-      "simple": "Plain English explanation a beginner would understand"
+      "simple": "Plain English explanation a beginner would understand",
+      "formula": "$LaTeX expression showing this symbol used in a compound expression from your technical_explanation$ (ONLY include for symbols that appear in fractions, sums, integrals, or other compound expressions — omit entirely for standalone symbols like Greek letters)"
     }
   ]
 }
@@ -1117,6 +1118,7 @@ The symbol_guide provides CONTEXT-AWARE explanations for mathematical symbols us
 - Order by importance/first appearance in the explanation
 - The "simple" field should be genuinely helpful for beginners - use analogies or plain English
 - Only include symbols that ACTUALLY APPEAR in your technical_explanation
+- The "formula" field should show the ACTUAL LaTeX expression from your technical_explanation where this symbol appears in a compound expression (fractions, sums, integrals, etc.). Only include it when the symbol appears in a compound expression — omit for standalone symbols
 - For non-STEM topics with no mathematical symbols, return an empty array: "symbol_guide": []
 
 CRITICAL RULES:
@@ -1279,7 +1281,8 @@ Return JSON in this EXACT format:
       "symbol": "symbol as written",
       "name": "Context-specific name for THIS definition (not generic)",
       "meaning": "What it represents in THIS context",
-      "simple": "Plain English for beginners"
+      "simple": "Plain English for beginners",
+      "formula": "$LaTeX compound expression from your definition$ (only for symbols in fractions/sums/integrals — omit for standalone)"
     }
   ` : ''}]
 }
@@ -1289,6 +1292,7 @@ SYMBOL_GUIDE RULES:
 - Names must be CONTEXT-SPECIFIC (if 'x' is an input value, call it "Input Value", not "Variable X")
 - For ELI5 with no math symbols, return empty array: "symbol_guide": []
 - The "simple" field should genuinely help beginners understand
+- The "formula" field shows the ACTUAL compound expression from your definition — only include when the symbol appears in a fraction, sum, integral, etc.
 
 Return ONLY valid JSON, no markdown code blocks.`;
 
@@ -1410,9 +1414,10 @@ CRITICAL RULES:
 6. Use LaTeX ($...$) ONLY for mathematical symbols - NOT for prose text!
    - CORRECT: "The value is $x = 5$"
    - WRONG: "$The value is x = 5$"
+7. The "analogyBridge" helps the user THINK through their ${domain} knowledge to arrive at the technical answer — NEVER give away which option is correct
 
 Return ONLY this JSON:
-{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
+{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}", "analogyBridge": {"hint": "1-2 sentence hint reframing the question through ${domain} — help them think, don't reveal the answer", "optionHints": ["${domain} analogy for option A (3-8 words)", "${domain} analogy for B", "${domain} analogy for C", "${domain} analogy for D"]}}`;
   } else {
     // Normal mode: Generate new question with difficulty
     const difficultyPrompt = getDifficultyPrompt(difficulty);
@@ -1433,12 +1438,13 @@ CRITICAL RULES:
 6. Use LaTeX ($...$) ONLY for mathematical symbols and equations - NOT for prose text!
    - CORRECT: "The resulting equation is $x = 10$"
    - WRONG: "$The resulting equation is x = 10$" (entire text in LaTeX breaks rendering)
+7. The "analogyBridge" helps the user THINK through their ${domain} knowledge to arrive at the technical answer — NEVER give away which option is correct through the hint
 
 GOOD question example: "What is the derivative of $f(x) = x^2$?"
 BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
 
 Return ONLY this JSON:
-{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
+{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name", "analogyBridge": {"hint": "1-2 sentence hint reframing the question through ${domain} — help the user think using their ${domain} knowledge without revealing the answer", "optionHints": ["${domain} analogy for option A (3-8 words)", "${domain} analogy for B", "${domain} analogy for C", "${domain} analogy for D"]}}`;
   }
 
   try {

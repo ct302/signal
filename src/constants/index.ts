@@ -247,15 +247,16 @@ export interface SymbolGlossaryEntry {
   meaning: string;
   simple: string;  // 8 words or less, beginner-friendly
   latex: string[];
+  formula?: string;  // KaTeX expression showing compound usage, e.g. "$\\frac{\\partial f}{\\partial x}$"
 }
 
 export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   // Greek letters - uppercase
-  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', simple: 'Add all the numbers together', latex: ['\\Sigma', '\\sum'] },
+  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', simple: 'Add all the numbers together', latex: ['\\Sigma', '\\sum'], formula: '$\\sum_{i=1}^{n} x_i$' },
   { symbol: 'Δ', name: 'Delta', meaning: 'Change in value', simple: 'The difference between two values', latex: ['\\Delta'] },
   { symbol: 'Ω', name: 'Omega', meaning: 'Worst-case complexity or ohm', simple: 'Slowest possible running time', latex: ['\\Omega'] },
   { symbol: 'Θ', name: 'Theta', meaning: 'Tight bound complexity', simple: 'Exact running time estimate', latex: ['\\Theta'] },
-  { symbol: 'Π', name: 'Pi (capital)', meaning: 'Product of sequence', simple: 'Multiply all the numbers together', latex: ['\\Pi', '\\prod'] },
+  { symbol: 'Π', name: 'Pi (capital)', meaning: 'Product of sequence', simple: 'Multiply all the numbers together', latex: ['\\Pi', '\\prod'], formula: '$\\prod_{i=1}^{n} x_i$' },
   { symbol: 'Φ', name: 'Phi (capital)', meaning: 'Golden ratio or empty set', simple: 'Special ratio found in nature', latex: ['\\Phi'] },
   { symbol: 'Ψ', name: 'Psi (capital)', meaning: 'Wave function', simple: 'Describes particle probability location', latex: ['\\Psi'] },
   { symbol: 'Γ', name: 'Gamma (capital)', meaning: 'Gamma function', simple: 'Extends factorials to all numbers', latex: ['\\Gamma'] },
@@ -297,12 +298,12 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '¬', name: 'Not', meaning: 'Logical negation', simple: 'The opposite', latex: ['\\neg', '\\lnot'] },
 
   // Calculus & analysis
-  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', simple: 'Goes on forever', latex: ['\\infty'] },
-  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', simple: 'Rate of change in one direction', latex: ['\\partial'] },
-  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', simple: 'Direction of steepest increase', latex: ['\\nabla'] },
-  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', simple: 'Find the total area', latex: ['\\int'] },
-  { symbol: '∑', name: 'Sum', meaning: 'Summation', simple: 'Add all values together', latex: ['\\sum'] },
-  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', simple: 'Multiply all values together', latex: ['\\prod'] },
+  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', simple: 'Goes on forever', latex: ['\\infty'], formula: '$\\lim_{x \\to \\infty} f(x)$' },
+  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', simple: 'Rate of change in one direction', latex: ['\\partial'], formula: '$\\frac{\\partial f}{\\partial x}$' },
+  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', simple: 'Direction of steepest increase', latex: ['\\nabla'], formula: '$\\nabla f = \\left(\\frac{\\partial f}{\\partial x}, \\frac{\\partial f}{\\partial y}\\right)$' },
+  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', simple: 'Find the total area', latex: ['\\int'], formula: '$\\int_a^b f(x)\\,dx$' },
+  { symbol: '∑', name: 'Sum', meaning: 'Summation', simple: 'Add all values together', latex: ['\\sum'], formula: '$\\sum_{i=1}^{n} x_i$' },
+  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', simple: 'Multiply all values together', latex: ['\\prod'], formula: '$\\prod_{i=1}^{n} x_i$' },
 
   // Comparisons & relations
   { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', simple: 'Almost the same', latex: ['\\approx'] },
@@ -322,7 +323,7 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '⟺', name: 'Iff', meaning: 'If and only if', simple: 'True both directions', latex: ['\\iff', '\\Leftrightarrow'] },
 
   // Arithmetic & operations
-  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', simple: 'Find the root', latex: ['\\sqrt'] },
+  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', simple: 'Find the root', latex: ['\\sqrt'], formula: '$\\sqrt{x^2 + y^2}$' },
   { symbol: '×', name: 'Times', meaning: 'Multiplication', simple: 'Multiply', latex: ['\\times'] },
   { symbol: '÷', name: 'Division', meaning: 'Division', simple: 'Divide', latex: ['\\div'] },
   { symbol: '±', name: 'Plus-minus', meaning: 'Positive or negative', simple: 'Plus or minus', latex: ['\\pm'] },

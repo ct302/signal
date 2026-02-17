@@ -39,6 +39,7 @@ export interface SymbolGuideEntry {
   name: string;          // Context-aware name: "Coordinate Ring" not "Matrix A"
   meaning: string;       // Technical meaning in THIS context
   simple: string;        // Plain English for learners
+  formula?: string;      // KaTeX expression showing compound usage, e.g. "$\\frac{\\partial f}{\\partial x}$"
 }
 
 export interface AttentionMapItem {
@@ -119,6 +120,10 @@ export interface QuizData {
   explanation?: string;
   difficulty?: QuizDifficulty;
   concept?: string; // The core concept being tested (for retry rephrasing)
+  analogyBridge?: {
+    hint: string;            // 1-2 sentence domain-lens reframing of the question
+    optionHints?: string[];  // Per-option domain analogy (3-8 words each)
+  };
 }
 
 export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'advanced';
