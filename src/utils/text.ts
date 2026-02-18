@@ -144,6 +144,14 @@ export const sanitizeRawApiResponse = (rawText: string): string => {
   });
 
   // ============================================================
+  // PART 1.5: Universal symbol cleanup across ALL fields
+  // These symbols should never appear as raw Unicode in ANY JSON field
+  // ============================================================
+  result = result.replace(/□/g, 'square');
+  result = result.replace(/∈/g, ' in ');
+  result = result.replace(/∃/g, ' there exists ');
+
+  // ============================================================
   // PART 2: Fix malformed LaTeX in TECHNICAL fields
   // Target: "technical_explanation", "tech" fields
   // Fix: "\ μ" -> "\mu", "\ π" -> "\pi", etc.
@@ -617,7 +625,8 @@ const fixMissingBackslashes = (text: string): string => {
     // Relations
     'approx', 'neq', 'leq', 'geq', 'll', 'gg', 'prec', 'succ',
     'preceq', 'succeq', 'sim', 'simeq', 'cong', 'equiv', 'propto',
-    'subset', 'supset', 'subseteq', 'supseteq', 'in', 'notin', 'ni',
+    // NOTE: Removed 'in' - too common as English word "in", causes prose "in" → \in → ∈ symbol
+    'subset', 'supset', 'subseteq', 'supseteq', 'notin', 'ni',
     'parallel', 'perp', 'mid', 'nmid',
 
     // Arrows
@@ -638,11 +647,13 @@ const fixMissingBackslashes = (text: string): string => {
 
     // Special symbols
     'infty', 'partial', 'nabla', 'prime', 'backprime',
-    'forall', 'exists', 'nexists', 'emptyset', 'varnothing',
+    // NOTE: Removed 'exists' - too common as English word, causes prose "exists" → \exists → ∃ symbol
+    'forall', 'nexists', 'emptyset', 'varnothing',
     'neg', 'lnot', 'land', 'lor', 'implies', 'iff',
     'aleph', 'beth', 'hbar', 'ell', 'wp', 'Re', 'Im',
     'angle', 'measuredangle', 'sphericalangle',
-    'triangle', 'square', 'diamond', 'Box', 'Diamond',
+    // NOTE: Removed 'square' - too common as English word "square roots", causes "square" → \square → □
+    'triangle', 'diamond', 'Box', 'Diamond',
     'clubsuit', 'diamondsuit', 'heartsuit', 'spadesuit',
 
     // Functions
@@ -826,6 +837,18 @@ export const sanitizeLatex = (text: string): string => {
   // Unconditional: bare ∈ should never appear in prose text outside $...$ math blocks
   result = result.replace(/\s*∈\s*/g, ' in ');
 
+  // Fix ∃ (there-exists symbol) misused in prose — e.g., "it always ∃ because"
+  // Same pattern as ∈: bare ∃ outside $...$ math blocks is always an AI mistake
+  result = result.replace(/\s*∃\s*/g, ' there exists ');
+
+  // Catch-all: remove backslash before 5+ letter English words outside math mode
+  // Real LaTeX commands (alpha, frac, sqrt, quad) are ≤5 chars; words like
+  // \obvious, \important, \significant, \because are AI artifacts
+  result = result.replace(/\\([a-z]{5,})\b/gi, '$1');
+
+  // Remove leading slash from /word artifacts (KaTeX renders unknown \word as /word)
+  result = result.replace(/(?<=\s|^)\/([a-z]{3,})\b/gi, '$1');
+
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
   // We need to handle them appearing OUTSIDE of $ delimiters
@@ -916,7 +939,9 @@ export const convertUnicodeToLatex = (text: string): string => {
 
     // Logic
     result = result.replace(/∀/g, '$\\forall$');
-    result = result.replace(/∃/g, '$\\exists$');
+    // ∃ outside math delimiters is almost always prose "there exists" (AI mistake)
+    // Real math ∃ should be inside $...$ blocks which are preserved above (line 884)
+    result = result.replace(/∃/g, 'there exists ');
 
     // Arrows
     result = result.replace(/⇒/g, '$\\Rightarrow$');
