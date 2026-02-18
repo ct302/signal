@@ -690,6 +690,8 @@ GOOD EXAMPLES:
 - "Gravity" → "Earth is like a big magnet for everything! It pulls you down so you don't float away."
 - "Encryption" → "It's like writing a secret message that only your best friend can read."
 
+NUMBER FORMAT: Write numbers as digits: "5 cookies" not "five cookies", "2 pieces" not "two pieces"
+
 TARGET LENGTH: 150-200 words for EACH explanation
 Remember: If a 5-year-old would say "huh?" - rewrite it simpler!`;
     case 100:
@@ -726,6 +728,7 @@ WRITING RULES:
 - Prefer SHORT sentences. Break up long compound sentences.
 - Use LaTeX ONLY for actual math expressions. Don't use LaTeX commands for normal words.
 - NEVER use \\n, \\\\, or line break commands in your output. Use normal paragraph spacing.
+- Use NUMERIC format for all numbers, dates, years, and scores: "February 2, 2002" NOT "February two thousand two", "17" NOT "seventeen", "3rd" NOT "third"
 
 QUALITY BAR: A brilliant professor explaining to a sharp grad student over coffee — clear, tight, no wasted words.`;
     default:
@@ -734,7 +737,8 @@ QUALITY BAR: A brilliant professor explaining to a sharp grad student over coffe
 - TARGET LENGTH: 150-220 words for EACH explanation (tech and analogy)
 - Be CONCISE - no filler phrases, no repetition. Every sentence adds new information.
 - Include WHAT it is, WHY it matters, and a practical example
-- Do NOT use \\n or \\\\ for line breaks. Use normal paragraph spacing.`;
+- Do NOT use \\n or \\\\ for line breaks. Use normal paragraph spacing.
+- Use NUMERIC format for all numbers, dates, years, and scores: "February 2, 2002" NOT "February two thousand two", "17" NOT "seventeen", "3rd" NOT "third"`;
   }
 };
 
@@ -1054,6 +1058,7 @@ SPECIFIC DETAILS REQUIRED:
 - Use REAL names: actual people WITH THEIR NAMES (not just roles like "the quarterback" or "the chef")
 - Use REAL events: actual moments that happened and can be verified
 - Use REAL details: specific dates, scores, statistics, or measurable facts
+- ALWAYS use numeric digits for dates, years, scores, and statistics: "February 2, 2002" NOT "February two thousand two", "21-17" NOT "twenty-one to seventeen"
 - NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
 - Tell a STORY that happens to teach the concept through its structure
 - The story needs a NARRATIVE ARC: setup, development, climax/resolution

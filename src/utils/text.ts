@@ -823,9 +823,8 @@ export const sanitizeLatex = (text: string): string => {
 
   // Fix ∈ (element-of symbol) misused as the word "in" in prose
   // LLMs sometimes output ∈ when they mean "in" — e.g., "technique ∈ linear algebra"
-  // In prose context (followed by a space and a lowercase letter/word), convert to "in"
-  // Valid math usage like $x ∈ S$ is inside $...$ and handled separately
-  result = result.replace(/∈\s+(?=[a-z])/gi, 'in ');
+  // Unconditional: bare ∈ should never appear in prose text outside $...$ math blocks
+  result = result.replace(/\s*∈\s*/g, ' in ');
 
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
@@ -906,8 +905,9 @@ export const convertUnicodeToLatex = (text: string): string => {
     result = result.replace(/≡/g, '$\\equiv$');
     result = result.replace(/∝/g, '$\\propto$');
 
-    // Set theory — remaining ∈ not already handled by sanitizeLatex prose rule
-    result = result.replace(/∈/g, '$\\in$');
+    // Set theory — ∈ outside math delimiters is almost always prose "in" (AI mistake)
+    // Real math ∈ should be inside $...$ blocks which are preserved above (line 884)
+    result = result.replace(/∈/g, ' in ');
     result = result.replace(/∅/g, '$\\emptyset$');
     result = result.replace(/⊂/g, '$\\subset$');
     result = result.replace(/⊆/g, '$\\subseteq$');
