@@ -74,7 +74,7 @@ import {
   CONCEPT_BG_COLORS,
   CONCEPT_BG_COLORS_DARK,
   MAX_TUTOR_HISTORY,
-  QUICK_START_DOMAINS,
+  ALL_QUICK_START_DOMAINS,
   SYMBOL_GLOSSARY,
   FONT_PRESETS,
   STORAGE_KEYS
@@ -1223,7 +1223,7 @@ export default function App() {
     setIsStudyGuideMode(false);
 
     // Look up emoji from quick start domains first
-    const quickStartMatch = QUICK_START_DOMAINS.find(
+    const quickStartMatch = ALL_QUICK_START_DOMAINS.find(
       d => d.name.toLowerCase() === inputToUse.toLowerCase()
     );
 

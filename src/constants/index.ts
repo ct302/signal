@@ -91,7 +91,7 @@ export const CONCEPT_BG_COLORS_DARK = [
 
 // Quick start domains - full list (randomized subset shown to users)
 export const ALL_QUICK_START_DOMAINS = [
-  // Sports
+  // ── Sports (existing) ──
   { emoji: '🏈', name: 'NFL' },
   { emoji: '🏀', name: 'NBA' },
   { emoji: '⚽', name: 'Soccer' },
@@ -100,7 +100,16 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '🎾', name: 'Tennis' },
   { emoji: '🥊', name: 'Boxing' },
   { emoji: '🏎️', name: 'Formula 1' },
-  // Entertainment
+  // Sports (new)
+  { emoji: '🏓', name: 'Pickleball' },
+  { emoji: '🏃', name: 'Running' },
+  { emoji: '🛹', name: 'Skateboarding' },
+  { emoji: '⛷️', name: 'Winter Olympics' },
+  { emoji: '🏆', name: 'World Cup' },
+  { emoji: '🥋', name: 'MMA' },
+  { emoji: '⛳', name: 'Golf' },
+
+  // ── Entertainment (existing) ──
   { emoji: '🎮', name: 'Video Games' },
   { emoji: '🎬', name: 'Movies' },
   { emoji: '📺', name: 'TV Shows' },
@@ -108,24 +117,38 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '🎭', name: 'Theater' },
   { emoji: '🎨', name: 'Art' },
   { emoji: '📷', name: 'Photography' },
-  // Practical
+  // Entertainment (new)
+  { emoji: '🎤', name: 'Stand-Up Comedy' },
+  { emoji: '📻', name: 'Podcasts' },
+  { emoji: '💃', name: 'Dance' },
+
+  // ── Practical (existing) ──
   { emoji: '🍳', name: 'Cooking' },
   { emoji: '🧵', name: 'Fashion' },
   { emoji: '🏠', name: 'Home Improvement' },
   { emoji: '🌱', name: 'Gardening' },
   { emoji: '🚗', name: 'Cars' },
-  // Strategy
+  // Practical (new)
+  { emoji: '🧁', name: 'Baking & Pastry' },
+  { emoji: '💪', name: 'Fitness & Gym' },
+  { emoji: '🧘', name: 'Yoga' },
+  { emoji: '🪴', name: 'Houseplants' },
+  { emoji: '🪄', name: 'Magic & Illusions' },
+
+  // ── Strategy (existing) ──
   { emoji: '♟️', name: 'Chess' },
   { emoji: '🎲', name: 'Board Games' },
   { emoji: '🃏', name: 'Poker' },
   { emoji: '💼', name: 'Business' },
   { emoji: '💰', name: 'Investing' },
-  // Outdoors
+
+  // ── Outdoors (existing) ──
   { emoji: '⛰️', name: 'Hiking' },
   { emoji: '🎣', name: 'Fishing' },
   { emoji: '🏕️', name: 'Camping' },
   { emoji: '🏄', name: 'Surfing' },
-  // Other
+
+  // ── Other (existing) ──
   { emoji: '🎸', name: 'Guitar' },
   { emoji: '🎹', name: 'Piano' },
   { emoji: '📚', name: 'Literature' },
@@ -133,7 +156,62 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '☕', name: 'Coffee' },
   { emoji: '🐕', name: 'Dog Training' },
   { emoji: '✈️', name: 'Aviation' },
-  { emoji: '🚀', name: 'Space' }
+  { emoji: '🚀', name: 'Space' },
+
+  // ── Trending TV Shows ──
+  { emoji: '💎', name: 'Bridgerton' },
+  { emoji: '🕵️', name: 'The Night Agent' },
+  { emoji: '🦑', name: 'Squid Game' },
+  { emoji: '🏢', name: 'Severance' },
+  { emoji: '🐉', name: 'Game of Thrones' },
+  { emoji: '🔦', name: 'Stranger Things' },
+  { emoji: '🧪', name: 'Breaking Bad' },
+  { emoji: '🗂️', name: 'The Office' },
+
+  // ── Popular Video Games ──
+  { emoji: '🌆', name: 'GTA' },
+  { emoji: '⛏️', name: 'Minecraft' },
+  { emoji: '🔫', name: 'Fortnite' },
+  { emoji: '🧱', name: 'Roblox' },
+  { emoji: '⚔️', name: 'League of Legends' },
+  { emoji: '🗡️', name: 'Zelda' },
+  { emoji: '🍄', name: 'Mario' },
+
+  // ── Science & Academics ──
+  { emoji: '⚗️', name: 'Chemistry' },
+  { emoji: '🧬', name: 'Biology' },
+  { emoji: '📜', name: 'History' },
+  { emoji: '🤖', name: 'AI & ChatGPT' },
+  { emoji: '🔬', name: 'Science' },
+
+  // ── Anime & Manga ──
+  { emoji: '🎌', name: 'Anime' },
+  { emoji: '📖', name: 'Manga' },
+  { emoji: '🥷', name: 'Naruto' },
+  { emoji: '🏴‍☠️', name: 'One Piece' },
+  { emoji: '👊', name: 'Dragon Ball' },
+
+  // ── Additional Variety ──
+  { emoji: '🧩', name: 'Puzzles' },
+  { emoji: '🎯', name: 'Archery' },
+  { emoji: '🎪', name: 'Circus Arts' },
+  { emoji: '🧶', name: 'Knitting & Crochet' },
+  { emoji: '🎻', name: 'Orchestra' },
+  { emoji: '🏛️', name: 'Architecture' },
+  { emoji: '🗺️', name: 'Geography' },
+  { emoji: '⚖️', name: 'Law' },
+  { emoji: '🩺', name: 'Medicine' },
+  { emoji: '📐', name: 'Mathematics' },
+  { emoji: '🌌', name: 'Astronomy' },
+  { emoji: '🦁', name: 'Wildlife' },
+  { emoji: '🎰', name: 'Casino Games' },
+  { emoji: '🏰', name: 'Dungeons & Dragons' },
+  { emoji: '🧗', name: 'Rock Climbing' },
+  { emoji: '🚴', name: 'Cycling' },
+  { emoji: '🥘', name: 'World Cuisine' },
+  { emoji: '📱', name: 'Social Media' },
+  { emoji: '🎥', name: 'Filmmaking' },
+  { emoji: '🪵', name: 'Woodworking' },
 ];
 
 // Helper to get randomized subset
