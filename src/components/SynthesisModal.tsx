@@ -87,7 +87,7 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
           </div>
         </div>
 
-        <div className="text-sm leading-relaxed mb-3" style={{ fontSize: `${textScale}em` }}>
+        <div className="text-sm leading-relaxed mb-3" style={{ zoom: textScale }}>
           {renderAttentiveText(
             synthesisSummary,
             synthesisThreshold,
