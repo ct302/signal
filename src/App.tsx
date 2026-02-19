@@ -2450,6 +2450,32 @@ export default function App() {
 
     return (
       <div>
+        {setThresholdState && (
+          <div className={`pb-2 border-b ${borderColor} flex items-center justify-between gap-4 mb-2`}>
+            <div className="flex items-center gap-3 flex-1">
+              <Eye size={12} className={textColor} />
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={currentThreshold}
+                onChange={(e) => setThresholdState(parseFloat(e.target.value))}
+                className={`w-full h-1 ${sliderBg} rounded-lg appearance-none cursor-pointer ${sliderAccent} transition-colors`}
+                title="Filter noise"
+              />
+            </div>
+            {setColorMode && (
+              <button
+                onClick={() => setColorMode(!isColorMode)}
+                className={`p-1.5 rounded-md transition-colors ${isColorMode ? btnActiveClass : btnClass}`}
+                title="Toggle Isomorphic Colors"
+              >
+                <Palette size={14} />
+              </button>
+            )}
+          </div>
+        )}
         <p className={`${textColor} text-sm leading-relaxed`}>
           {textSegments.map((segment, i) => {
             const isLatex = segment.startsWith('$') || segment.startsWith('\\(') || segment.startsWith('\\[') || (segment.startsWith('\\') && segment.length > 1);
@@ -2561,32 +2587,6 @@ export default function App() {
             }
           })}
         </p>
-        {setThresholdState && (
-          <div className={`pt-3 border-t ${borderColor} flex items-center justify-between gap-4 mt-2`}>
-            <div className="flex items-center gap-3 flex-1">
-              <Eye size={12} className={textColor} />
-              <input
-                type="range"
-                min="0.1"
-                max="1.0"
-                step="0.05"
-                value={currentThreshold}
-                onChange={(e) => setThresholdState(parseFloat(e.target.value))}
-                className={`w-full h-1 ${sliderBg} rounded-lg appearance-none cursor-pointer ${sliderAccent} transition-colors`}
-                title="Filter noise"
-              />
-            </div>
-            {setColorMode && (
-              <button
-                onClick={() => setColorMode(!isColorMode)}
-                className={`p-1.5 rounded-md transition-colors ${isColorMode ? btnActiveClass : btnClass}`}
-                title="Toggle Isomorphic Colors"
-              >
-                <Palette size={14} />
-              </button>
-            )}
-          </div>
-        )}
       </div>
     );
   };
