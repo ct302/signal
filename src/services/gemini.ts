@@ -1465,7 +1465,10 @@ DOMAIN_INTUITION RULES (top-level field):
 Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    const response = await callApi(promptText, {});
+    let response = await callApi(promptText, {});
+
+    // Strip markdown code blocks if the API wrapped the response
+    response = response.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
 
     // Try to parse as JSON
     try {

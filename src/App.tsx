@@ -4637,10 +4637,21 @@ export default function App() {
                         {title}
                       </h3>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {symbols.map(({ symbol, name, meaning, simple, formula: hardcodedFormula }) => {
-                          // Look up API-generated formula (context-specific) — prefer over hardcoded
-                          const apiEntry = symbolGuide.find(sg => sg.symbol === symbol);
+                        {symbols.map(({ symbol, name, meaning, simple, formula: hardcodedFormula, latex }) => {
+                          // Look up API-generated entry from both main and definition symbol guides
+                          // Try exact match first, then fuzzy match for multi-char symbols
+                          const findEntry = (guide: typeof symbolGuide) =>
+                            guide.find(sg => sg.symbol === symbol) ||
+                            guide.find(sg => sg.symbol.toLowerCase().includes(symbol.toLowerCase()) || symbol.toLowerCase().includes(sg.symbol.toLowerCase()));
+                          const apiEntry = findEntry(symbolGuide) || findEntry(defSymbolGuide);
                           const resolvedFormula = apiEntry?.formula || hardcodedFormula;
+
+                          // For multi-character symbols (frac, lim, dx, dy/dx), wrap in LaTeX
+                          // Single Unicode symbols render fine as-is
+                          const isMultiCharSymbol = symbol.length > 1 && /^[a-zA-Z/]+$/.test(symbol);
+                          const displaySymbol = isMultiCharSymbol
+                            ? (latex?.[0]?.startsWith('\\') ? `$${latex[0]}$` : `$\\text{${symbol}}$`)
+                            : symbol;
 
                           return (
                             <div
@@ -4648,7 +4659,7 @@ export default function App() {
                               className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
                             >
                               <span className={`text-xl font-mono w-auto min-w-[2rem] text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                                {renderRichText(symbol, isDarkMode ? 'text-blue-400' : 'text-blue-600')}
+                                {renderRichText(displaySymbol, isDarkMode ? 'text-blue-400' : 'text-blue-600')}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <div>
