@@ -76,6 +76,7 @@ import {
   MAX_TUTOR_HISTORY,
   ALL_QUICK_START_DOMAINS,
   SYMBOL_GLOSSARY,
+  CONCEPT_SYMBOL_HINTS,
   FONT_PRESETS,
   STORAGE_KEYS
 } from './constants';
@@ -4527,7 +4528,20 @@ export default function App() {
                 } else {
                   currentText = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
                 }
+                // Step 1: Collect symbols hinted by concept keywords in text
+                const textLower = currentText.toLowerCase();
+                const hintedSymbols = new Set<string>();
+                for (const [keyword, symbols] of Object.entries(CONCEPT_SYMBOL_HINTS)) {
+                  if (textLower.includes(keyword.toLowerCase())) {
+                    symbols.forEach(s => hintedSymbols.add(s));
+                  }
+                }
+
+                // Step 2: Direct detection + concept hint matching
                 const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
+                  // Check if hinted by concept keywords
+                  if (hintedSymbols.has(entry.symbol)) return true;
+
                   // Single Latin letters (linear algebra) - only match in LaTeX context to avoid false positives
                   const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
                   if (isSingleLatinLetter) {
@@ -4564,7 +4578,7 @@ export default function App() {
                 const greekUpper = detectedSymbols.filter(s => /^[ΣΔΩΘΠΦΨΓΛ]$/.test(s.symbol));
                 const greekLower = detectedSymbols.filter(s => /^[σαβγδεθλμπφψωρτηκνχ]$/.test(s.symbol));
                 const setLogic = detectedSymbols.filter(s => /^[∈∉⊂⊆∪∩∀∃∅∧∨¬]$/.test(s.symbol));
-                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol));
+                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol) || ['lim', 'dx', 'dy/dx', 'frac'].includes(s.symbol));
                 const relations = detectedSymbols.filter(s => /^[≈≠≤≥≪≫∝≡]$/.test(s.symbol));
                 const arrows = detectedSymbols.filter(s => /^[→←↔⟹⟺]$/.test(s.symbol));
                 const operations = detectedSymbols.filter(s => /^[√×÷±·∘⊕⊗]$/.test(s.symbol));

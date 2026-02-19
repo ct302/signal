@@ -879,9 +879,9 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
-    "why": "2-3 sentences on why this concept matters in real life",
-    "real_world": "2-3 sentences with a specific real-world application",
-    "narrative": "A memorable one-liner or mental hook for the concept"
+    "why": "2-3 sentences explaining WHY this concept matters — grounded in the user's domain (${domain || 'everyday life'}). NO generic academic filler. Write like you're explaining to a friend over lunch using their world. e.g. for derivatives + NFL: 'Every yard gained tells a story — the derivative is WHICH play made the difference between a first down and a punt.'",
+    "real_world": "2-3 sentences with a VIVID, SPECIFIC, EVERYDAY scenario using the user's domain (${domain || 'daily life'}). Make it visceral and relatable — like a Chick-fil-A order, a Netflix binge, or a bad Uber ride. NO textbook language. e.g. for partial derivatives + fast food: 'You order your usual combo meal — nuggets, fries, lemonade, 5 sauces. Today they only give you 3 sauces. How much angrier are you JUST about the sauces, ignoring everything else? That's a partial derivative — measuring how one change affects your satisfaction while holding everything else constant.'",
+    "narrative": "A punchy one-liner that maps the concept to the user's domain (${domain || 'real life'}) — visceral, memorable, zero jargon. e.g. 'A single yard can flip a game, just as a single instant can flip a curve.'"
   },
   "synthesis": {
     "summary": "2-3 sentence integration of both perspectives",
