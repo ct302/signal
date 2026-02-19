@@ -2248,28 +2248,48 @@ export const generateMasteryStory = async (
     console.log(`[generateMasteryStory] Granular signals: ${domainGranularity.signals.join(', ')}`);
   }
 
+  // Detect domain type for appropriate search queries and fictional vs real framing
+  const domainLower = domain.toLowerCase();
+  const isFictionalDomain = /\b(show|series|sitcom|anime|cartoon|movie|film|book|novel|manga|comic|video\s*game)\b/i.test(domainLower)
+    || /\b(season|episode|s\d+e\d+)\b/i.test(domainLower);
+
+  let granularSearchQueries: string;
+  if (/\b(season|episode|ep\b|s\d+e\d+|series|show|sitcom|drama|anime|cartoon)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} plot summary recap"\n2. "${domain} characters scenes"\n3. "${domain} episode guide synopsis"`;
+  } else if (/\b(album|song|track|concert|tour|band|musician)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} review tracklist"\n2. "${domain} artists performers"\n3. "${domain} release history background"`;
+  } else if (/\b(recipe|dish|cook|cuisine|restaurant|chef)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} recipe ingredients technique"\n2. "${domain} history origin"\n3. "${domain} famous preparation"`;
+  } else if (/\b(game\s*\d|match|playoff|championship|super\s*bowl|world\s*cup|tournament)/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} game results score"\n2. "${domain} key players highlights"\n3. "${domain} date opponent final score"`;
+  } else {
+    granularSearchQueries = `1. "${domain} summary overview"\n2. "${domain} key details facts"\n3. "${domain} history background"`;
+  }
+
   // Web search context - different prompts for granular (specific event) vs general domains
   // Both get web search, but granular domains are more constrained to the exact event
   const webSearchContext = isGranularDomain
-    ? `CRITICAL - WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
+    ? `WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
 
-SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
+SEARCH FOR: "${domain}"
 Search queries to use:
-1. "${domain} game results score"
-2. "${domain} key players highlights"
-3. "${domain} date opponent final score"
+${granularSearchQueries}
 
-YOU MUST USE ONLY FACTS FROM THE SEARCH RESULTS.
-- The story MUST be about THIS EXACT EVENT - "${domain}"
-- Do NOT use generic knowledge about this domain
-- Do NOT fabricate or guess any details
-- If search results mention specific people, dates, scores, or events - USE THOSE EXACT FACTS
+GROUNDING RULES (in priority order):
+1. PREFER facts from the search results — if results contain relevant info about "${domain}", use those facts
+2. If search results are sparse or irrelevant for "${domain}", supplement with your general knowledge — but keep facts REAL and VERIFIABLE
+3. NEVER refuse to generate a story — always produce an engaging narrative
+4. NEVER output apologies, refusals, or meta-commentary about search results — just write the story
 
-REQUIRED FACTUAL ELEMENTS (extract from search results):
-- Specific date of the event
-- Names of key individuals involved (WITH FULL NAMES)
-- Specific outcome/result (scores, statistics, achievements)
-- Key moments that happened during this specific event
+The story MUST be about "${domain}".
+${isFictionalDomain
+    ? '- Since this is fictional source material, "facts" means REAL plot points, character names, and storylines from the actual show/film/book/game'
+    : '- If search results mention specific people, dates, scores, or events — USE THOSE EXACT FACTS'}
+
+REQUIRED FACTUAL ELEMENTS (from search results OR your knowledge of "${domain}"):
+- Specific details about this ${isFictionalDomain ? 'episode/scene/chapter' : 'event'} (names, ${isFictionalDomain ? 'plot points, character actions' : 'dates, scores, outcomes'})
+- Names of key ${isFictionalDomain ? 'characters' : 'individuals'} involved
+- What actually happened (${isFictionalDomain ? 'storyline, key scenes, dialogue moments' : 'outcome, key moments, significance'})
 
 ---
 
@@ -2308,8 +2328,10 @@ DO NOT FABRICATE:
     1: `STAGE 1 - THE BIG PICTURE (ZERO TECHNICAL JARGON):
 Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
 
-NARRATIVE SCOPE: Tell the story of a GAME/MATCH/EVENT - the overall arc, who was involved, what happened.
-Example: "The 2011 playoff series between the Grizzlies and Spurs..." - broad strokes, key players, the outcome.
+NARRATIVE SCOPE: Tell the story of a REAL moment from ${domain} — the overall arc, who was involved, what happened.
+${isFictionalDomain
+    ? 'Since this is from fictional source material, use REAL plot points, character names, and storylines from the actual show/film/book/game.'
+    : 'Use REAL historical facts, people, and events that enthusiasts would recognize.'}
 
 CRITICAL RULES:
 - NO technical terms whatsoever - not even simple ones
@@ -2425,9 +2447,11 @@ STORY REQUIREMENTS:
 HISTORICAL ACCURACY (MANDATORY):
 - Feature REAL people, characters, figures, or entities that ${domain} enthusiasts would recognize
 - Reference ACTUAL events, moments, episodes, performances, or achievements from ${domain}
-- Include SPECIFIC details: dates, numbers, statistics, records, achievements
-- Ground the story in ${domain} history that enthusiasts would recognize
-- NO fictional scenarios - this must reference real ${domain} moments that actually happened
+- Include SPECIFIC details: ${isFictionalDomain ? 'character names, plot points, episode details, dialogue moments' : 'dates, numbers, statistics, records, achievements'}
+- Ground the story in ${domain} ${isFictionalDomain ? 'canon that fans would recognize' : 'history that enthusiasts would recognize'}
+${isFictionalDomain
+    ? '- Use REAL plot points and characters from the source material — actual episodes, scenes, and storylines'
+    : `- NO fictional scenarios — this must reference real ${domain} moments that actually happened`}
 - Write as if creating a documentary about ${domain} that happens to explain the technical concept
 
 Return ONLY the story text (no JSON, no explanations, just the story).`;
@@ -2436,19 +2460,18 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
     // Build search prompt to guide how web results are used
     // We're getting 8 sources - synthesize them into accurate, verifiable narratives
     const searchPromptText = isGranularDomain
-      ? `STRICT REQUIREMENT: Synthesize facts from these 8 web search results about "${domain}".
+      ? `GROUNDING GUIDANCE: Use these web search results to enrich your story about "${domain}".
 
-The story MUST be about THIS SPECIFIC EVENT: "${domain}"
-- Cross-reference the search results to extract VERIFIED facts
-- Use the EXACT date, opponent/participants, score/outcome from search results
-- Extract SPECIFIC player/character names mentioned in search results
-- Extract KEY MOMENTS described in search results
+The story should be about "${domain}".
+- If results contain relevant facts about "${domain}", weave them into your narrative
+- If results are NOT relevant to "${domain}", rely on your general knowledge of "${domain}" instead
+- The goal is an ACCURATE, ENGAGING story — not a refusal
+- NEVER output apologies, meta-commentary about search quality, or "I'm sorry" — just write the story
 
 SYNTHESIS RULES:
 - If multiple sources agree on a fact, use it confidently
 - If sources disagree, pick the most commonly cited version
-- NEVER fabricate details that don't appear in the search results
-- The story must be verifiable against the search results provided.`
+- ${isFictionalDomain ? 'For fictional source material, "facts" = real plot points, characters, and storylines from the show/film/book' : 'Keep all facts verifiable — use real names, dates, and outcomes'}`
       : `SYNTHESIZE these 8 web search results to ground your ${shortDomain} story in REAL history.
 
 SYNTHESIS REQUIREMENTS:
@@ -2488,6 +2511,23 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
         .trim()
         .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
         .replace(/^Story:\s*/i, ''); // Remove "Story:" prefix if any
+
+      // Detect AI refusal patterns (AI followed strict grounding instructions too literally)
+      const refusalPatterns = [
+        /^I'm sorry/i, /^I cannot/i, /^I apologize/i,
+        /^Unfortunately,?\s+I/i, /^I don't have/i,
+        /search results.*do not contain/i, /no information about/i,
+        /I'm unable to/i, /cannot generate/i, /cannot create/i
+      ];
+      const isRefusal = refusalPatterns.some(p => p.test(cleanContent));
+      if (isRefusal) {
+        console.warn(`[generateMasteryStory] Stage ${stage} attempt ${attempts}: AI refusal detected, retrying...`);
+        cleanContent = ''; // Force word count check to fail → triggers retry
+        if (attempts < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        continue;
+      }
 
       const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
       const minWords = MIN_WORD_COUNT[stage];
