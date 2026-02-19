@@ -3555,6 +3555,27 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
+                  {/* Attention Meter - locked at top of content area */}
+                  {!(showCondensedView && isFirstPrinciplesMode) && (
+                    <div className={`sticky top-0 z-20 pb-3 mb-4 border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                      <div className="flex items-center gap-4">
+                        <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="1.0"
+                          step="0.05"
+                          value={threshold}
+                          onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                          className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
+                        />
+                        <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          {Math.round(threshold * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* First Principles View - Button-toggled via "Essence" button in Tech mode */}
                   {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
@@ -3856,30 +3877,12 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Content Footer - Hide when in Essence mode */}
-                {!(showCondensedView && isFirstPrinciplesMode) && (
+                {/* Content Footer - Selection hint only (attention meter moved to top of content) */}
+                {!(showCondensedView && isFirstPrinciplesMode) && viewMode !== 'morph' && (
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  {/* Selection hint - only show when not in morph mode */}
-                  {viewMode !== 'morph' && (
-                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      <BookOpen size={12} />
-                      <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-4">
-                    <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="1.0"
-                      step="0.05"
-                      value={threshold}
-                      onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                      className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
-                    />
-                    <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      {Math.round(threshold * 100)}%
-                    </span>
+                  <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                    <BookOpen size={12} />
+                    <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
                   </div>
                 </div>
                 )}
