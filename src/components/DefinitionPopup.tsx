@@ -259,7 +259,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           </div>
           {onWordClick && !isLoadingDef && (
             <div className="text-xs text-neutral-600 mt-1 text-center">
-              Click any word for a nested definition
+              {isMobile ? 'Tap' : 'Click'} any word for a nested definition
             </div>
           )}
 

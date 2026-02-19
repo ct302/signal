@@ -325,7 +325,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               {getShortName(topicName)}
             </span>
           </div>
-          <span className={`hidden md:inline text-sm ml-4 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+          <span className={`text-xs md:text-sm ml-2 md:ml-4 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
             {conceptMap.length} concept mappings
           </span>
         </div>

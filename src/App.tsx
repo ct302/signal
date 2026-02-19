@@ -36,7 +36,9 @@ import {
   ChevronDown,
   Minus,
   GripHorizontal,
-  Lightbulb
+  Lightbulb,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 // Types
@@ -121,7 +123,8 @@ import {
   MasterySessionCache,
   StudyGuide,
   SkeletonLoader,
-  FontPicker
+  FontPicker,
+  Settings
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -519,6 +522,11 @@ export default function App() {
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const tutorResponseRef = useRef<HTMLDivElement>(null);
+
+  // Touch-tap-to-define refs (mobile word tap detection)
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchWordRef = useRef<string | null>(null);
+  const touchTargetRef = useRef<HTMLElement | null>(null);
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -1491,6 +1499,105 @@ export default function App() {
       fetchDefinition(selectedText, context, defComplexity, false);
     }
   };
+
+  // Mobile: tap-to-define handlers
+  const handleContentTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || viewMode === 'morph') return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    // Record touch start position and time
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+
+    // Find the word span under the touch point
+    let target = e.target as HTMLElement;
+    let wordSpan: HTMLElement | null = null;
+    let currentElement: HTMLElement | null = target;
+    for (let i = 0; i < 5 && currentElement; i++) {
+      if (currentElement.tagName === 'SPAN' && currentElement.id?.startsWith('word-')) {
+        wordSpan = currentElement;
+        break;
+      }
+      currentElement = currentElement.parentElement;
+    }
+
+    if (wordSpan) {
+      touchWordRef.current = wordSpan.textContent?.trim() || null;
+      touchTargetRef.current = wordSpan;
+    } else {
+      touchWordRef.current = null;
+      touchTargetRef.current = null;
+    }
+  }, [isMobile, viewMode]);
+
+  const handleContentTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || viewMode === 'morph') return;
+    if (!touchStartRef.current || !touchWordRef.current || !touchTargetRef.current) return;
+
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+    const duration = Date.now() - touchStartRef.current.time;
+
+    // Only treat as a tap if movement < 10px and duration < 300ms
+    if (dx > 10 || dy > 10 || duration > 300) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    // Check if user has an active text selection (drag-to-select) — don't intercept
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    // Clean the word: remove punctuation from edges
+    const rawWord = touchWordRef.current;
+    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+    if (!cleanWord || cleanWord.length < 2) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    // Prevent the default and the selection handler from firing
+    e.preventDefault();
+
+    const rect = touchTargetRef.current.getBoundingClientRect();
+    const popupMinHeight = 250;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+
+    const top = showAbove
+      ? rect.top + window.scrollY - popupMinHeight - 10
+      : rect.bottom + window.scrollY + 10;
+
+    if (defPosition && selectedTerm) {
+      // Already have a popup open — replace it (mobile stacking prevention)
+      setMiniDefPosition(null);
+      setMiniSelectedTerm(null);
+      setSelectedTerm(cleanWord);
+      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
+      fetchDefinition(cleanWord, defText, defComplexity, false);
+    } else {
+      // No popup — open new one
+      setSelectedTerm(cleanWord);
+      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
+      const context = isAnalogyVisualMode
+        ? segments.map(s => s.analogy).join(' ')
+        : segments.map(s => s.tech).join(' ');
+      fetchDefinition(cleanWord, context, defComplexity, false);
+    }
+
+    // Reset refs
+    touchStartRef.current = null;
+    touchWordRef.current = null;
+    touchTargetRef.current = null;
+  }, [isMobile, viewMode, defPosition, selectedTerm, defText, defComplexity, isAnalogyVisualMode, segments]);
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
     if (isMini) {
@@ -2640,7 +2747,7 @@ export default function App() {
                 return (
                   <span
                     key={`${i}-${j}`}
-                    className={`${colorClassName} ${isClickable ? 'cursor-pointer hover:underline hover:decoration-dotted' : ''}`}
+                    className={`${colorClassName} ${isClickable ? 'cursor-pointer underline decoration-dotted decoration-neutral-400/50 hover:decoration-neutral-400' : ''}`}
                     style={{
                       fontSize: `${scale}em`,
                       opacity: opacity,
@@ -3880,6 +3987,18 @@ export default function App() {
                           <span className="text-sm font-serif">Aa</span>
                           <span>{fontPreset.emoji}</span>
                         </button>
+                        {/* Dark Mode toggle - moved from header on mobile */}
+                        <button
+                          onClick={() => setIsDarkMode(!isDarkMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'
+                          }`}
+                        >
+                          {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
+                          <span>{isDarkMode ? 'Light' : 'Dark'}</span>
+                        </button>
+                        {/* Settings - moved from header on mobile */}
+                        <Settings isDarkMode={isDarkMode} />
                         {/* Regenerating indicator */}
                         {isRegenerating && (
                           <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
@@ -3914,8 +4033,8 @@ export default function App() {
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
-                  onTouchStart={handleSelectionStart}
-                  onTouchEnd={handleSelectionEnd}
+                  onTouchStart={(e) => { handleSelectionStart(); handleContentTouchStart(e); }}
+                  onTouchEnd={(e) => { handleContentTouchEnd(e); handleSelectionEnd(e); }}
                 >
                   {/* Attention Meter - locked at top of content area, collapsible */}
                   {!(showCondensedView && isFirstPrinciplesMode) && (
@@ -4263,7 +4382,7 @@ export default function App() {
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                     <BookOpen size={12} />
-                    <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
+                    <span>{isMobile ? 'Tap any word to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
                   </div>
                 </div>
                 )}
