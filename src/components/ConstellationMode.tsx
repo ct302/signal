@@ -1,19 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
-
-// Mobile detection hook
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  return isMobile;
-};
+import { useMobile } from '../hooks/useMobile';
 
 interface ConceptMapItem {
   id: number;
@@ -217,7 +204,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [foundationalMappingCache, setFoundationalMappingCache] = useState<Map<number, string>>(new Map());
 
   // Mobile responsive
-  const isMobile = useIsMobile();
+  const isMobile = useMobile();
 
   // Get importance for a concept
   const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
@@ -405,7 +392,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   {/* Left Pill (Analogy/Expertise) */}
                   <div
                     className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
-                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102 active:scale-95'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(251, 191, 36, 0.15)' : 'rgba(251, 191, 36, 0.2)'),
@@ -413,7 +400,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${
+                    <span className={`font-semibold text-sm md:text-base truncate block ${
                       isActive
                         ? (isDarkMode ? 'text-white' : 'text-neutral-900')
                         : (isDarkMode ? 'text-amber-100' : 'text-amber-800')
@@ -436,8 +423,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       }}
                     />
 
-                    {/* Animated dot on hover - desktop only */}
-                    {isHovered && !isMobile && (
+                    {/* Animated dot on hover (desktop) or selected (mobile) */}
+                    {((isHovered && !isMobile) || (isSelected && isMobile)) && (
                       <div
                         className="absolute w-2 h-2 rounded-full animate-bridge-flow z-10"
                         style={{ backgroundColor: data.color, boxShadow: `0 0 8px ${data.color}` }}
@@ -459,7 +446,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   {/* Right Pill (Tech/Learning) */}
                   <div
                     className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
-                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102 active:scale-95'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(96, 165, 250, 0.15)' : 'rgba(59, 130, 246, 0.15)'),
@@ -467,7 +454,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${
+                    <span className={`font-semibold text-sm md:text-base truncate block ${
                       isActive
                         ? (isDarkMode ? 'text-white' : 'text-neutral-900')
                         : (isDarkMode ? 'text-blue-100' : 'text-blue-800')
@@ -486,7 +473,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         {showExplanation && selectedConceptData && (
           <div className={`
             ${isMobile
-              ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
+              ? 'fixed bottom-0 left-0 right-0 max-h-[75vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
             ${isDarkMode ? 'border-neutral-600 bg-neutral-800/98' : 'border-neutral-200 bg-white/98'}
@@ -553,7 +540,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
 
             {/* Concept Comparison - Scrollable content area */}
             <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
-              isMobile ? 'max-h-[calc(60vh-80px)]' : 'max-h-[calc(100vh-140px)]'
+              isMobile ? 'max-h-[calc(75vh-80px)]' : 'max-h-[calc(100vh-140px)]'
             } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
               {/* Expertise Term */}
               <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-amber-900/30 border border-amber-700/60' : 'bg-amber-50 border border-amber-200'}`}>

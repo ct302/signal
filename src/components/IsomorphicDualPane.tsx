@@ -1,20 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
-
-// Mobile detection hook
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  return isMobile;
-};
+import { useMobile } from '../hooks/useMobile';
 
 type MobilePane = 'tech' | 'connection' | 'analogy';
 
@@ -220,7 +207,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
 
   // Mobile responsive state
-  const isMobile = useIsMobile();
+  const isMobile = useMobile();
   const [mobileActivePane, setMobileActivePane] = useState<MobilePane>('tech');
 
   // Auto-switch to connection tab when concept is selected on mobile
@@ -460,7 +447,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 style={{ borderLeftColor: color, boxShadow: `0 0 12px ${color}15` }}
                               >
                                 <div className="flex items-center gap-1.5 mb-1">
-                                  <span className={`text-[10px] uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Technical</span>
+                                  <span className={`text-xs uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Technical</span>
                                 </div>
                                 <p className="text-sm font-semibold" style={{ color }}>{techTerm}</p>
                                 {sixWordDef && (
@@ -478,7 +465,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                   >
                                     <div className={`w-3 h-3 rounded-full m-1 ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`} />
                                   </div>
-                                  <span className={`text-[10px] font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
+                                  <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
                                 </div>
                               </div>
 
@@ -500,7 +487,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 style={{ borderRightColor: color, boxShadow: `0 0 12px ${color}15` }}
                               >
                                 <div className="flex items-center gap-1.5 mb-1">
-                                  <span className={`text-[10px] uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{analogyDomain}</span>
+                                  <span className={`text-xs uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{analogyDomain}</span>
                                 </div>
                                 <p className="text-sm font-semibold" style={{ color }}>
                                   {domainEmoji && <span className="mr-1">{domainEmoji}</span>}

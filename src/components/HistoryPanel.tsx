@@ -1,6 +1,7 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
 import { HistoryItem } from '../types';
+import { useMobile } from '../hooks/useMobile';
 
 interface HistoryPanelProps {
   history: HistoryItem[];
@@ -15,9 +16,15 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   onLoadEntry,
   onDeleteEntry
 }) => {
+  const isMobile = useMobile();
+
   return (
     <div
-      className={`fixed top-16 left-4 z-[100] w-80 max-h-96 overflow-y-auto rounded-xl shadow-2xl border ${
+      className={`fixed top-16 z-[100] overflow-y-auto rounded-xl shadow-2xl border ${
+        isMobile
+          ? 'left-3 right-3 max-h-[60vh]'
+          : 'left-4 w-80 max-h-96'
+      } ${
         isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
       }`}
     >
@@ -52,7 +59,9 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
             </div>
             <button
               onClick={(e) => onDeleteEntry(e, entry.id)}
-              className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-600 transition-opacity"
+              className={`p-2 min-w-touch min-h-touch flex items-center justify-center text-red-400 hover:text-red-600 transition-opacity ${
+                isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
             >
               <Trash2 size={14} />
             </button>

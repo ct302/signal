@@ -1461,12 +1461,24 @@ export default function App() {
     const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
 
     if (defPosition && selectedTerm) {
-      setMiniSelectedTerm(selectedText);
-      const top = showAbove
-        ? rect.top + window.scrollY - popupMinHeight - 10
-        : rect.bottom + window.scrollY + 10;
-      setMiniDefPosition({ top, left: rect.left + window.scrollX });
-      fetchDefinition(selectedText, defText, miniDefComplexity, true);
+      if (isMobile) {
+        // Mobile: replace main popup instead of stacking a mini popup
+        setMiniDefPosition(null);
+        setMiniSelectedTerm(null);
+        setSelectedTerm(selectedText);
+        const top = showAbove
+          ? rect.top + window.scrollY - popupMinHeight - 10
+          : rect.bottom + window.scrollY + 10;
+        setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
+        fetchDefinition(selectedText, defText, defComplexity, false);
+      } else {
+        setMiniSelectedTerm(selectedText);
+        const top = showAbove
+          ? rect.top + window.scrollY - popupMinHeight - 10
+          : rect.bottom + window.scrollY + 10;
+        setMiniDefPosition({ top, left: rect.left + window.scrollX });
+        fetchDefinition(selectedText, defText, miniDefComplexity, true);
+      }
     } else {
       setSelectedTerm(selectedText);
       const top = showAbove
@@ -1533,20 +1545,28 @@ export default function App() {
     // Only open mini definition if we're in main definition popup (not already nested)
     if (!defPosition || miniDefPosition) return;
 
-    const popupMinHeight = 200;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+    if (isMobile) {
+      // Mobile: replace main popup content with new term (no stacking)
+      setSelectedTerm(word);
+      setDefText("");
+      fetchDefinition(word, defText, defComplexity, false);
+      // Position stays as bottom sheet, no need to update
+    } else {
+      const popupMinHeight = 200;
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
 
-    setMiniSelectedTerm(word);
-    const rawTop = showAbove
-      ? rect.top + window.scrollY - popupMinHeight - 10
-      : rect.bottom + window.scrollY + 10;
-    const clampedTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
-    const clampedLeft = Math.max(10, Math.min(window.innerWidth - 280, rect.left + window.scrollX));
-    setMiniDefPosition({ top: clampedTop, left: clampedLeft });
-    fetchDefinition(word, defText, miniDefComplexity, true);
+      setMiniSelectedTerm(word);
+      const rawTop = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      const clampedTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
+      const clampedLeft = Math.max(10, Math.min(window.innerWidth - 280, rect.left + window.scrollX));
+      setMiniDefPosition({ top: clampedTop, left: clampedLeft });
+      fetchDefinition(word, defText, miniDefComplexity, true);
+    }
   };
 
   // === Selection Handlers for Multi-Word Definition ===
@@ -1667,10 +1687,19 @@ export default function App() {
 
     // Open definition popup
     if (defPosition && selectedTerm) {
-      // Already have a popup open - use mini popup
-      setMiniSelectedTerm(pendingSelection);
-      setMiniDefPosition({ top: popupTop, left: popupLeft });
-      fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+      if (isMobile) {
+        // Mobile: replace main popup instead of stacking mini popup
+        setMiniDefPosition(null);
+        setMiniSelectedTerm(null);
+        setSelectedTerm(pendingSelection);
+        // Position stays as bottom sheet on mobile
+        fetchDefinition(pendingSelection, defText, defComplexity, false);
+      } else {
+        // Desktop: open mini popup alongside main popup
+        setMiniSelectedTerm(pendingSelection);
+        setMiniDefPosition({ top: popupTop, left: popupLeft });
+        fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+      }
     } else {
       // Open main popup
       setSelectedTerm(pendingSelection);
@@ -1683,7 +1712,7 @@ export default function App() {
 
     // Clear selection state
     clearSelectionState();
-  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState]);
+  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState, isMobile]);
 
   // Close define button when clicking outside
   useEffect(() => {
@@ -3894,7 +3923,7 @@ export default function App() {
                       {isAttentionMeterCollapsed ? (
                         <button
                           onClick={() => setIsAttentionMeterCollapsed(false)}
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                          className={`flex items-center gap-1.5 px-2 py-2 min-h-touch rounded-md text-xs transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
                           title="Show attention meter"
                         >
                           <Eye size={12} />
@@ -3911,14 +3940,14 @@ export default function App() {
                             step="0.05"
                             value={threshold}
                             onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                            className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
+                            className={`flex-1 h-2 md:h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
                           />
                           <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                             {Math.round(threshold * 100)}%
                           </span>
                           <button
                             onClick={() => setIsAttentionMeterCollapsed(true)}
-                            className={`p-1 rounded-md transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-md transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
                             title="Minimize attention meter"
                           >
                             <ChevronUp size={14} />

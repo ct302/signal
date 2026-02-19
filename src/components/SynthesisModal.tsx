@@ -43,10 +43,13 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
     <div
       className="synthesis-window fixed z-[200] w-full max-w-lg px-4 flex flex-col cursor-move signal-font"
       style={{
-        top: synthPos ? synthPos.top : '50%',
-        left: synthPos ? synthPos.left : '50%',
-        transform: synthPos ? 'none' : 'translate(-50%, -50%)',
-        width: isMobile ? '100%' : 'auto'
+        top: isMobile ? 'auto' : (synthPos ? synthPos.top : '50%'),
+        bottom: isMobile ? 0 : 'auto',
+        left: isMobile ? 0 : (synthPos ? synthPos.left : '50%'),
+        transform: isMobile ? 'none' : (synthPos ? 'none' : 'translate(-50%, -50%)'),
+        width: isMobile ? '100%' : 'auto',
+        maxHeight: isMobile ? '80vh' : undefined,
+        paddingBottom: isMobile ? 'env(safe-area-inset-bottom, 0px)' : undefined
       }}
     >
       <div
@@ -87,7 +90,7 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
           </div>
         </div>
 
-        <div className="text-sm leading-relaxed mb-3" style={{ zoom: textScale }}>
+        <div className="text-sm leading-relaxed mb-3 overflow-y-auto flex-1" style={{ zoom: textScale }}>
           {renderAttentiveText(
             synthesisSummary,
             synthesisThreshold,
