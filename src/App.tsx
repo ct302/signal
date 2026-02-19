@@ -4639,19 +4639,24 @@ export default function App() {
                       <div className="grid grid-cols-1 gap-1.5">
                         {symbols.map(({ symbol, name, meaning, simple, formula: hardcodedFormula, latex }) => {
                           // Look up API-generated entry from both main and definition symbol guides
-                          // Try exact match first, then fuzzy match for multi-char symbols
+                          // Match by symbol (exact/fuzzy), name, or latex patterns
                           const findEntry = (guide: typeof symbolGuide) =>
                             guide.find(sg => sg.symbol === symbol) ||
-                            guide.find(sg => sg.symbol.toLowerCase().includes(symbol.toLowerCase()) || symbol.toLowerCase().includes(sg.symbol.toLowerCase()));
+                            guide.find(sg => sg.name.toLowerCase() === name.toLowerCase()) ||
+                            guide.find(sg => sg.symbol.toLowerCase().includes(symbol.toLowerCase()) || symbol.toLowerCase().includes(sg.symbol.toLowerCase())) ||
+                            guide.find(sg => latex?.some(l => sg.symbol.includes(l) || l.includes(sg.symbol)));
                           const apiEntry = findEntry(symbolGuide) || findEntry(defSymbolGuide);
                           const resolvedFormula = apiEntry?.formula || hardcodedFormula;
 
-                          // For multi-character symbols (frac, lim, dx, dy/dx), wrap in LaTeX
-                          // Single Unicode symbols render fine as-is
-                          const isMultiCharSymbol = symbol.length > 1 && /^[a-zA-Z/]+$/.test(symbol);
-                          const displaySymbol = isMultiCharSymbol
-                            ? (latex?.[0]?.startsWith('\\') ? `$${latex[0]}$` : `$\\text{${symbol}}$`)
-                            : symbol;
+                          // Display symbol: use curated LaTeX for multi-char symbols
+                          // Bare \frac is invalid KaTeX (needs args), dx needs math mode, etc.
+                          const SYMBOL_DISPLAY: Record<string, string> = {
+                            'frac': '$\\frac{a}{b}$',
+                            'dx': '$dx$',
+                            'dy/dx': '$\\frac{dy}{dx}$',
+                            'lim': '$\\lim$',
+                          };
+                          const displaySymbol = SYMBOL_DISPLAY[symbol] || symbol;
 
                           return (
                             <div
