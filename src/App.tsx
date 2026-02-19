@@ -76,7 +76,6 @@ import {
   MAX_TUTOR_HISTORY,
   ALL_QUICK_START_DOMAINS,
   SYMBOL_GLOSSARY,
-  CONCEPT_SYMBOL_HINTS,
   FONT_PRESETS,
   STORAGE_KEYS
 } from './constants';
@@ -4558,8 +4557,10 @@ export default function App() {
           {!isSymbolGuideMinimized && (
             <div className="overflow-y-auto max-h-[60vh] p-4">
               {(() => {
-                // Detect which symbols are in the current content
-                // Use the same text source as displayed content (full explanations, not segments)
+                // PRIMARY: Use API-generated symbolGuide — the AI identifies exactly which
+                // symbols appear in the content, avoiding false positives from keyword hinting.
+                // FALLBACK: Direct symbol detection (no concept hints) for when API data is empty.
+
                 let currentText: string;
                 if (isNarrativeMode) {
                   currentText = segments.map(s => s.narrative).filter(Boolean).join(' ');
@@ -4568,42 +4569,47 @@ export default function App() {
                 } else {
                   currentText = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
                 }
-                // Step 1: Collect symbols hinted by concept keywords in text
-                const textLower = currentText.toLowerCase();
-                const hintedSymbols = new Set<string>();
-                for (const [keyword, symbols] of Object.entries(CONCEPT_SYMBOL_HINTS)) {
-                  if (textLower.includes(keyword.toLowerCase())) {
-                    symbols.forEach(s => hintedSymbols.add(s));
-                  }
-                }
 
-                // Step 2: Direct detection + concept hint matching
-                const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
-                  // Check if hinted by concept keywords
-                  if (hintedSymbols.has(entry.symbol)) return true;
+                // Build detected symbols from API symbolGuide entries matched to SYMBOL_GLOSSARY
+                // This gives us rich static metadata (categories, latex arrays) + API context data (formula, domain_analogy)
+                const apiMatchedSymbols = symbolGuide.length > 0
+                  ? SYMBOL_GLOSSARY.filter(entry => {
+                      return symbolGuide.some(sg => {
+                        // Exact symbol match
+                        if (sg.symbol === entry.symbol) return true;
+                        // Name match (e.g., "Partial Derivative" ↔ "Partial Derivative")
+                        if (sg.name.toLowerCase() === entry.name.toLowerCase()) return true;
+                        // Symbol appears in API symbol (e.g., entry.symbol='∂' in sg.symbol='∂f/∂x')
+                        if (entry.symbol.length === 1 && sg.symbol.includes(entry.symbol)) return true;
+                        // LaTeX pattern match
+                        return entry.latex.some(l => sg.symbol.includes(l) || l.includes(sg.symbol));
+                      });
+                    })
+                  : [];
 
-                  // Single Latin letters (linear algebra) - only match in LaTeX context to avoid false positives
-                  const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
-                  if (isSingleLatinLetter) {
-                    // Check for $X$ pattern or within larger LaTeX expressions like $m \times n$
-                    const latexPattern = new RegExp(`\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$`);
-                    return latexPattern.test(currentText);
-                  }
-                  // Check Unicode symbol (for non-Latin symbols)
-                  if (currentText.includes(entry.symbol)) return true;
-                  // Check LaTeX commands (handle both escaped and unescaped backslashes)
-                  return entry.latex.some(cmd => {
-                    // Check direct match
-                    if (currentText.includes(cmd)) return true;
-                    // Check with single backslash (in case of different escaping)
-                    const unescaped = cmd.replace(/\\\\/g, '\\');
-                    if (currentText.includes(unescaped)) return true;
-                    // Check within $ delimiters (e.g., $\in$)
-                    if (currentText.includes('$' + cmd + '$')) return true;
-                    if (currentText.includes('$' + unescaped + '$')) return true;
-                    return false;
-                  });
-                });
+                // Fallback: Direct detection (only actual symbol/LaTeX presence, NO concept hints)
+                const directDetected = apiMatchedSymbols.length > 0
+                  ? []
+                  : SYMBOL_GLOSSARY.filter(entry => {
+                      // Single Latin letters - only in LaTeX context
+                      const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
+                      if (isSingleLatinLetter) {
+                        const latexPattern = new RegExp(`\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$`);
+                        return latexPattern.test(currentText);
+                      }
+                      // Check Unicode symbol directly in text
+                      if (currentText.includes(entry.symbol)) return true;
+                      // Check LaTeX commands in $ delimiters only (stricter)
+                      return entry.latex.some(cmd => {
+                        const unescaped = cmd.replace(/\\\\/g, '\\');
+                        if (currentText.includes('$' + cmd + '$') || currentText.includes('$' + unescaped + '$')) return true;
+                        // Check LaTeX command within larger $ blocks
+                        const cmdRegex = new RegExp(`\\$[^$]*${cmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^$]*\\$`);
+                        return cmdRegex.test(currentText);
+                      });
+                    });
+
+                const detectedSymbols = apiMatchedSymbols.length > 0 ? apiMatchedSymbols : directDetected;
 
                 if (detectedSymbols.length === 0) {
                   return (
