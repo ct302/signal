@@ -517,6 +517,7 @@ export default function App() {
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const tutorResponseRef = useRef<HTMLDivElement>(null);
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -2084,6 +2085,11 @@ export default function App() {
       if (result) {
         setTutorResponse({ question: query, answer: result, mode: "Tutor" });
         setFollowUpQuery("");
+
+        // Auto-scroll to the response so user doesn't have to hunt for it
+        setTimeout(() => {
+          tutorResponseRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
 
         // Update history - if branching, truncate to branch point first
         setTutorHistory(prev => {
@@ -4138,7 +4144,7 @@ export default function App() {
 
                   {/* Current response with attention controls */}
                   {tutorResponse && (
-                    <div className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
+                    <div ref={tutorResponseRef} className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
                       <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
 
                       {/* Answer with attention rendering - strip math symbols for clean prose */}
