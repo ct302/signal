@@ -486,7 +486,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         {showExplanation && selectedConceptData && (
           <div className={`
             ${isMobile
-              ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90]'
+              ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
             ${isDarkMode ? 'border-neutral-600 bg-neutral-800/98' : 'border-neutral-200 bg-white/98'}

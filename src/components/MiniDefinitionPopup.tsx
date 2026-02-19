@@ -63,7 +63,8 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
         right: 0,
         width: '100%',
         height: '50vh',
-        transform: 'none'
+        transform: 'none',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
       }
     : {
         top: miniDefPosition.top,

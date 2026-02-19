@@ -467,6 +467,7 @@ export default function App() {
     return FONT_PRESETS[0];
   });
   const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
 
   // Font persistence, CSS variables, and Google Font loading
   useEffect(() => {
@@ -3101,7 +3102,7 @@ export default function App() {
 
   // Main App
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${isDarkMode ? 'bg-neutral-900' : 'bg-neutral-50'}`}>
+    <div className={`min-h-screen flex flex-col overflow-x-hidden transition-colors duration-300 ${isDarkMode ? 'bg-neutral-900' : 'bg-neutral-50'}`}>
       {/* Disambiguation Modal */}
       {disambiguation && (
         <DisambiguationModal
@@ -3282,343 +3283,584 @@ export default function App() {
                 onClick={handleTouchToggle}
               >
                 {/* Content Header */}
-                <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5">
-                    <button
-                      onClick={cycleViewMode}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                        viewMode === 'morph' && !isNarrativeMode
-                          ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
-                          : viewMode === 'tech'
-                            ? (isDarkMode ? 'bg-amber-900/50 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20' : 'bg-amber-100 text-amber-700 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/20')
-                            : viewMode === 'nfl'
-                              ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20' : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20')
-                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                      }`}
-                    >
-                      {modeLabel.icon}
-                      <span>{modeLabel.text}</span>
-                    </button>
-                    {/* Show selecting indicator when morph is locked for selection */}
-                    {morphLockedForSelection && viewMode === 'morph' && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
-                        Selecting...
-                      </span>
-                    )}
-                    {hasStarted && (
+                <div className={`px-3 md:px-4 py-2 md:py-3 border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
+                  {/* Primary toolbar row — always visible */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5">
                       <button
-                        onClick={() => {
-                          if (!isNarrativeMode) {
-                            // Turning on Story - disable Bullets and Essence
-                            setIsBulletMode(false);
-                            if (isFirstPrinciplesMode) {
-                              setShowCondensedView(false);
-                              setIsFirstPrinciplesMode(false);
-                            }
-                            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
-                            if (viewMode === 'morph') {
-                              setViewMode('nfl');
-                            }
-                          }
-                          setIsNarrativeMode(!isNarrativeMode);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isNarrativeMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                      >
-                        <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Story</span>
-                      </button>
-                    )}
-                    {/* Bullet Point Mode - Available in Tech and Morph modes */}
-                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && (
-                      <button
-                        onClick={() => {
-                          if (!isBulletMode) {
-                            // Turning on Bullets - disable Story and Essence
-                            setIsNarrativeMode(false);
-                            if (isFirstPrinciplesMode) {
-                              setShowCondensedView(false);
-                              setIsFirstPrinciplesMode(false);
-                            }
-                            // Auto-switch to tech mode — bullets render in expert view
-                            if (viewMode === 'morph') {
-                              setViewMode('tech');
-                            }
-                          }
-                          setIsBulletMode(!isBulletMode);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isBulletMode
-                            ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Bullet Point Mode - Condensed single-sentence summaries"
-                      >
-                        <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Bullets</span>
-                      </button>
-                    )}
-                    {/* First Principles Mode - Available in Tech and Morph modes when condensed data available */}
-                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
-                      <button
-                        onClick={toggleFirstPrinciplesMode}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isFirstPrinciplesMode
-                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="First Principles Mode - WHAT/WHY essence with atomic insights"
-                      >
-                        <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Essence</span>
-                      </button>
-                    )}
-                    {/* ELI Complexity Buttons */}
-                    {hasStarted && (
-                      <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
-                        {([5, 50, 100] as const).map((level) => (
-                          <button
-                            key={level}
-                            onClick={() => handleComplexityChange(level)}
-                            disabled={isRegenerating || isLoading}
-                            className={`px-2 py-2 min-h-touch text-xs font-bold transition-colors ${
-                              mainComplexity === level
-                                ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
-                                : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
-                            } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={level === 5 ? "Explain like I'm 5" : level === 100 ? "Advanced Academic" : "Standard"}
-                          >
-                            ELI{level}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {/* Constellation Mode Button */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setIsConstellationMode(!isConstellationMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isConstellationMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Constellation Mode (G)"
-                      >
-                        <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Graph</span>
-                      </button>
-                    )}
-                    {/* Dual Pane Mode Button */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setIsDualPaneMode(!isDualPaneMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isDualPaneMode
-                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Dual Pane Isomorphic View (P)"
-                      >
-                        <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Dual</span>
-                      </button>
-                    )}
-                    {/* Mastery Mode Button */}
-                    {hasStarted && conceptMap.length > 0 && (
-                      <button
-                        onClick={() => setIsMasteryMode(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isMasteryMode
-                            ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Test My Understanding (U)"
-                      >
-                        <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Mastery</span>
-                      </button>
-                    )}
-                    {/* Study Guide Button */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isStudyGuideMode
-                            ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50 shadow-lg shadow-teal-500/20' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50 shadow-lg shadow-teal-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Generate Study Guide (Y)"
-                      >
-                        <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Guide</span>
-                      </button>
-                    )}
-                    {/* Intuition Mode Button - Opens modal with 3 memorable one-liners */}
-                    {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
-                      <button
-                        onClick={() => setShowIntuitionModal(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showIntuitionModal
-                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="View Core Intuitions"
-                      >
-                        <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
-                        <span className="hidden sm:inline">Intuition</span>
-                      </button>
-                    )}
-                    {/* Regenerate Button - Dice to regenerate description and reset mastery */}
-                    {hasStarted && lastSubmittedTopic && (
-                      <button
-                        onClick={() => {
-                          // Reset mastery session cache (clears quiz progress)
-                          setMasterySessionCache(null);
-                          // Close mastery mode if open
-                          setIsMasteryMode(false);
-                          // Clear study guide cache on reroll
-                          setStudyGuideCache(null);
-                          setIsStudyGuideMode(false);
-                          // Regenerate content for current topic
-                          fetchAnalogy(lastSubmittedTopic);
-                        }}
-                        disabled={isRegenerating || isLoading}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
-                        } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Regenerate description and reset mastery progress"
-                      >
-                        <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
-                        <span className="hidden sm:inline">Reroll</span>
-                      </button>
-                    )}
-                    {/* Ask Question Button - Follow-up Q&A */}
-                    {hasStarted && !isStudyGuideMode && (
-                      <button
-                        onClick={() => setShowFollowUp(!showFollowUp)}
-                        disabled={isLoading}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          showFollowUp
+                        onClick={cycleViewMode}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                          viewMode === 'morph' && !isNarrativeMode
                             ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            : viewMode === 'tech'
+                              ? (isDarkMode ? 'bg-amber-900/50 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20' : 'bg-amber-100 text-amber-700 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/20')
+                              : viewMode === 'nfl'
+                                ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20' : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                         }`}
-                        title="Ask a Follow-up Question"
                       >
-                        <MessageCircle size={14} />
-                        <span className="hidden sm:inline">Ask</span>
+                        {modeLabel.icon}
+                        <span>{modeLabel.text}</span>
                       </button>
-                    )}
-                    {/* Quiz Me Button */}
-                    {hasStarted && !isStudyGuideMode && (
+                      {/* Show selecting indicator when morph is locked for selection */}
+                      {morphLockedForSelection && viewMode === 'morph' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                          Selecting...
+                        </span>
+                      )}
+                      {hasStarted && (
+                        <button
+                          onClick={() => {
+                            if (!isNarrativeMode) {
+                              setIsBulletMode(false);
+                              if (isFirstPrinciplesMode) {
+                                setShowCondensedView(false);
+                                setIsFirstPrinciplesMode(false);
+                              }
+                              if (viewMode === 'morph') {
+                                setViewMode('nfl');
+                              }
+                            }
+                            setIsNarrativeMode(!isNarrativeMode);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isNarrativeMode
+                              ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
+                          <span className="hidden sm:inline">Story</span>
+                        </button>
+                      )}
+                      {/* ELI Complexity Buttons — always in primary row */}
+                      {hasStarted && (
+                        <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
+                          {([5, 50, 100] as const).map((level) => (
+                            <button
+                              key={level}
+                              onClick={() => handleComplexityChange(level)}
+                              disabled={isRegenerating || isLoading}
+                              className={`px-2 py-1.5 md:py-2 min-h-touch text-xs font-bold transition-colors ${
+                                mainComplexity === level
+                                  ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
+                                  : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
+                              } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title={level === 5 ? "Explain like I'm 5" : level === 100 ? "Advanced Academic" : "Standard"}
+                            >
+                              ELI{level}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Mobile: "More" toggle — only on mobile when content has loaded */}
+                      {isMobile && hasStarted && (
+                        <button
+                          onClick={() => setShowMoreTools(!showMoreTools)}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            showMoreTools
+                              ? (isDarkMode ? 'bg-neutral-600 text-white' : 'bg-neutral-300 text-neutral-800')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')
+                          }`}
+                          title="More tools"
+                        >
+                          <ChevronDown size={14} className={`transition-transform ${showMoreTools ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                      {/* Desktop: show ALL remaining buttons inline (no change from before) */}
+                      {/* Mobile: these go into collapsible section below */}
+                      {!isMobile && (
+                        <>
+                          {/* Bullet Point Mode */}
+                          {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && (
+                            <button
+                              onClick={() => {
+                                if (!isBulletMode) {
+                                  setIsNarrativeMode(false);
+                                  if (isFirstPrinciplesMode) {
+                                    setShowCondensedView(false);
+                                    setIsFirstPrinciplesMode(false);
+                                  }
+                                  if (viewMode === 'morph') {
+                                    setViewMode('tech');
+                                  }
+                                }
+                                setIsBulletMode(!isBulletMode);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isBulletMode
+                                  ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Bullet Point Mode"
+                            >
+                              <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Bullets</span>
+                            </button>
+                          )}
+                          {/* First Principles Mode */}
+                          {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
+                            <button
+                              onClick={toggleFirstPrinciplesMode}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isFirstPrinciplesMode
+                                  ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="First Principles Mode"
+                            >
+                              <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Essence</span>
+                            </button>
+                          )}
+                          {/* Constellation Mode */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setIsConstellationMode(!isConstellationMode)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isConstellationMode
+                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Constellation Mode (G)"
+                            >
+                              <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Graph</span>
+                            </button>
+                          )}
+                          {/* Dual Pane Mode */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isDualPaneMode
+                                  ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Dual Pane Isomorphic View (P)"
+                            >
+                              <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Dual</span>
+                            </button>
+                          )}
+                          {/* Mastery Mode */}
+                          {hasStarted && conceptMap.length > 0 && (
+                            <button
+                              onClick={() => setIsMasteryMode(true)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isMasteryMode
+                                  ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Test My Understanding (U)"
+                            >
+                              <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Mastery</span>
+                            </button>
+                          )}
+                          {/* Study Guide */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isStudyGuideMode
+                                  ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50 shadow-lg shadow-teal-500/20' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50 shadow-lg shadow-teal-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Generate Study Guide (Y)"
+                            >
+                              <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Guide</span>
+                            </button>
+                          )}
+                          {/* Intuition */}
+                          {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
+                            <button
+                              onClick={() => setShowIntuitionModal(true)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showIntuitionModal
+                                  ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="View Core Intuitions"
+                            >
+                              <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
+                              <span className="hidden sm:inline">Intuition</span>
+                            </button>
+                          )}
+                          {/* Reroll */}
+                          {hasStarted && lastSubmittedTopic && (
+                            <button
+                              onClick={() => {
+                                setMasterySessionCache(null);
+                                setIsMasteryMode(false);
+                                setStudyGuideCache(null);
+                                setIsStudyGuideMode(false);
+                                fetchAnalogy(lastSubmittedTopic);
+                              }}
+                              disabled={isRegenerating || isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
+                              } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Regenerate description and reset mastery progress"
+                            >
+                              <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                              <span className="hidden sm:inline">Reroll</span>
+                            </button>
+                          )}
+                          {/* Ask */}
+                          {hasStarted && !isStudyGuideMode && (
+                            <button
+                              onClick={() => setShowFollowUp(!showFollowUp)}
+                              disabled={isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                              } ${
+                                showFollowUp
+                                  ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Ask a Follow-up Question"
+                            >
+                              <MessageCircle size={14} />
+                              <span className="hidden sm:inline">Ask</span>
+                            </button>
+                          )}
+                          {/* Quiz */}
+                          {hasStarted && !isStudyGuideMode && (
+                            <button
+                              onClick={() => fetchQuiz(false)}
+                              disabled={isQuizLoading || isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                              } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
+                              title="Quick Quiz"
+                            >
+                              {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
+                              <span className="hidden sm:inline">Quiz</span>
+                            </button>
+                          )}
+                          {/* Synthesis */}
+                          {synthesisSummary && !isStudyGuideMode && (
+                            <button
+                              onClick={() => setShowSynthesis(!showSynthesis)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showSynthesis
+                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="View Synthesis Summary"
+                            >
+                              <BrainCircuit size={14} />
+                              <span className="hidden sm:inline">Synthesis</span>
+                            </button>
+                          )}
+                          {/* Mastery History */}
+                          {masteryHistory.length > 0 && (
+                            <button
+                              onClick={() => setShowMasteryHistory(true)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showMasteryHistory
+                                  ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`${masteryHistory.length} Mastered Topics`}
+                            >
+                              <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
+                              <span className="hidden sm:inline">{masteryHistory.length}</span>
+                            </button>
+                          )}
+                          {/* Text Scale */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => {
+                                const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                                const currentIndex = scales.indexOf(textScale);
+                                setTextScale(scales[(currentIndex + 1) % scales.length]);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                textScale > 1
+                                  ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
+                            >
+                              <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                            </button>
+                          )}
+                          {/* Font Preset */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setShowFontPicker(!showFontPicker)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showFontPicker
+                                  ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50 shadow-lg shadow-indigo-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`Reading Font: ${fontPreset.name}`}
+                            >
+                              <span className="text-sm font-serif">Aa</span>
+                              <span className="hidden sm:inline">{fontPreset.emoji}</span>
+                            </button>
+                          )}
+                          {/* Regenerating indicator */}
+                          {isRegenerating && (
+                            <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                              <Loader2 size={12} className="animate-spin" />
+                              Regenerating...
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => fetchQuiz(false)}
-                        disabled={isQuizLoading || isLoading}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
-                        title="Quick Quiz"
-                      >
-                        {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
-                        <span className="hidden sm:inline">Quiz</span>
-                      </button>
-                    )}
-                    {/* Synthesis Button */}
-                    {synthesisSummary && !isStudyGuideMode && (
-                      <button
-                        onClick={() => setShowSynthesis(!showSynthesis)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showSynthesis
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        onClick={() => setIsIsomorphicMode(!isIsomorphicMode)}
+                        className={`p-2 rounded-lg transition-colors mr-1 ${
+                          isIsomorphicMode
+                            ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-600')
+                            : (isDarkMode ? 'text-neutral-500 hover:bg-neutral-700' : 'text-neutral-400 hover:bg-neutral-100')
                         }`}
-                        title="View Synthesis Summary"
+                        title="Isomorphic Colors"
                       >
-                        <BrainCircuit size={14} />
-                        <span className="hidden sm:inline">Synthesis</span>
+                        <Palette size={16} />
                       </button>
-                    )}
-                    {/* Mastery History Button - Shows gold medals for mastered topics */}
-                    {masteryHistory.length > 0 && (
                       <button
-                        onClick={() => setShowMasteryHistory(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showMasteryHistory
-                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title={`${masteryHistory.length} Mastered Topics`}
+                        onClick={() => setIsImmersive(!isImmersive)}
+                        className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:bg-neutral-700' : 'text-neutral-500 hover:bg-neutral-100'}`}
+                        title={isImmersive ? "Exit Immersive" : "Immersive Mode"}
                       >
-                        <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
-                        <span className="hidden sm:inline">{masteryHistory.length}</span>
+                        {isImmersive ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                       </button>
-                    )}
-                    {/* Text Scale Control */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => {
-                          const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
-                          const currentIndex = scales.indexOf(textScale);
-                          setTextScale(scales[(currentIndex + 1) % scales.length]);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          textScale > 1
-                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
-                      >
-                        <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
-                      </button>
-                    )}
-                    {/* Font Preset Picker Toggle */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setShowFontPicker(!showFontPicker)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showFontPicker
-                            ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50 shadow-lg shadow-indigo-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title={`Reading Font: ${fontPreset.name}`}
-                      >
-                        <span className="text-sm font-serif">Aa</span>
-                        <span className="hidden sm:inline">{fontPreset.emoji}</span>
-                      </button>
-                    )}
-                    {/* Regenerating indicator */}
-                    {isRegenerating && (
-                      <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
-                        <Loader2 size={12} className="animate-spin" />
-                        Regenerating...
-                      </span>
-                    )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsIsomorphicMode(!isIsomorphicMode)}
-                      className={`p-2 rounded-lg transition-colors mr-1 ${
-                        isIsomorphicMode
-                          ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-600')
-                          : (isDarkMode ? 'text-neutral-500 hover:bg-neutral-700' : 'text-neutral-400 hover:bg-neutral-100')
-                      }`}
-                      title="Isomorphic Colors"
+
+                  {/* Mobile: Collapsible secondary toolbar */}
+                  {isMobile && hasStarted && (
+                    <div
+                      className={`overflow-hidden transition-all duration-200 ease-in-out ${showMoreTools ? 'max-h-96 mt-2' : 'max-h-0'}`}
                     >
-                      <Palette size={16} />
-                    </button>
-                    <button
-                      onClick={() => setIsImmersive(!isImmersive)}
-                      className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:bg-neutral-700' : 'text-neutral-500 hover:bg-neutral-100'}`}
-                      title={isImmersive ? "Exit Immersive" : "Immersive Mode"}
-                    >
-                      {isImmersive ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                    </button>
-                  </div>
+                      <div className={`flex items-center flex-wrap gap-x-2 gap-y-1.5 pt-2 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                        {/* Bullets */}
+                        {(viewMode === 'tech' || viewMode === 'morph') && (
+                          <button
+                            onClick={() => {
+                              if (!isBulletMode) {
+                                setIsNarrativeMode(false);
+                                if (isFirstPrinciplesMode) {
+                                  setShowCondensedView(false);
+                                  setIsFirstPrinciplesMode(false);
+                                }
+                                if (viewMode === 'morph') {
+                                  setViewMode('tech');
+                                }
+                              }
+                              setIsBulletMode(!isBulletMode);
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isBulletMode
+                                ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
+                            <span>Bullets</span>
+                          </button>
+                        )}
+                        {/* Essence */}
+                        {(viewMode === 'tech' || viewMode === 'morph') && condensedData && (
+                          <button
+                            onClick={toggleFirstPrinciplesMode}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isFirstPrinciplesMode
+                                ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
+                            <span>Essence</span>
+                          </button>
+                        )}
+                        {/* Graph */}
+                        <button
+                          onClick={() => setIsConstellationMode(!isConstellationMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isConstellationMode
+                              ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
+                          <span>Graph</span>
+                        </button>
+                        {/* Dual */}
+                        <button
+                          onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isDualPaneMode
+                              ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
+                          <span>Dual</span>
+                        </button>
+                        {/* Mastery */}
+                        {conceptMap.length > 0 && (
+                          <button
+                            onClick={() => setIsMasteryMode(true)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isMasteryMode
+                                ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
+                            <span>Mastery</span>
+                          </button>
+                        )}
+                        {/* Guide */}
+                        <button
+                          onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isStudyGuideMode
+                              ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
+                          <span>Guide</span>
+                        </button>
+                        {/* Intuition */}
+                        {segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
+                          <button
+                            onClick={() => setShowIntuitionModal(true)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              showIntuitionModal
+                                ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
+                            <span>Intuition</span>
+                          </button>
+                        )}
+                        {/* Reroll */}
+                        {lastSubmittedTopic && (
+                          <button
+                            onClick={() => {
+                              setMasterySessionCache(null);
+                              setIsMasteryMode(false);
+                              setStudyGuideCache(null);
+                              setIsStudyGuideMode(false);
+                              fetchAnalogy(lastSubmittedTopic);
+                            }}
+                            disabled={isRegenerating || isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'
+                            } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                            <span>Reroll</span>
+                          </button>
+                        )}
+                        {/* Ask */}
+                        {!isStudyGuideMode && (
+                          <button
+                            onClick={() => setShowFollowUp(!showFollowUp)}
+                            disabled={isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${
+                              showFollowUp
+                                ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <MessageCircle size={14} />
+                            <span>Ask</span>
+                          </button>
+                        )}
+                        {/* Quiz */}
+                        {!isStudyGuideMode && (
+                          <button
+                            onClick={() => fetchQuiz(false)}
+                            disabled={isQuizLoading || isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
+                          >
+                            {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
+                            <span>Quiz</span>
+                          </button>
+                        )}
+                        {/* Synthesis */}
+                        {synthesisSummary && !isStudyGuideMode && (
+                          <button
+                            onClick={() => setShowSynthesis(!showSynthesis)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              showSynthesis
+                                ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <BrainCircuit size={14} />
+                            <span>Synthesis</span>
+                          </button>
+                        )}
+                        {/* Mastery History */}
+                        {masteryHistory.length > 0 && (
+                          <button
+                            onClick={() => setShowMasteryHistory(true)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              showMasteryHistory
+                                ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
+                            <span>{masteryHistory.length}</span>
+                          </button>
+                        )}
+                        {/* Text Scale */}
+                        <button
+                          onClick={() => {
+                            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                            const currentIndex = scales.indexOf(textScale);
+                            setTextScale(scales[(currentIndex + 1) % scales.length]);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            textScale > 1
+                              ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+                          <span>{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                        </button>
+                        {/* Font Preset */}
+                        <button
+                          onClick={() => setShowFontPicker(!showFontPicker)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            showFontPicker
+                              ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <span className="text-sm font-serif">Aa</span>
+                          <span>{fontPreset.emoji}</span>
+                        </button>
+                        {/* Regenerating indicator */}
+                        {isRegenerating && (
+                          <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                            <Loader2 size={12} className="animate-spin" />
+                            Regenerating...
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Font Picker Panel */}
@@ -4508,19 +4750,35 @@ export default function App() {
       {/* Symbol Glossary Modal - Draggable, No Blur - Hidden in analogy mode */}
       {showSymbolGlossary && !(viewMode === 'morph' && isHovering) && (
         <div
-          className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
-          style={{
-            left: '50%',
-            top: '50%',
-            transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
-            maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
-            willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
-          }}
+          className={`fixed z-[100] shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'} ${
+            isMobile
+              ? 'left-0 right-0 bottom-0 w-full rounded-t-2xl'
+              : `${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl`
+          }`}
+          style={isMobile
+            ? {
+                maxHeight: isSymbolGuideMinimized ? 'auto' : '70vh',
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              }
+            : {
+                left: '50%',
+                top: '50%',
+                transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
+                maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
+                willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
+              }
+          }
         >
-          {/* Draggable Header */}
+          {/* Mobile drag handle bar */}
+          {isMobile && (
+            <div className="flex justify-center pt-2 pb-1">
+              <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} />
+            </div>
+          )}
+          {/* Draggable Header (desktop) / Static Header (mobile) */}
           <div
-            className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
-            onMouseDown={(e) => {
+            className={`px-4 py-3 border-b select-none ${isMobile ? '' : 'cursor-move'} ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} ${isMobile ? '' : 'rounded-t-2xl'}`}
+            onMouseDown={isMobile ? undefined : (e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsDraggingSymbolGuide(true);

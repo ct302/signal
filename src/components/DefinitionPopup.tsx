@@ -170,7 +170,8 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         right: 0,
         width: '100%',
         height: '60vh',
-        transform: 'none'
+        transform: 'none',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
       }
     : {
         top: defPos ? defPos.top : defPosition.top,
