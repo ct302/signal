@@ -1580,13 +1580,44 @@ export default function App() {
 
     selectionTimeoutRef.current = setTimeout(() => {
       const selection = window.getSelection();
-      const selectedText = selection?.toString().trim();
+      const rawSelectedText = selection?.toString().trim();
 
-      if (selectedText && selectedText.length > 0) {
+      if (rawSelectedText && rawSelectedText.length > 0) {
         // Get the selection range to position the button
         const range = selection?.getRangeAt(0);
         if (range) {
           const rect = range.getBoundingClientRect();
+
+          // Reconstruct LaTeX-aware selection text
+          // Walk the range to find katex-source spans and substitute their data-latex
+          let selectedText = rawSelectedText;
+          try {
+            const container = range.commonAncestorContainer;
+            const parentEl = container instanceof Element ? container : container.parentElement;
+            if (parentEl) {
+              const fragment = range.cloneContents();
+              const tempDiv = document.createElement('div');
+              tempDiv.appendChild(fragment);
+              const clonedKatexSpans = tempDiv.querySelectorAll('.katex-source');
+              clonedKatexSpans.forEach((clonedSpan) => {
+                const garbledText = clonedSpan.textContent || '';
+                const latexSource = clonedSpan.getAttribute('data-latex');
+                if (latexSource && garbledText) {
+                  const idx = selectedText.indexOf(garbledText);
+                  if (idx !== -1) {
+                    selectedText =
+                      selectedText.substring(0, idx) +
+                      latexSource +
+                      selectedText.substring(idx + garbledText.length);
+                  }
+                }
+              });
+              selectedText = selectedText.trim();
+            }
+          } catch {
+            // Fall back to raw selection — prepareTermForHeader will still attempt cleanup
+            selectedText = rawSelectedText;
+          }
 
           // Position the button above the selection (or below if near top)
           const buttonTop = rect.top < 60
@@ -2421,7 +2452,7 @@ export default function App() {
         if (window.katex) {
           try {
             const html = window.katex.renderToString(latexContent, { throwOnError: false });
-            return <span key={i} dangerouslySetInnerHTML={{ __html: html }} className="inline-block not-italic normal-case" />;
+            return <span key={i} dangerouslySetInnerHTML={{ __html: html }} data-latex={part} className="inline-block not-italic normal-case katex-source" />;
           } catch (e) {
             return <span key={i}>{latexContent}</span>;
           }
@@ -2500,7 +2531,7 @@ export default function App() {
                 else if (latexContent.startsWith('$')) latexContent = latexContent.slice(1, -1);
                 if (window.katex) {
                   const html = window.katex.renderToString(latexContent, { throwOnError: false });
-                  return <span key={i} dangerouslySetInnerHTML={{ __html: html }} className="inline-block not-italic normal-case" />;
+                  return <span key={i} dangerouslySetInnerHTML={{ __html: html }} data-latex={segment} className="inline-block not-italic normal-case katex-source" />;
                 }
                 return <span key={i}>{latexContent}</span>;
               } catch (e) {
@@ -4616,8 +4647,8 @@ export default function App() {
                               key={symbol}
                               className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
                             >
-                              <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                                {symbol}
+                              <span className={`text-xl font-mono w-auto min-w-[2rem] text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                {renderRichText(symbol, isDarkMode ? 'text-blue-400' : 'text-blue-600')}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <div>
@@ -4630,14 +4661,20 @@ export default function App() {
                                 </div>
                                 {/* Contextual formula — KaTeX rendered */}
                                 {resolvedFormula && (
-                                  <div className={`text-sm mt-1.5 px-2 py-1 rounded ${isDarkMode ? 'bg-neutral-800/80 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
+                                  <div className={`text-sm mt-1.5 px-2 py-1 rounded overflow-x-auto ${isDarkMode ? 'bg-neutral-800/80 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
                                     {renderRichText(resolvedFormula, isDarkMode ? 'text-blue-300' : 'text-blue-700')}
                                   </div>
                                 )}
                                 {/* Simple explanation */}
                                 <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                                  💡 {simple}
+                                  💡 {renderRichText(simple, isDarkMode ? 'text-emerald-400' : 'text-emerald-600')}
                                 </p>
+                                {/* Domain analogy — from API-generated symbol guide */}
+                                {apiEntry?.domain_analogy && (
+                                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                                    {domainEmoji || '🧠'} {renderRichText(apiEntry.domain_analogy, isDarkMode ? 'text-amber-400' : 'text-amber-600')}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           );
