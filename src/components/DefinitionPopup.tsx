@@ -78,18 +78,22 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         top: defPos ? defPos.top : defPosition.top,
         left: defPos ? defPos.left : defPosition.left,
         width: `${defSize.width}px`,
-        height: 'auto',
+        // If user has explicitly resized vertically, use that height; otherwise auto with max
+        ...(defSize.height
+          ? { height: `${defSize.height}px` }
+          : { height: 'auto', maxHeight: '70vh' }
+        ),
         minWidth: '280px',
         minHeight: '200px',
-        maxHeight: '70vh'
       };
 
   return (
     <div className="def-window fixed z-[200] flex flex-col signal-font" style={style}>
       <div
-        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none h-full ${
+        className={`bg-neutral-950 text-white p-4 shadow-2xl border border-neutral-800 flex flex-col relative select-none overflow-hidden ${
           isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
+        style={{ height: '100%' }}
       >
         {/* Drag grip indicator */}
         {!isMobile && (
@@ -131,113 +135,116 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           </div>
         </div>
 
-        {/* Content */}
-        <div
-          className="text-sm leading-relaxed text-neutral-200 flex-1 overflow-y-auto -mr-2 pr-2"
-          style={{ fontSize: `${textScale}em` }}
-        >
-          {isLoadingDef ? (
-            <span className="italic text-neutral-400">Defining...</span>
-          ) : (
-            renderAttentiveText(
-              defText,
-              defThreshold,
-              setDefThreshold,
-              isDefColorMode,
-              setIsDefColorMode,
-              null,
-              "text-neutral-200",
-              textScale,
-              onWordClick
-            )
-          )}
-        </div>
-        {onWordClick && !isLoadingDef && (
-          <div className="text-xs text-neutral-600 mt-1 text-center">
-            Click any word for a nested definition
-          </div>
-        )}
-
-        {/* Symbol Guide - API-provided context-aware symbol explanations */}
-        {!isLoadingDef && symbolGuide.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-neutral-800">
-            <button
-              onClick={() => setShowGlossary(!showGlossary)}
-              className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors w-full"
-            >
-              <BookOpen size={12} />
-              <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
-              <span className="text-neutral-600">({symbolGuide.length})</span>
-              {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
-            </button>
-            {showGlossary && (
-              <div className="mt-2 space-y-2">
-                {symbolGuide.map(({ symbol, name, meaning, simple, formula }) => (
-                  <div
-                    key={symbol}
-                    className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-blue-300">{renderRichText(symbol, "text-blue-300")}</span>
-                      <span className="text-white font-medium">{renderRichText(name, "text-white")}</span>
-                    </div>
-                    <div className="text-neutral-400 text-xs mt-0.5">{renderRichText(meaning, "text-neutral-400")}</div>
-                    {formula && (
-                      <div className="text-blue-300 text-xs mt-1 px-1.5 py-0.5 rounded bg-neutral-900/80">
-                        {renderRichText(formula, "text-blue-300")}
-                      </div>
-                    )}
-                    {simple && (
-                      <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
+        {/* Scrollable content area — contains definition, symbol guide, and footer controls */}
+        <div className="flex-1 overflow-y-auto -mr-2 pr-2 min-h-0">
+          {/* Definition Text */}
+          <div
+            className="text-sm leading-relaxed text-neutral-200"
+            style={{ fontSize: `${textScale}em` }}
+          >
+            {isLoadingDef ? (
+              <span className="italic text-neutral-400">Defining...</span>
+            ) : (
+              renderAttentiveText(
+                defText,
+                defThreshold,
+                setDefThreshold,
+                isDefColorMode,
+                setIsDefColorMode,
+                null,
+                "text-neutral-200",
+                textScale,
+                onWordClick
+              )
             )}
           </div>
-        )}
+          {onWordClick && !isLoadingDef && (
+            <div className="text-xs text-neutral-600 mt-1 text-center">
+              Click any word for a nested definition
+            </div>
+          )}
 
-        {/* Footer Controls */}
-        <div className="pt-3 border-t border-neutral-800 flex flex-col gap-3">
-          {/* ELI Buttons */}
-          <div className="flex bg-neutral-900 p-1 rounded-lg w-full">
-            {[5, 50, 100].map((level) => (
+          {/* Symbol Guide - API-provided context-aware symbol explanations */}
+          {!isLoadingDef && symbolGuide.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-neutral-800">
               <button
-                key={level}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEliClick(level);
-                }}
-                disabled={isLoadingDef}
-                className={`flex-1 px-2 py-2 min-h-touch text-xs font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
-                  defComplexity === level
-                    ? 'bg-neutral-700 text-white'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                } ${isLoadingDef ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => setShowGlossary(!showGlossary)}
+                className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors w-full"
               >
-                ELI{level}
+                <BookOpen size={12} />
+                <span className="font-semibold uppercase tracking-wider">Symbol Guide</span>
+                <span className="text-neutral-600">({symbolGuide.length})</span>
+                {showGlossary ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
               </button>
-            ))}
-          </div>
+              {showGlossary && (
+                <div className="mt-2 space-y-2">
+                  {symbolGuide.map(({ symbol, name, meaning, simple, formula }) => (
+                    <div
+                      key={symbol}
+                      className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-blue-300">{renderRichText(symbol, "text-blue-300")}</span>
+                        <span className="text-white font-medium">{renderRichText(name, "text-white")}</span>
+                      </div>
+                      <div className="text-neutral-400 text-xs mt-0.5">{renderRichText(meaning, "text-neutral-400")}</div>
+                      {formula && (
+                        <div className="text-blue-300 text-xs mt-1 px-1.5 py-0.5 rounded bg-neutral-900/80">
+                          {renderRichText(formula, "text-blue-300")}
+                        </div>
+                      )}
+                      {simple && (
+                        <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Copy Button */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 w-full justify-end">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCopy(defText, 'def');
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`p-1.5 rounded-md transition-colors ${
-                  copiedId === 'def'
-                    ? 'bg-green-900/50 text-green-400'
-                    : 'text-neutral-500 hover:text-white'
-                }`}
-                title="Copy Definition"
-              >
-                {copiedId === 'def' ? <Check size={14} /> : <Copy size={14} />}
-              </button>
+          {/* Footer Controls — inside scrollable area so they're always reachable */}
+          <div className="pt-3 mt-2 border-t border-neutral-800 flex flex-col gap-3">
+            {/* ELI Buttons */}
+            <div className="flex bg-neutral-900 p-1 rounded-lg w-full">
+              {[5, 50, 100].map((level) => (
+                <button
+                  key={level}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEliClick(level);
+                  }}
+                  disabled={isLoadingDef}
+                  className={`flex-1 px-2 py-2 min-h-touch text-xs font-bold rounded-md transition-colors flex justify-center items-center gap-1 ${
+                    defComplexity === level
+                      ? 'bg-neutral-700 text-white'
+                      : 'text-neutral-500 hover:text-neutral-300'
+                  } ${isLoadingDef ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  ELI{level}
+                </button>
+              ))}
+            </div>
+
+            {/* Copy Button */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 w-full justify-end">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(defText, 'def');
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    copiedId === 'def'
+                      ? 'bg-green-900/50 text-green-400'
+                      : 'text-neutral-500 hover:text-white'
+                  }`}
+                  title="Copy Definition"
+                >
+                  {copiedId === 'def' ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -245,13 +252,30 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         {/* Resize Handles */}
         {!isMobile && (
           <>
+            {/* Left edge — horizontal resize */}
             <div
               className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 transition-colors"
               onMouseDown={(e) => onStartResize(e, 'def-left')}
             />
+            {/* Right edge — horizontal resize */}
             <div
               className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 transition-colors"
               onMouseDown={(e) => onStartResize(e, 'def-right')}
+            />
+            {/* Bottom edge — vertical resize */}
+            <div
+              className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize hover:bg-white/10 transition-colors"
+              onMouseDown={(e) => onStartResize(e, 'def-bottom')}
+            />
+            {/* Bottom-right corner — diagonal resize */}
+            <div
+              className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-white/10 transition-colors rounded-bl"
+              onMouseDown={(e) => onStartResize(e, 'def-corner')}
+            />
+            {/* Bottom-left corner — diagonal resize */}
+            <div
+              className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-white/10 transition-colors rounded-br"
+              onMouseDown={(e) => onStartResize(e, 'def-left-corner')}
             />
           </>
         )}

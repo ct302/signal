@@ -6,17 +6,17 @@ interface ContextCardProps {
   isDarkMode: boolean;
 }
 
-// Sticky note color palettes — warm pastels for light, muted tones for dark
+// Sticky note color palettes — high-contrast text on warm pastels (light) / muted tones (dark)
 const stickyColors = {
   light: [
-    { bg: 'bg-yellow-100', border: 'border-yellow-300/60', text: 'text-yellow-900', pin: 'bg-yellow-400', shadow: 'shadow-yellow-200/50' },
-    { bg: 'bg-pink-100', border: 'border-pink-300/60', text: 'text-pink-900', pin: 'bg-pink-400', shadow: 'shadow-pink-200/50' },
-    { bg: 'bg-blue-100', border: 'border-blue-300/60', text: 'text-blue-900', pin: 'bg-blue-400', shadow: 'shadow-blue-200/50' },
+    { bg: 'bg-yellow-100', border: 'border-yellow-300/60', text: 'text-neutral-800', label: 'text-yellow-800', pin: 'bg-yellow-400', shadow: 'shadow-yellow-200/50' },
+    { bg: 'bg-pink-100', border: 'border-pink-300/60', text: 'text-neutral-800', label: 'text-pink-800', pin: 'bg-pink-400', shadow: 'shadow-pink-200/50' },
+    { bg: 'bg-blue-100', border: 'border-blue-300/60', text: 'text-neutral-800', label: 'text-blue-800', pin: 'bg-blue-400', shadow: 'shadow-blue-200/50' },
   ],
   dark: [
-    { bg: 'bg-yellow-900/30', border: 'border-yellow-700/40', text: 'text-yellow-200', pin: 'bg-yellow-500', shadow: 'shadow-yellow-900/30' },
-    { bg: 'bg-pink-900/30', border: 'border-pink-700/40', text: 'text-pink-200', pin: 'bg-pink-500', shadow: 'shadow-pink-900/30' },
-    { bg: 'bg-blue-900/30', border: 'border-blue-700/40', text: 'text-blue-200', pin: 'bg-blue-500', shadow: 'shadow-blue-900/30' },
+    { bg: 'bg-yellow-900/30', border: 'border-yellow-700/40', text: 'text-yellow-100', label: 'text-yellow-300', pin: 'bg-yellow-500', shadow: 'shadow-yellow-900/30' },
+    { bg: 'bg-pink-900/30', border: 'border-pink-700/40', text: 'text-pink-100', label: 'text-pink-300', pin: 'bg-pink-500', shadow: 'shadow-pink-900/30' },
+    { bg: 'bg-blue-900/30', border: 'border-blue-700/40', text: 'text-blue-100', label: 'text-blue-300', pin: 'bg-blue-500', shadow: 'shadow-blue-900/30' },
   ]
 };
 
@@ -61,7 +61,7 @@ export const ContextCard: React.FC<ContextCardProps> = ({
               className={`
                 relative ${rotation} hover:rotate-0
                 transition-transform duration-200 ease-out
-                ${colors.bg} ${colors.border} ${colors.text}
+                ${colors.bg} ${colors.border}
                 border rounded-sm shadow-md ${colors.shadow}
                 px-3.5 pt-5 pb-3
                 group
@@ -79,13 +79,13 @@ export const ContextCard: React.FC<ContextCardProps> = ({
               {/* Label */}
               <div className="flex items-center gap-1.5 mb-1.5">
                 <span className="text-sm">{tip.emoji}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                <span className={`text-[10px] font-bold uppercase tracking-wider opacity-70 ${colors.label}`}>
                   {tip.label}
                 </span>
               </div>
 
               {/* Tip text */}
-              <p className="text-xs leading-relaxed italic">
+              <p className={`text-sm leading-relaxed ${colors.text}`}>
                 {tip.text}
               </p>
             </div>

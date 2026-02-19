@@ -80,6 +80,7 @@ export interface Position {
 
 export interface Size {
   width: number;
+  height?: number;
 }
 
 export interface ContextData {

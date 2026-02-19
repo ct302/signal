@@ -19,7 +19,9 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const isResizingRef = useRef(false);
   const resizeTargetRef = useRef<string | null>(null);
   const resizeStartXRef = useRef(0);
+  const resizeStartYRef = useRef(0);
   const resizeStartWidthRef = useRef(0);
+  const resizeStartHeightRef = useRef(0);
 
   const startDrag = useCallback((e: React.MouseEvent, target: string) => {
     if (isMobile) return;
@@ -41,12 +43,21 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     isResizingRef.current = true;
     resizeTargetRef.current = target;
     resizeStartXRef.current = e.clientX;
+    resizeStartYRef.current = e.clientY;
     if (target.startsWith('def')) {
       resizeStartWidthRef.current = defSize.width;
+      // If no explicit height yet, measure the current rendered element height
+      if (defSize.height) {
+        resizeStartHeightRef.current = defSize.height;
+      } else {
+        const el = (e.currentTarget as HTMLElement).closest('.def-window');
+        resizeStartHeightRef.current = el ? el.getBoundingClientRect().height : 350;
+      }
     } else if (target.startsWith('mini')) {
       resizeStartWidthRef.current = miniDefSize.width;
+      resizeStartHeightRef.current = 0;
     }
-  }, [isMobile, defSize.width, miniDefSize.width]);
+  }, [isMobile, defSize.width, defSize.height, miniDefSize.width]);
 
   const handleMiniHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile || !(e.target as HTMLElement).closest('.header-drag-area')) return;
@@ -87,27 +98,44 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
 
       if (isResizingRef.current && resizeTargetRef.current) {
         const deltaX = e.clientX - resizeStartXRef.current;
-        const isLeft = resizeTargetRef.current.includes('left');
-        const newWidth = isLeft
-          ? resizeStartWidthRef.current - deltaX
-          : resizeStartWidthRef.current + deltaX;
-        const clampedWidth = Math.max(200, Math.min(600, newWidth));
+        const deltaY = e.clientY - resizeStartYRef.current;
+        const target = resizeTargetRef.current;
+        const isLeft = target.includes('left');
+        const isBottom = target.includes('bottom');
+        const isCorner = target.includes('corner');
 
-        if (resizeTargetRef.current.startsWith('def')) {
-          setDefSize({ width: clampedWidth });
-          if (isLeft && defPos) {
-            const widthDelta = defSize.width - clampedWidth;
-            setDefPos(prev =>
-              prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
-            );
+        // Horizontal resize
+        if (!isBottom || isCorner) {
+          const newWidth = isLeft
+            ? resizeStartWidthRef.current - deltaX
+            : resizeStartWidthRef.current + deltaX;
+          const clampedWidth = Math.max(200, Math.min(600, newWidth));
+
+          if (target.startsWith('def')) {
+            setDefSize(prev => ({ ...prev, width: clampedWidth }));
+            if (isLeft && defPos) {
+              const widthDelta = defSize.width - clampedWidth;
+              setDefPos(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
+          } else if (target.startsWith('mini')) {
+            setMiniDefSize({ width: clampedWidth });
+            if (isLeft && miniDefPosition) {
+              const widthDelta = miniDefSize.width - clampedWidth;
+              setMiniDefPosition(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
           }
-        } else if (resizeTargetRef.current.startsWith('mini')) {
-          setMiniDefSize({ width: clampedWidth });
-          if (isLeft && miniDefPosition) {
-            const widthDelta = miniDefSize.width - clampedWidth;
-            setMiniDefPosition(prev =>
-              prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
-            );
+        }
+
+        // Vertical resize (bottom or corner)
+        if (isBottom || isCorner) {
+          if (target.startsWith('def')) {
+            const newHeight = resizeStartHeightRef.current + deltaY;
+            const clampedHeight = Math.max(200, Math.min(window.innerHeight * 0.85, newHeight));
+            setDefSize(prev => ({ ...prev, height: clampedHeight }));
           }
         }
       }
@@ -126,7 +154,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [defSize.width, miniDefSize.width, defPos, miniDefPosition]);
+  }, [defSize.width, defSize.height, miniDefSize.width, defPos, miniDefPosition]);
 
   return {
     defPos,
