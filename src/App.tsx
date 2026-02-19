@@ -308,6 +308,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'morph' | 'nfl' | 'tech'>('morph');
   const [mode, setMode] = useState<'opacity' | 'size' | 'heatmap'>('opacity');
   const [threshold, setThreshold] = useState(0.3);
+  const [isAttentionMeterCollapsed, setIsAttentionMeterCollapsed] = useState(false);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isBulletMode, setIsBulletMode] = useState(false); // Bullet point mode for Tech Lock
   const [activeBulletIndex, setActiveBulletIndex] = useState<number | null>(null); // Bullet analogy tooltip
@@ -3555,24 +3556,43 @@ export default function App() {
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={handleSelectionEnd}
                 >
-                  {/* Attention Meter - locked at top of content area */}
+                  {/* Attention Meter - locked at top of content area, collapsible */}
                   {!(showCondensedView && isFirstPrinciplesMode) && (
-                    <div className={`sticky top-0 z-20 pb-3 mb-4 border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-                      <div className="flex items-center gap-4">
-                        <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
-                        <input
-                          type="range"
-                          min="0.1"
-                          max="1.0"
-                          step="0.05"
-                          value={threshold}
-                          onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                          className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
-                        />
-                        <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                          {Math.round(threshold * 100)}%
-                        </span>
-                      </div>
+                    <div className={`sticky top-0 z-20 ${isAttentionMeterCollapsed ? 'mb-2' : 'pb-3 mb-4 border-b'} ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                      {isAttentionMeterCollapsed ? (
+                        <button
+                          onClick={() => setIsAttentionMeterCollapsed(false)}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                          title="Show attention meter"
+                        >
+                          <Eye size={12} />
+                          <span className="font-mono">{Math.round(threshold * 100)}%</span>
+                          <ChevronDown size={10} />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-4">
+                          <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1.0"
+                            step="0.05"
+                            value={threshold}
+                            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                            className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
+                          />
+                          <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                            {Math.round(threshold * 100)}%
+                          </span>
+                          <button
+                            onClick={() => setIsAttentionMeterCollapsed(true)}
+                            className={`p-1 rounded-md transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                            title="Minimize attention meter"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
