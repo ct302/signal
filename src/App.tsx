@@ -284,6 +284,7 @@ export default function App() {
   const [synthesisCitation, setSynthesisCitation] = useState("");
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
+  const [defDomainIntuition, setDefDomainIntuition] = useState<string | null>(null);
   const [technicalExplanation, setTechnicalExplanation] = useState<string>(""); // Full 250+ word technical explanation
   const [analogyExplanation, setAnalogyExplanation] = useState<string>(""); // Full 250+ word analogy explanation
 
@@ -1486,20 +1487,23 @@ export default function App() {
       setIsLoadingDef(true);
       setDefText("");
       setDefSymbolGuide([]); // Clear previous symbol guide
+      setDefDomainIntuition(null); // Clear previous domain intuition
       setDefComplexity(level);
     }
 
     try {
-      const result = await fetchDefinitionApi(term, context, level);
-      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[] }
+      const result = await fetchDefinitionApi(term, context, level, analogyDomain);
+      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[], domain_intuition?: string }
       const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
       const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
+      const domainIntuition = typeof result === 'object' && result.domain_intuition ? result.domain_intuition : null;
 
       if (isMini) {
         setMiniDefText(definition);
       } else {
         setDefText(definition);
         setDefSymbolGuide(symbolGuideData);
+        setDefDomainIntuition(domainIntuition);
       }
     } catch (e) {
       const errText = "Could not load definition.";
@@ -1507,6 +1511,7 @@ export default function App() {
       else {
         setDefText(errText);
         setDefSymbolGuide([]);
+        setDefDomainIntuition(null);
       }
     } finally {
       if (isMini) setIsLoadingMiniDef(false);
@@ -4226,6 +4231,9 @@ export default function App() {
           isMobile={isMobile}
           copiedId={copiedId}
           symbolGuide={defSymbolGuide}
+          domainIntuition={defDomainIntuition}
+          analogyDomain={analogyDomain}
+          domainEmoji={domainEmoji}
           onClose={() => {
             setDefPosition(null);
             setSelectedTerm(null);

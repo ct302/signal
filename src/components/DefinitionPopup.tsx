@@ -17,6 +17,9 @@ interface DefinitionPopupProps {
   isMobile: boolean;
   copiedId: string | null;
   symbolGuide?: SymbolGuideEntry[];  // API-provided context-aware symbol explanations
+  domainIntuition?: string | null;   // Domain-mapped intuition for the entire concept
+  analogyDomain?: string;            // User's expert domain (e.g., "NFL", "Cooking")
+  domainEmoji?: string;              // Emoji for the domain
   onClose: () => void;
   onStartDrag: (e: React.MouseEvent, target: string) => void;
   onStartResize: (e: React.MouseEvent, target: string) => void;
@@ -52,6 +55,9 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   isMobile,
   copiedId,
   symbolGuide = [],  // API-provided context-aware symbols
+  domainIntuition,
+  analogyDomain,
+  domainEmoji,
   onClose,
   onStartDrag,
   onStartResize,
@@ -63,6 +69,98 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
 }) => {
   const [textScale, setTextScale] = useState(1);
   const [showGlossary, setShowGlossary] = useState(false);
+
+  // Convert Unicode math characters back to LaTeX for proper KaTeX rendering in the header
+  const prepareTermForHeader = (term: string): string => {
+    if (!term) return term;
+    if (term.includes('$')) return term; // Already has LaTeX delimiters
+
+    // Detect math-like characters (Unicode from KaTeX rendering or operator patterns)
+    const mathIndicators = /[′→←∂∫∑∏∇∞≈≠≤≥±×÷αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΦΨΩ⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ₀₁₂₃₄₅₆₇₈₉]/;
+    const hasOperatorPattern = /[a-zA-Z]\s*\([a-zA-Z]\)|lim|sin|cos|tan|log|ln|exp|det|sup|inf|max|min/i;
+    const hasPrimeNotation = /[a-zA-Z][′']/;
+    const hasFractionLike = /[a-zA-Z]\s*\/\s*[a-zA-Z]/;
+
+    if (mathIndicators.test(term) || hasPrimeNotation.test(term) || hasOperatorPattern.test(term) || hasFractionLike.test(term)) {
+      let latex = term;
+      // Unicode → LaTeX command mappings
+      latex = latex.replace(/′/g, "'");
+      latex = latex.replace(/→/g, ' \\to ');
+      latex = latex.replace(/←/g, ' \\leftarrow ');
+      latex = latex.replace(/∂/g, '\\partial ');
+      latex = latex.replace(/∫/g, '\\int ');
+      latex = latex.replace(/∑/g, '\\sum ');
+      latex = latex.replace(/∏/g, '\\prod ');
+      latex = latex.replace(/∇/g, '\\nabla ');
+      latex = latex.replace(/∞/g, '\\infty ');
+      latex = latex.replace(/≈/g, ' \\approx ');
+      latex = latex.replace(/≠/g, ' \\neq ');
+      latex = latex.replace(/≤/g, ' \\leq ');
+      latex = latex.replace(/≥/g, ' \\geq ');
+      latex = latex.replace(/±/g, ' \\pm ');
+      latex = latex.replace(/×/g, ' \\times ');
+      latex = latex.replace(/÷/g, ' \\div ');
+      // Greek lowercase
+      latex = latex.replace(/α/g, '\\alpha ');
+      latex = latex.replace(/β/g, '\\beta ');
+      latex = latex.replace(/γ/g, '\\gamma ');
+      latex = latex.replace(/δ/g, '\\delta ');
+      latex = latex.replace(/ε/g, '\\varepsilon ');
+      latex = latex.replace(/ζ/g, '\\zeta ');
+      latex = latex.replace(/η/g, '\\eta ');
+      latex = latex.replace(/θ/g, '\\theta ');
+      latex = latex.replace(/λ/g, '\\lambda ');
+      latex = latex.replace(/μ/g, '\\mu ');
+      latex = latex.replace(/π/g, '\\pi ');
+      latex = latex.replace(/σ/g, '\\sigma ');
+      latex = latex.replace(/τ/g, '\\tau ');
+      latex = latex.replace(/φ/g, '\\varphi ');
+      latex = latex.replace(/ω/g, '\\omega ');
+      // Greek uppercase
+      latex = latex.replace(/Γ/g, '\\Gamma ');
+      latex = latex.replace(/Δ/g, '\\Delta ');
+      latex = latex.replace(/Θ/g, '\\Theta ');
+      latex = latex.replace(/Λ/g, '\\Lambda ');
+      latex = latex.replace(/Σ/g, '\\Sigma ');
+      latex = latex.replace(/Π/g, '\\Pi ');
+      latex = latex.replace(/Φ/g, '\\Phi ');
+      latex = latex.replace(/Ψ/g, '\\Psi ');
+      latex = latex.replace(/Ω/g, '\\Omega ');
+      // Superscript digits
+      latex = latex.replace(/⁰/g, '^{0}');
+      latex = latex.replace(/¹/g, '^{1}');
+      latex = latex.replace(/²/g, '^{2}');
+      latex = latex.replace(/³/g, '^{3}');
+      latex = latex.replace(/⁴/g, '^{4}');
+      latex = latex.replace(/⁵/g, '^{5}');
+      latex = latex.replace(/⁶/g, '^{6}');
+      latex = latex.replace(/⁷/g, '^{7}');
+      latex = latex.replace(/⁸/g, '^{8}');
+      latex = latex.replace(/⁹/g, '^{9}');
+      latex = latex.replace(/ⁿ/g, '^{n}');
+      // Subscript digits
+      latex = latex.replace(/₀/g, '_{0}');
+      latex = latex.replace(/₁/g, '_{1}');
+      latex = latex.replace(/₂/g, '_{2}');
+      latex = latex.replace(/₃/g, '_{3}');
+      latex = latex.replace(/₄/g, '_{4}');
+      latex = latex.replace(/₅/g, '_{5}');
+      latex = latex.replace(/₆/g, '_{6}');
+      latex = latex.replace(/₇/g, '_{7}');
+      latex = latex.replace(/₈/g, '_{8}');
+      latex = latex.replace(/₉/g, '_{9}');
+      // Wrap known function names in \text or \operatorname for proper rendering
+      latex = latex.replace(/\blim\b/gi, '\\lim');
+      latex = latex.replace(/\bsin\b/gi, '\\sin');
+      latex = latex.replace(/\bcos\b/gi, '\\cos');
+      latex = latex.replace(/\btan\b/gi, '\\tan');
+      latex = latex.replace(/\blog\b/gi, '\\log');
+      latex = latex.replace(/\bln\b/gi, '\\ln');
+      latex = latex.replace(/\bexp\b/gi, '\\exp');
+      return `$${latex.trim()}$`;
+    }
+    return term;
+  };
 
   const style: React.CSSProperties = isMobile
     ? {
@@ -109,7 +207,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <CornerDownRight size={14} className="text-yellow-400 flex-shrink-0" />
             <span className="font-bold text-sm text-yellow-200 truncate">
-              {renderRichText(selectedTerm, "text-yellow-200")}
+              {renderRichText(prepareTermForHeader(selectedTerm), "text-yellow-200")}
             </span>
           </div>
           <div className="flex gap-1 text-neutral-400 items-center flex-shrink-0 ml-2">
@@ -164,6 +262,15 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             </div>
           )}
 
+          {/* Domain Intuition — maps entire concept to user's expert domain */}
+          {domainIntuition && !isLoadingDef && defComplexity !== 5 && (
+            <div className="mt-2 px-2.5 py-1.5 rounded-md bg-amber-900/20 border border-amber-800/30">
+              <div className="text-amber-300 text-xs">
+                {domainEmoji || '🧠'} {renderRichText(domainIntuition, "text-amber-300")}
+              </div>
+            </div>
+          )}
+
           {/* Symbol Guide - API-provided context-aware symbol explanations */}
           {!isLoadingDef && symbolGuide.length > 0 && (
             <div className="mt-2 pt-2 border-t border-neutral-800">
@@ -178,7 +285,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
               </button>
               {showGlossary && (
                 <div className="mt-2 space-y-2">
-                  {symbolGuide.map(({ symbol, name, meaning, simple, formula }) => (
+                  {symbolGuide.map(({ symbol, name, meaning, simple, formula, domain_analogy }) => (
                     <div
                       key={symbol}
                       className="px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-xs"
@@ -189,12 +296,17 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
                       </div>
                       <div className="text-neutral-400 text-xs mt-0.5">{renderRichText(meaning, "text-neutral-400")}</div>
                       {formula && (
-                        <div className="text-blue-300 text-xs mt-1 px-1.5 py-0.5 rounded bg-neutral-900/80">
+                        <div className="text-blue-300 text-xs mt-1 px-1.5 py-0.5 rounded bg-neutral-900/80 overflow-x-auto">
                           {renderRichText(formula, "text-blue-300")}
                         </div>
                       )}
                       {simple && (
-                        <div className="text-emerald-400 text-xs mt-0.5">💡 {simple}</div>
+                        <div className="text-emerald-400 text-xs mt-0.5">💡 {renderRichText(simple, "text-emerald-400")}</div>
+                      )}
+                      {domain_analogy && (
+                        <div className="text-amber-400 text-xs mt-0.5">
+                          {domainEmoji || '🧠'} {renderRichText(domain_analogy, "text-amber-400")}
+                        </div>
                       )}
                     </div>
                   ))}

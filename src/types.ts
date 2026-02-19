@@ -40,6 +40,7 @@ export interface SymbolGuideEntry {
   meaning: string;       // Technical meaning in THIS context
   simple: string;        // Plain English for learners
   formula?: string;      // KaTeX expression showing compound usage, e.g. "$\\frac{\\partial f}{\\partial x}$"
+  domain_analogy?: string; // Domain-mapped isomorphic intuition (e.g., NFL, cooking)
 }
 
 export interface AttentionMapItem {

@@ -1364,7 +1364,7 @@ Return ONLY valid JSON, no markdown, no explanation.`;
  * - ELI50: 130-150 words (balanced, clear, practical)
  * - ELI100: 220-280 words (graduate-level, formal, dense)
  */
-export const fetchDefinition = async (term: string, context: string, level: number) => {
+export const fetchDefinition = async (term: string, context: string, level: number, domain?: string) => {
   // Word count and style guidance per level
   const levelConfig = {
     5: {
@@ -1418,6 +1418,7 @@ CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslash
 
   // For ELI5, we don't need symbol_guide (no math symbols)
   const includeSymbolGuide = level !== 5;
+  const includeDomain = domain && domain.trim() && level !== 5;
 
   let promptText = `Define "${term}" in context of: "${context}".
 
@@ -1428,14 +1429,16 @@ ${config.style}
 
 Return JSON in this EXACT format:
 {
-  "definition": "Your definition here...",
+  "definition": "Your definition here...",${includeDomain ? `
+  "domain_intuition": "One visceral sentence mapping this ENTIRE concept to ${domain}. Must feel like an 'aha' moment — physical, gut-level, zero jargon. Example for derivatives + NFL: 'The derivative is the exact moment a receiver plants his foot and cuts — it captures that split-second change in direction.'",` : ''}
   "symbol_guide": [${includeSymbolGuide ? `
     {
       "symbol": "symbol as written",
       "name": "Context-specific name for THIS definition (not generic)",
       "meaning": "What it represents in THIS context",
       "simple": "Plain English for beginners",
-      "formula": "$LaTeX compound expression from your definition$ (only for symbols in fractions/sums/integrals — omit for standalone)"
+      "formula": "$LaTeX compound expression from your definition$ (only for symbols in fractions/sums/integrals — omit for standalone)"${includeDomain ? `,
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Be specific to what the symbol DOES."` : ''}
     }
   ` : ''}]
 }
@@ -1446,7 +1449,19 @@ SYMBOL_GUIDE RULES:
 - For ELI5 with no math symbols, return empty array: "symbol_guide": []
 - The "simple" field should genuinely help beginners understand
 - The "formula" field shows the ACTUAL compound expression from your definition — only include when the symbol appears in a fraction, sum, integral, etc.
+${includeDomain ? `
+DOMAIN_ANALOGY RULES:
+- Map each symbol to a specific ${domain} concept — visceral and physical, not abstract
+- One sentence maximum, make it hit the gut
+- Example for ∂ (partial derivative) + NFL: "Like tracking just one receiver's speed while the whole offense runs"
+- Example for ∫ (integral) + Cooking: "Like adding up every tiny taste-test into the final flavor profile"
+- NO generic filler — every analogy must be specific to ${domain}
 
+DOMAIN_INTUITION RULES (top-level field):
+- One sentence mapping the ENTIRE concept to ${domain}
+- Must be DIFFERENT from any individual symbol's domain_analogy
+- Must feel like an "aha" moment connecting the abstract to lived ${domain} experience
+` : ''}
 Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
