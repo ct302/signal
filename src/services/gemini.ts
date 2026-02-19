@@ -1344,16 +1344,16 @@ RULES:
 - "corrected" should be your best single guess if forced to pick one
 - For typos with only one obvious correction, still set isAmbiguous: true so user confirms
 
-Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4), "corrected": string (best guess), "emoji": string }
+Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4), "corrected": string (best guess), "emoji": string (a SINGLE emoji that BEST represents this specific topic/domain - e.g., 🏈 for NFL, 🧬 for genetics, 🎸 for guitar, 🍳 for cooking, 🎮 for gaming, 💻 for programming, ⚽ for soccer, 🎬 for movies, 📐 for geometry. MUST be specific and relevant to the topic, NEVER use generic emojis like ⚡ or 🎯) }
 
 Return ONLY valid JSON, no markdown, no explanation.`;
 
   try {
     const responseText = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(responseText);
-    return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+    return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "🧠" };
   } catch {
-    return { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+    return { isValid: true, isAmbiguous: false, corrected: text, emoji: "🧠" };
   }
 };
 
@@ -1362,7 +1362,7 @@ Return ONLY valid JSON, no markdown, no explanation.`;
  * Word count targets:
  * - ELI5: 80-100 words (simple, engaging, memorable)
  * - ELI50: 130-150 words (balanced, clear, practical)
- * - ELI100: 150-180 words (thorough, technical, precise)
+ * - ELI100: 220-280 words (graduate-level, formal, dense)
  */
 export const fetchDefinition = async (term: string, context: string, level: number) => {
   // Word count and style guidance per level
@@ -1397,9 +1397,20 @@ Make it click instantly. If a 5-year-old would say "huh?" - simpler!`
       style: "Balance clarity with substance. Include WHAT it is, WHY it matters, and a practical example. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac."
     },
     100: {
-      name: "Advanced Academic",
-      words: "150-180 words",
-      style: "Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations. Cover the concept thoroughly with WHAT/WHY/HOW. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes."
+      name: "Advanced Academic (Graduate Level)",
+      words: "220-280 words",
+      style: `TARGET: A graduate student or expert who wants FULL technical depth.
+
+REQUIREMENTS:
+- Begin with a FORMAL DEFINITION using precise mathematical/scientific notation in LaTeX
+- Include the governing equation, theorem statement, or formal relationship
+- Explain the mechanism/proof sketch - HOW and WHY it works at a fundamental level
+- Note edge cases, limitations, or common misconceptions
+- Reference connections to related advanced concepts
+
+WRITING STYLE: Dense, precise, no hand-holding. Write like a top textbook author - every sentence earns its place. Use domain-specific jargon freely.
+
+CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac.`
     }
   };
 

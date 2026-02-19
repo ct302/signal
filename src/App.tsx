@@ -250,7 +250,7 @@ export default function App() {
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
   const [tempDomainInput, setTempDomainInput] = useState("");
-  const [domainEmoji, setDomainEmoji] = useState("🏈");
+  const [domainEmoji, setDomainEmoji] = useState("🧠");
   const [hasSelectedDomain, setHasSelectedDomain] = useState(false);
   const [isSettingDomain, setIsSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
@@ -1248,7 +1248,7 @@ export default function App() {
 
       const result = await checkAmbiguity(inputToUse, 'domain');
       const finalDomain = result.corrected || inputToUse;
-      setDomainEmoji(result.emoji || "🎯");
+      setDomainEmoji(result.emoji || "🧠");
       setAnalogyDomain(finalDomain);
       setHasSelectedDomain(true);
       setDisambiguation(null);
@@ -1274,7 +1274,7 @@ export default function App() {
     }
 
     const finalDomain = result.corrected || inputToUse;
-    setDomainEmoji(result.emoji || "⚡");
+    setDomainEmoji(result.emoji || "🧠");
     setAnalogyDomain(finalDomain);
     setHasSelectedDomain(true);
     setIsSettingDomain(false);
@@ -3452,6 +3452,53 @@ export default function App() {
                         <span className="hidden sm:inline">Reroll</span>
                       </button>
                     )}
+                    {/* Ask Question Button - Follow-up Q&A */}
+                    {hasStarted && !isStudyGuideMode && (
+                      <button
+                        onClick={() => setShowFollowUp(!showFollowUp)}
+                        disabled={isLoading}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          showFollowUp
+                            ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="Ask a Follow-up Question"
+                      >
+                        <MessageCircle size={14} />
+                        <span className="hidden sm:inline">Ask</span>
+                      </button>
+                    )}
+                    {/* Quiz Me Button */}
+                    {hasStarted && !isStudyGuideMode && (
+                      <button
+                        onClick={() => fetchQuiz(false)}
+                        disabled={isQuizLoading || isLoading}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
+                        title="Quick Quiz"
+                      >
+                        {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
+                        <span className="hidden sm:inline">Quiz</span>
+                      </button>
+                    )}
+                    {/* Synthesis Button */}
+                    {synthesisSummary && !isStudyGuideMode && (
+                      <button
+                        onClick={() => setShowSynthesis(!showSynthesis)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          showSynthesis
+                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                        title="View Synthesis Summary"
+                      >
+                        <BrainCircuit size={14} />
+                        <span className="hidden sm:inline">Synthesis</span>
+                      </button>
+                    )}
                     {/* Mastery History Button - Shows gold medals for mastered topics */}
                     {masteryHistory.length > 0 && (
                       <button
@@ -4076,42 +4123,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Action Buttons - hidden when Study Guide is active */}
-              {!isStudyGuideMode && (
-              <div className="flex flex-wrap gap-2 justify-center">
-                <button
-                  onClick={() => setShowFollowUp(!showFollowUp)}
-                  disabled={isLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    showFollowUp
-                      ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
-                      : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
-                  }`}
-                >
-                  <MessageCircle size={14} />Ask Question
-                </button>
-                <button
-                  onClick={() => fetchQuiz(false)}
-                  disabled={isQuizLoading || isLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
-                >
-                  {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
-                  Quiz Me
-                </button>
-                {synthesisSummary && (
-                  <button
-                    onClick={() => setShowSynthesis(!showSynthesis)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      showSynthesis
-                        ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
-                        : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
-                    }`}
-                  >
-                    <BrainCircuit size={14} />Synthesis
-                  </button>
-                )}
-              </div>
-              )}
             </div>
           )}
 
