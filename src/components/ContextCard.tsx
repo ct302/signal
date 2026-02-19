@@ -45,7 +45,7 @@ export const ContextCard: React.FC<ContextCardProps> = ({
   const palette = isDarkMode ? stickyColors.dark : stickyColors.light;
 
   return (
-    <div className="py-3 px-1">
+    <div className="py-3 px-1 signal-font">
       <div className={`grid gap-3 ${
         tips.length === 1 ? 'grid-cols-1 max-w-sm mx-auto'
         : tips.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto'
