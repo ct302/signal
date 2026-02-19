@@ -914,12 +914,18 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "name": "Context-specific name for THIS topic (e.g., 'Coordinate Ring' not 'Matrix A' if A represents a ring)",
       "meaning": "What this symbol represents in THIS specific context",
       "simple": "Plain English explanation a beginner would understand",
-      "formula": "$LaTeX expression showing this symbol used in a compound expression from your technical_explanation$ (ONLY include for symbols that appear in fractions, sums, integrals, or other compound expressions — omit entirely for standalone symbols like Greek letters)"
+      "formula": "$LaTeX expression showing this symbol used in a compound expression from your technical_explanation$ (ONLY include for symbols that appear in fractions, sums, integrals, or other compound expressions — omit entirely for standalone symbols like Greek letters)"${domain ? `,
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${shortDomain}. Be specific to what the symbol DOES in this context."` : ''}
     }
   ]
 }
 
-${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
+${domain ? `SYMBOL_GUIDE DOMAIN_ANALOGY RULES:
+- Map each symbol to a specific ${shortDomain} concept — visceral, gut-level, zero jargon
+- One sentence max per symbol
+- Every analogy must be specific to what the symbol DOES in this context
+- Must feel like an "aha" moment connecting the abstract to lived ${shortDomain} experience
+` : ''}${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
 ALLOWED LaTeX (use these ONLY):
 - Variables and subscripts: $x$, $T_{ij}$, $v^k$
 - Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$

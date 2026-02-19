@@ -82,7 +82,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
@@ -998,7 +998,8 @@ export default function App() {
         name: entry.name || "",
         meaning: entry.meaning || "",
         simple: entry.simple || "",
-        ...(entry.formula ? { formula: entry.formula } : {})
+        ...(entry.formula ? { formula: entry.formula } : {}),
+        ...(entry.domain_analogy ? { domain_analogy: entry.domain_analogy } : {})
       })));
     } else {
       setSymbolGuide([]);
@@ -4646,7 +4647,9 @@ export default function App() {
                             guide.find(sg => sg.symbol.toLowerCase().includes(symbol.toLowerCase()) || symbol.toLowerCase().includes(sg.symbol.toLowerCase())) ||
                             guide.find(sg => latex?.some(l => sg.symbol.includes(l) || l.includes(sg.symbol)));
                           const apiEntry = findEntry(symbolGuide) || findEntry(defSymbolGuide);
-                          const resolvedFormula = apiEntry?.formula || hardcodedFormula;
+                          const resolvedFormula = apiEntry?.formula
+                            ? ensureFormulaDelimiters(apiEntry.formula)
+                            : hardcodedFormula;
 
                           // Display symbol: use curated LaTeX for multi-char symbols
                           // Bare \frac is invalid KaTeX (needs args), dx needs math mode, etc.

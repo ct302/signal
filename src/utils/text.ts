@@ -1,6 +1,22 @@
 import { LATEX_CMD_REGEX } from '../constants';
 
 /**
+ * Ensure a formula string has $...$ delimiters.
+ * API-returned formulas are always math content but often lack delimiters.
+ * Without delimiters, wrapBareLatex fragments compound expressions into broken pieces.
+ */
+export const ensureFormulaDelimiters = (formula: string): string => {
+  if (!formula || !formula.trim()) return formula;
+  const trimmed = formula.trim();
+  // Already has delimiters — pass through
+  if (trimmed.startsWith('$') || trimmed.startsWith('\\(') || trimmed.startsWith('\\[')) return formula;
+  // Contains backslash commands (LaTeX content) — wrap entire expression
+  if (trimmed.includes('\\')) return `$${trimmed}$`;
+  // No LaTeX detected — return as-is
+  return formula;
+};
+
+/**
  * NUCLEAR SANITIZATION - Applied to raw API response BEFORE JSON parsing
  * This catches ALL math symbols at the source, preventing any from reaching the UI
  */
@@ -646,7 +662,7 @@ const fixMissingBackslashes = (text: string): string => {
     'quad', 'qquad', 'hspace', 'vspace', 'hfill', 'vfill',
 
     // Special symbols
-    'infty', 'partial', 'nabla', 'prime', 'backprime',
+    'infty', 'partial', 'nabla', 'top', 'bot', 'dagger', 'prime', 'backprime',
     // NOTE: Removed 'exists' - too common as English word, causes prose "exists" → \exists → ∃ symbol
     'forall', 'nexists', 'emptyset', 'varnothing',
     'neg', 'lnot', 'land', 'lor', 'implies', 'iff',
@@ -856,9 +872,19 @@ export const sanitizeLatex = (text: string): string => {
   // Split by $ to process non-math regions only
   const parts = result.split(/(\$[^$]*\$)/g);
   result = parts.map((part, index) => {
-    // Odd indices are inside $ delimiters (math mode) - leave them alone
+    // Inside $ delimiters (math mode) — fix concatenated commands then pass through
     if (part.startsWith('$') && part.endsWith('$')) {
-      return part;
+      // Split concatenated LaTeX commands inside math blocks
+      // e.g., \topdelta → \top \delta, \botgamma → \bot \gamma
+      // KaTeX can't parse unknown commands like \topdelta — they must be separated
+      let mathContent = part;
+      const shortCmds = ['top', 'bot', 'mid', 'mod', 'det', 'dim', 'gcd', 'inf', 'sup', 'max', 'min', 'log', 'exp', 'sin', 'cos', 'tan', 'dag'];
+      const greekAndCommon = 'alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|frac|sqrt|partial|nabla|cdot|times|left|right|vec|hat|bar|text|mathrm|mathbf';
+      for (const cmd of shortCmds) {
+        const regex = new RegExp(`\\\\${cmd}(${greekAndCommon})`, 'g');
+        mathContent = mathContent.replace(regex, `\\${cmd} \\$1`);
+      }
+      return mathContent;
     }
 
     // Even indices are outside $ delimiters - clean up orphaned LaTeX commands
