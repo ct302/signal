@@ -982,3 +982,37 @@ export const convertUnicodeToLatex = (text: string): string => {
     return result;
   }).join('');
 };
+
+/**
+ * Lightweight fuzzy scorer for word search (no external deps).
+ * Returns 0-1 score: prefix match = 1.0, substring = 0.8, subsequence = proportional, no match = 0.
+ */
+export const fuzzyScore = (query: string, target: string): number => {
+  const q = query.toLowerCase();
+  const t = target.toLowerCase();
+
+  // Exact prefix match is best
+  if (t.startsWith(q)) return 1.0;
+
+  // Substring match is good
+  if (t.includes(q)) return 0.8;
+
+  // Character-by-character subsequence match
+  let qi = 0;
+  let consecutive = 0;
+  let maxConsecutive = 0;
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      qi++;
+      consecutive++;
+      maxConsecutive = Math.max(maxConsecutive, consecutive);
+    } else {
+      consecutive = 0;
+    }
+  }
+
+  if (qi < q.length) return 0; // Not all query chars found
+
+  // Score based on coverage and consecutiveness
+  return 0.3 + (maxConsecutive / q.length) * 0.4 + (q.length / t.length) * 0.2;
+};

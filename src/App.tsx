@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Eye,
   Zap,
@@ -38,7 +38,8 @@ import {
   GripHorizontal,
   Lightbulb,
   Sun,
-  Moon
+  Moon,
+  Search
 } from 'lucide-react';
 
 // Types
@@ -83,7 +84,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters } from './utils';
+import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters, fuzzyScore } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition, useBottomSheetDrag } from './hooks';
@@ -280,6 +281,8 @@ export default function App() {
   const [multiWordPhraseLookup, setMultiWordPhraseLookup] = useState<{ tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } | null>(null);
   const [semanticColorMap, setSemanticColorMap] = useState<{ tech: Map<string, number>; analogy: Map<string, number> } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
+  const [techProcessedWords, setTechProcessedWords] = useState<ProcessedWord[]>([]);
+  const [analogyProcessedWords, setAnalogyProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
   const [synthesisSummary, setSynthesisSummary] = useState("");
@@ -327,6 +330,12 @@ export default function App() {
   const [isLoadingDef, setIsLoadingDef] = useState(false);
   const [defThreshold, setDefThreshold] = useState(0.3);
   const [isDefColorMode, setIsDefColorMode] = useState(false);
+
+  // Mobile word search (replaces press-and-hold touch-to-define)
+  const [isWordSearchOpen, setIsWordSearchOpen] = useState(false);
+  const [wordSearchQuery, setWordSearchQuery] = useState('');
+  const [wordSearchResults, setWordSearchResults] = useState<string[]>([]);
+  const wordSearchInputRef = useRef<HTMLInputElement>(null);
 
   // Bottom sheet drag for Definition Popup (mobile)
   const defSheet = useBottomSheetDrag({
@@ -567,14 +576,6 @@ export default function App() {
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const tutorResponseRef = useRef<HTMLDivElement>(null);
   const followUpContainerRef = useRef<HTMLDivElement>(null);
-
-  // Press-and-hold → slide → release define refs (mobile)
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const touchWordRef = useRef<string | null>(null);
-  const touchTargetRef = useRef<HTMLElement | null>(null);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isInDefineModeRef = useRef(false);       // true only after 300ms hold
-  const highlightedSpanRef = useRef<HTMLElement | null>(null); // tracks DOM highlight
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -1548,149 +1549,8 @@ export default function App() {
     }
   };
 
-  // Mobile: press-and-hold → slide → release to define
-  // Helper: find word span at a given touch point (walks DOM tree)
-  const findWordSpanAtPoint = useCallback((clientX: number, clientY: number): HTMLElement | null => {
-    const el = document.elementFromPoint(clientX, clientY);
-    if (!el) return null;
-    let current: HTMLElement | null = el as HTMLElement;
-    for (let i = 0; i < 5 && current; i++) {
-      if (current.tagName === 'SPAN' && current.id?.startsWith('word-')) return current;
-      current = current.parentElement;
-    }
-    return null;
-  }, []);
-
-  // Helper: define a word from a word span element (called ONCE on finger lift)
-  const defineWordFromSpan = useCallback((wordSpan: HTMLElement) => {
-    const rawWord = wordSpan.textContent?.trim() || '';
-    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
-    if (!cleanWord || cleanWord.length < 2) return;
-
-    // Skip if same word is already being defined
-    if (selectedTerm === cleanWord) return;
-
-    const rect = wordSpan.getBoundingClientRect();
-    const popupMinHeight = 250;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
-    const top = showAbove
-      ? rect.top + window.scrollY - popupMinHeight - 10
-      : rect.bottom + window.scrollY + 10;
-
-    // Clear any mini-definition stacking
-    setMiniDefPosition(null);
-    setMiniSelectedTerm(null);
-    setSelectedTerm(cleanWord);
-    setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
-
-    const context = isAnalogyVisualMode
-      ? segments.map(s => s.analogy).join(' ')
-      : segments.map(s => s.tech).join(' ');
-    fetchDefinition(cleanWord, context, defComplexity, false);
-  }, [selectedTerm, defComplexity, isAnalogyVisualMode, segments]);
-
-  const handleContentTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || viewMode !== 'tech') return;
-    const touch = e.touches[0];
-    if (!touch) return;
-
-    // Clear any previous hold timer
-    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-
-    // Record touch start position and time
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    isInDefineModeRef.current = false;
-
-    // Find the word span under the touch point
-    const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
-    if (wordSpan) {
-      touchWordRef.current = wordSpan.textContent?.trim() || null;
-      touchTargetRef.current = wordSpan;
-    } else {
-      touchWordRef.current = null;
-      touchTargetRef.current = null;
-    }
-
-    // Start 300ms press-and-hold timer — only enters define mode if user holds still
-    holdTimerRef.current = setTimeout(() => {
-      holdTimerRef.current = null;
-      isInDefineModeRef.current = true;
-
-      // Haptic feedback (supported on Android Chrome, ignored elsewhere)
-      try { navigator.vibrate?.(10); } catch {}
-
-      // Highlight word under finger (direct DOM, zero re-renders)
-      const currentSpan = touchTargetRef.current;
-      if (currentSpan) {
-        currentSpan.classList.add('touch-define-highlight');
-        highlightedSpanRef.current = currentSpan;
-      }
-    }, 300);
-  }, [isMobile, viewMode, findWordSpanAtPoint]);
-
-  const handleContentTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || viewMode !== 'tech') return;
-    if (!touchStartRef.current) return;
-    const touch = e.touches[0];
-    if (!touch) return;
-
-    // PHASE 1: Hold timer still pending — user hasn't held long enough
-    if (!isInDefineModeRef.current) {
-      // If user moves before 300ms, they intend to scroll — cancel hold timer
-      const dx = Math.abs(touch.clientX - touchStartRef.current.x);
-      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-      if (dx > 10 || dy > 10) {
-        if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-      }
-      // Do NOT call e.preventDefault() — let native scroll happen
-      return;
-    }
-
-    // PHASE 2: In define mode (hold timer fired) — lock scroll, highlight words
-    e.preventDefault();
-    window.getSelection()?.removeAllRanges();
-
-    // Find word span under current finger position
-    const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
-    if (wordSpan && wordSpan !== highlightedSpanRef.current) {
-      // Move highlight (direct DOM — zero re-renders)
-      highlightedSpanRef.current?.classList.remove('touch-define-highlight');
-      wordSpan.classList.add('touch-define-highlight');
-      highlightedSpanRef.current = wordSpan;
-      touchTargetRef.current = wordSpan;
-      touchWordRef.current = wordSpan.textContent?.trim() || null;
-    }
-    // NO defineWordFromSpan(). NO fetchDefinition(). NO state updates during slide.
-  }, [isMobile, viewMode, findWordSpanAtPoint]);
-
-  const handleContentTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || viewMode !== 'tech') return;
-
-    // Always clear hold timer
-    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-
-    // Remove visual highlight (direct DOM cleanup)
-    if (highlightedSpanRef.current) {
-      highlightedSpanRef.current.classList.remove('touch-define-highlight');
-      highlightedSpanRef.current = null;
-    }
-
-    // If we were in define mode → trigger SINGLE definition fetch for last word
-    if (isInDefineModeRef.current && touchTargetRef.current) {
-      window.getSelection()?.removeAllRanges();
-      e.preventDefault();
-      defineWordFromSpan(touchTargetRef.current);
-    }
-
-    // Reset all refs
-    isInDefineModeRef.current = false;
-    touchStartRef.current = null;
-    touchWordRef.current = null;
-    touchTargetRef.current = null;
-  }, [isMobile, viewMode, defineWordFromSpan]);
+  // Mobile word definition is now handled by the search bar (8B).
+  // Desktop: double-click + text selection + floating Define button (unchanged).
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
     if (isMini) {
@@ -2516,6 +2376,10 @@ export default function App() {
       setIsBulletMode(false);
       setActiveBulletIndex(null);
     }
+    // Close word search when switching modes
+    setIsWordSearchOpen(false);
+    setWordSearchQuery('');
+    setWordSearchResults([]);
     if (viewMode === 'morph') setViewMode('nfl');
     else if (viewMode === 'nfl') setViewMode('tech');
     else setViewMode('morph');
@@ -3182,45 +3046,34 @@ export default function App() {
     );
   };
 
-  // Process words effect - uses FULL explanations (250+ words) not short segment snippets
-  useEffect(() => {
-    // Need either full explanations or segments to display content
+  // Pure function: compute processed words for a given mode (tech/analogy/narrative)
+  // Extracted so we can pre-compute both tech and analogy arrays without mode dependencies
+  const computeProcessedWords = useCallback((forAnalogyMode: boolean, forNarrativeMode: boolean): ProcessedWord[] => {
     const hasFullExplanation = technicalExplanation || analogyExplanation;
     const hasSegments = segments.length > 0;
-    if ((!hasFullExplanation && !hasSegments) || isLoading) return;
+    if (!hasFullExplanation && !hasSegments) return [];
 
     const allTokens: ProcessedWord[] = [];
+    const isTechnicalMode = !forNarrativeMode && !forAnalogyMode;
 
-    // Select the appropriate full text based on view mode
-    // Priority: Full explanation > Joined segments (fallback)
     let textToParse: string;
-    const isTechnicalMode = !isNarrativeMode && !isAnalogyVisualMode;
-
-    if (isNarrativeMode) {
-      // Narrative mode: join all narrative segments (no full narrative explanation exists)
+    if (forNarrativeMode) {
       textToParse = segments.map(s => s.narrative).filter(Boolean).join(' ');
-    } else if (isAnalogyVisualMode) {
-      // Analogy/Expert mode: use full analogy explanation, fall back to joined segments
+    } else if (forAnalogyMode) {
       textToParse = analogyExplanation || segments.map(s => s.analogy).filter(Boolean).join(' ');
     } else {
-      // Technical mode: use full technical explanation, fall back to joined segments
       textToParse = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
     }
 
-    if (!textToParse) return;
+    if (!textToParse) return [];
 
-    // --- PRE-SCAN: Run phrase matching on the RAW text BEFORE LaTeX processing ---
-    // This catches multi-word phrases that would be broken by LATEX_REGEX splitting.
-    // E.g., "Singular Value Decomposition" may get split if LaTeX tokens appear mid-phrase.
-    // We build a word→entityId fallback map from the raw text's phrase matches.
-    const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
+    // PRE-SCAN: phrase matching on RAW text BEFORE LaTeX processing
+    const useAnalogyTerms = forAnalogyMode || forNarrativeMode;
     const phraseWordFallback: Record<string, number> = {};
     if (multiWordPhraseLookup) {
       const rawTokens = textToParse.split(/(\s+)/);
       const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
       const rawOverrides = buildPhraseOverrides(rawTokens, phraseLookup);
-      // Build content-based fallback: cleaned word → entityId
-      // For ambiguous words (same word in multiple concepts), prefer the first match (longest phrase)
       rawTokens.forEach((tok, idx) => {
         if (rawOverrides[idx] !== undefined) {
           const cleaned = stripWordPunctuation(cleanText(tok).toLowerCase());
@@ -3231,27 +3084,20 @@ export default function App() {
       });
     }
 
-    // Only apply LaTeX processing to technical text (and NOT in ELI5 mode)
-    // Analogy/narrative should be pure prose - no LaTeX conversion
+    // LaTeX processing: only for technical mode (non-ELI5)
     let processedText: string;
     if (isTechnicalMode && mainComplexity !== 5) {
-      // Technical mode (non-ELI5): fix malformed LaTeX, convert Unicode math to KaTeX, then wrap bare commands
       const sanitizedText = sanitizeLatex(textToParse);
       const latexConverted = convertUnicodeToLatex(sanitizedText);
       processedText = wrapBareLatex(latexConverted);
     } else {
-      // Analogy/narrative mode OR ELI5 tech mode: pure prose, no LaTeX processing
-      // Apply one final aggressive strip to catch anything that slipped through
       processedText = stripMathSymbols(textToParse);
     }
 
-    // Only split on LaTeX patterns in technical mode (and NOT in ELI5)
-    // Analogy text is pure prose — splitting on LATEX_REGEX would incorrectly
-    // extract \word patterns as LaTeX tokens and render garbled math
     const hasLatex = isTechnicalMode && mainComplexity !== 5;
     const parts = hasLatex
       ? processedText.split(LATEX_REGEX)
-      : [processedText]; // Single chunk, no LaTeX extraction
+      : [processedText];
 
     parts.forEach(part => {
       if (!part) return;
@@ -3260,7 +3106,6 @@ export default function App() {
       if (isLatex) {
         allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });
       } else {
-        // Per-part phrase scan (works when phrases aren't broken by LaTeX splitting)
         const tokens = part.split(/(\s+)/);
         let phraseOverrides: Record<number, number> = {};
         if (multiWordPhraseLookup) {
@@ -3274,17 +3119,9 @@ export default function App() {
             allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex: 0 });
             return;
           }
-          // Weight (bold/opacity), conceptId (concept_map color), entityId (attention/proper noun color)
           const { weight, conceptId, entityId: wordEntityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
-
-          // Concept coloring priority chain:
-          // 1st: AI semantic color map (highest quality — understands synonyms, abbreviations, context)
-          // 2nd: per-part phrase match (fast, works when phrase is fully within this part)
-          // 3rd: raw-text pre-scan fallback (catches phrases broken by LaTeX splitting)
-          // 4th: individual word conceptId from getWordAttention (rule-based fallback)
           const cleanedForLookup = stripWordPunctuation(cleanText(word).toLowerCase());
 
-          // 1st priority: semantic color map
           let semanticConceptId: number | undefined;
           if (semanticColorMap) {
             const semanticLookup = useAnalogyTerms ? semanticColorMap.analogy : semanticColorMap.tech;
@@ -3292,7 +3129,6 @@ export default function App() {
             if (mapped !== undefined) semanticConceptId = mapped;
           }
 
-          // 2nd/3rd priority: phrase overrides
           let phraseOverrideId = phraseOverrides[tokenIdx];
           if (phraseOverrideId === undefined) {
             if (cleanedForLookup && phraseWordFallback[cleanedForLookup] !== undefined) {
@@ -3306,18 +3142,103 @@ export default function App() {
       }
     });
 
-    setIsTransitioning(true);
-    const timer = setTimeout(() => {
-      if (defPosition) {
-        setIsTransitioning(false);
-        return;
-      }
-      setProcessedWords(allTokens);
-      requestAnimationFrame(() => setIsTransitioning(false));
-    }, 200);
+    return allTokens;
+  }, [segments, conceptMap, importanceMap, technicalExplanation, analogyExplanation, multiWordPhraseLookup, mainComplexity, semanticColorMap]);
 
-    return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation, conceptLookup, multiWordPhraseLookup, mainComplexity, semanticColorMap]);
+  // Content-change effect: pre-compute BOTH tech and analogy word arrays (runs on data changes, NOT on morph toggle)
+  useEffect(() => {
+    const hasFullExplanation = technicalExplanation || analogyExplanation;
+    const hasSegments = segments.length > 0;
+    if ((!hasFullExplanation && !hasSegments) || isLoading) return;
+
+    const techWords = computeProcessedWords(false, false);
+    const analogyWords = computeProcessedWords(true, false);
+    setTechProcessedWords(techWords);
+    setAnalogyProcessedWords(analogyWords);
+
+    // Set active display based on current mode
+    if (isNarrativeMode) {
+      const narrativeWords = computeProcessedWords(isAnalogyVisualMode, true);
+      setProcessedWords(narrativeWords);
+    } else {
+      setProcessedWords(isAnalogyVisualMode ? analogyWords : techWords);
+    }
+  }, [segments, conceptMap, importanceMap, technicalExplanation, analogyExplanation, multiWordPhraseLookup, mainComplexity, semanticColorMap, isLoading, computeProcessedWords]);
+
+  // Lightweight mode-switch effect: instant swap of pre-computed arrays on morph toggle
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (techProcessedWords.length === 0 && analogyProcessedWords.length === 0) return;
+    if (isNarrativeMode) {
+      const narrativeWords = computeProcessedWords(isAnalogyVisualMode, true);
+      setProcessedWords(narrativeWords);
+      return;
+    }
+    const target = isAnalogyVisualMode ? analogyProcessedWords : techProcessedWords;
+    if (isMobile) {
+      // Mobile: instant swap — no transition overhead, no blur, no delay
+      setProcessedWords(target);
+    } else {
+      // Desktop: keep smooth transition for polish
+      setIsTransitioning(true);
+      const timer = setTimeout(() => {
+        setProcessedWords(target);
+        requestAnimationFrame(() => setIsTransitioning(false));
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [isAnalogyVisualMode, isNarrativeMode]);
+
+  // Searchable word list for mobile word search (derived from current processedWords)
+  const searchableWords = useMemo(() => {
+    if (processedWords.length === 0) return [];
+    const seen = new Set<string>();
+    const words: string[] = [];
+    for (const pw of processedWords) {
+      if (pw.isSpace || pw.isLatex) continue;
+      const clean = pw.text.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '').toLowerCase();
+      if (clean.length >= 2 && !STOP_WORDS.has(clean) && !seen.has(clean)) {
+        seen.add(clean);
+        words.push(clean);
+      }
+    }
+    return words;
+  }, [processedWords]);
+
+  // Mobile word search handler
+  const handleWordSearch = useCallback((query: string) => {
+    setWordSearchQuery(query);
+    if (query.length < 1) {
+      setWordSearchResults([]);
+      return;
+    }
+    const scored = searchableWords
+      .map((word: string) => ({ word, score: fuzzyScore(query, word) }))
+      .filter(({ score }: { score: number }) => score > 0.2)
+      .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+      .slice(0, 7)
+      .map(({ word }: { word: string }) => word);
+    setWordSearchResults(scored);
+  }, [searchableWords]);
+
+  // Handle search result selection → define the word
+  const handleSearchDefine = useCallback((word: string) => {
+    setIsWordSearchOpen(false);
+    setWordSearchQuery('');
+    setWordSearchResults([]);
+
+    setMiniDefPosition(null);
+    setMiniSelectedTerm(null);
+    setSelectedTerm(word);
+    if (isMobile) {
+      setDefPosition({ top: 0, left: 0, placement: 'below' });
+    }
+
+    const context = isAnalogyVisualMode
+      ? segments.map(s => s.analogy).join(' ')
+      : segments.map(s => s.tech).join(' ');
+    fetchDefinition(word, context, defComplexity, false);
+  }, [isMobile, isAnalogyVisualMode, segments, defComplexity]);
 
   const modeLabel = getViewModeLabel();
 
@@ -4133,9 +4054,8 @@ export default function App() {
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
-                  onTouchStart={(e) => { handleSelectionStart(); handleContentTouchStart(e); }}
-                  onTouchMove={handleContentTouchMove}
-                  onTouchEnd={(e) => { handleContentTouchEnd(e); handleSelectionEnd(e); }}
+                  onTouchStart={handleSelectionStart}
+                  onTouchEnd={(e) => handleSelectionEnd(e)}
                 >
                   {/* Attention Meter - locked at top of content area, collapsible */}
                   {!(showCondensedView && isFirstPrinciplesMode) && (
@@ -4331,10 +4251,10 @@ export default function App() {
                   {/* Bullet Point Mode - Condensed sentence bullets */}
                   {isBulletMode && viewMode === 'tech' ? (
                     <ul
-                      className={`space-y-3 transition-all duration-300 ease-in-out ${
+                      className={`space-y-3 transition-all ${isMobile ? 'duration-75' : 'duration-300'} ease-in-out ${
                         isTransitioning || isCondensedMorphing
-                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
-                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                          ? (isMobile ? 'opacity-0' : 'opacity-0 blur-md scale-[0.98] translate-y-1')
+                          : (isMobile ? 'opacity-100' : 'opacity-100 blur-0 scale-100 translate-y-0')
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{
                         fontSize: `${1.125 * textScale}rem`,
@@ -4438,10 +4358,10 @@ export default function App() {
                     </ul>
                   ) : (
                     <p
-                      className={`leading-relaxed transition-all duration-300 ease-in-out ${
+                      className={`leading-relaxed transition-all ${isMobile ? 'duration-75' : 'duration-300'} ease-in-out ${
                         isTransitioning || (viewMode === 'tech' && isCondensedMorphing)
-                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
-                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                          ? (isMobile ? 'opacity-0' : 'opacity-0 blur-md scale-[0.98] translate-y-1')
+                          : (isMobile ? 'opacity-100' : 'opacity-100 blur-0 scale-100 translate-y-0')
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{
                         fontSize: `${1.125 * textScale}rem`,
@@ -4478,13 +4398,79 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Content Footer - Selection hint only (attention meter moved to top of content) */}
-                {!(showCondensedView && isFirstPrinciplesMode) && viewMode === 'tech' && (
-                <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                    <BookOpen size={12} />
-                    <span>{isMobile ? 'Press & hold any word to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
-                  </div>
+                {/* Content Footer - Word search (mobile) / Selection hint (desktop) */}
+                {!(showCondensedView && isFirstPrinciplesMode) && (
+                <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isMobile ? (
+                    isWordSearchOpen ? (
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          <Search size={14} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
+                          <input
+                            ref={wordSearchInputRef}
+                            type="text"
+                            value={wordSearchQuery}
+                            onChange={(e) => handleWordSearch(e.target.value)}
+                            placeholder="Type to find a word..."
+                            className={`flex-1 bg-transparent text-sm outline-none ${
+                              isDarkMode ? 'text-white placeholder-neutral-500' : 'text-neutral-800 placeholder-neutral-400'
+                            }`}
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => { setIsWordSearchOpen(false); setWordSearchQuery(''); setWordSearchResults([]); }}
+                            className="p-1"
+                          >
+                            <X size={14} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
+                          </button>
+                        </div>
+                        {wordSearchResults.length > 0 && (
+                          <div className={`absolute bottom-full left-0 right-0 mb-1 rounded-lg border shadow-lg max-h-48 overflow-y-auto ${
+                            isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
+                          }`} style={{ animation: 'slideUp 0.15s ease-out' }}>
+                            {wordSearchResults.map((word) => (
+                              <button
+                                key={word}
+                                onClick={(e) => { e.stopPropagation(); handleSearchDefine(word); }}
+                                className={`w-full text-left px-3 py-2.5 text-sm min-h-touch ${
+                                  isDarkMode ? 'hover:bg-neutral-700 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-700'
+                                }`}
+                              >
+                                {word}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {wordSearchQuery.length > 0 && wordSearchResults.length === 0 && (
+                          <div className={`absolute bottom-full left-0 right-0 mb-1 px-3 py-2 rounded-lg border text-sm ${
+                            isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-500' : 'bg-white border-neutral-200 text-neutral-400'
+                          }`} style={{ animation: 'slideUp 0.15s ease-out' }}>
+                            No matches found
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsWordSearchOpen(true);
+                          setTimeout(() => wordSearchInputRef.current?.focus(), 50);
+                        }}
+                        className={`flex items-center justify-center gap-1.5 text-xs w-full ${
+                          isDarkMode ? 'text-neutral-500' : 'text-neutral-400'
+                        }`}
+                      >
+                        <Search size={12} />
+                        <span>Search to define a word</span>
+                      </button>
+                    )
+                  ) : (
+                    <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                      <BookOpen size={12} />
+                      <span>Select any text to define • Double-click words for quick definitions</span>
+                    </div>
+                  )}
                 </div>
                 )}
                 </>) : (
