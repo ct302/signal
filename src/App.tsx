@@ -564,10 +564,11 @@ export default function App() {
   const tutorResponseRef = useRef<HTMLDivElement>(null);
   const followUpContainerRef = useRef<HTMLDivElement>(null);
 
-  // Touch-tap-to-define refs (mobile word tap detection)
+  // Touch-slide-to-define refs (mobile: slide finger over words to define)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const touchWordRef = useRef<string | null>(null);
   const touchTargetRef = useRef<HTMLElement | null>(null);
+  const isTouchDefiningRef = useRef(false); // true once a word is identified during touch
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -1542,6 +1543,49 @@ export default function App() {
   };
 
   // Mobile: tap-to-define handlers
+  // Helper: find word span at a given touch point (walks DOM tree)
+  const findWordSpanAtPoint = useCallback((clientX: number, clientY: number): HTMLElement | null => {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return null;
+    let current: HTMLElement | null = el as HTMLElement;
+    for (let i = 0; i < 5 && current; i++) {
+      if (current.tagName === 'SPAN' && current.id?.startsWith('word-')) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }, []);
+
+  // Helper: define a word from a word span element
+  const defineWordFromSpan = useCallback((wordSpan: HTMLElement) => {
+    const rawWord = wordSpan.textContent?.trim() || '';
+    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+    if (!cleanWord || cleanWord.length < 2) return;
+
+    // Skip if same word is already being defined
+    if (selectedTerm === cleanWord) return;
+
+    const rect = wordSpan.getBoundingClientRect();
+    const popupMinHeight = 250;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+    const top = showAbove
+      ? rect.top + window.scrollY - popupMinHeight - 10
+      : rect.bottom + window.scrollY + 10;
+
+    // Clear any mini-definition stacking
+    setMiniDefPosition(null);
+    setMiniSelectedTerm(null);
+    setSelectedTerm(cleanWord);
+    setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
+
+    const context = isAnalogyVisualMode
+      ? segments.map(s => s.analogy).join(' ')
+      : segments.map(s => s.tech).join(' ');
+    fetchDefinition(cleanWord, context, defComplexity, false);
+  }, [selectedTerm, defComplexity, isAnalogyVisualMode, segments]);
+
   const handleContentTouchStart = useCallback((e: React.TouchEvent) => {
     if (!isMobile || viewMode !== 'tech') return;
     const touch = e.touches[0];
@@ -1549,19 +1593,10 @@ export default function App() {
 
     // Record touch start position and time
     touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    isTouchDefiningRef.current = false;
 
     // Find the word span under the touch point
-    let target = e.target as HTMLElement;
-    let wordSpan: HTMLElement | null = null;
-    let currentElement: HTMLElement | null = target;
-    for (let i = 0; i < 5 && currentElement; i++) {
-      if (currentElement.tagName === 'SPAN' && currentElement.id?.startsWith('word-')) {
-        wordSpan = currentElement;
-        break;
-      }
-      currentElement = currentElement.parentElement;
-    }
-
+    const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
     if (wordSpan) {
       touchWordRef.current = wordSpan.textContent?.trim() || null;
       touchTargetRef.current = wordSpan;
@@ -1569,11 +1604,51 @@ export default function App() {
       touchWordRef.current = null;
       touchTargetRef.current = null;
     }
-  }, [isMobile, viewMode]);
+  }, [isMobile, viewMode, findWordSpanAtPoint]);
+
+  const handleContentTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || viewMode !== 'tech') return;
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    // Check if finger has moved enough to be a slide (not just a tap tremor)
+    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+    if (dx < 15 && dy < 15) return; // Wait for intentional movement
+
+    // Now in slide-to-define mode — prevent scrolling and text selection
+    e.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    isTouchDefiningRef.current = true;
+
+    // Find word span under current finger position
+    const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
+    if (wordSpan && wordSpan !== touchTargetRef.current) {
+      touchTargetRef.current = wordSpan;
+      touchWordRef.current = wordSpan.textContent?.trim() || null;
+      defineWordFromSpan(wordSpan);
+    }
+  }, [isMobile, viewMode, findWordSpanAtPoint, defineWordFromSpan]);
 
   const handleContentTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!isMobile || viewMode !== 'tech') return;
-    if (!touchStartRef.current || !touchWordRef.current || !touchTargetRef.current) return;
+    if (!touchStartRef.current) return;
+
+    // If we were sliding, the word is already defined — just clean up
+    if (isTouchDefiningRef.current) {
+      isTouchDefiningRef.current = false;
+      touchStartRef.current = null;
+      touchWordRef.current = null;
+      touchTargetRef.current = null;
+      return;
+    }
+
+    // Otherwise treat as a single tap
+    if (!touchWordRef.current || !touchTargetRef.current) {
+      touchStartRef.current = null;
+      return;
+    }
 
     const touch = e.changedTouches[0];
     if (!touch) return;
@@ -1582,63 +1657,23 @@ export default function App() {
     const dy = Math.abs(touch.clientY - touchStartRef.current.y);
     const duration = Date.now() - touchStartRef.current.time;
 
-    // Only treat as a tap if movement < 10px and duration < 300ms
-    if (dx > 10 || dy > 10 || duration > 300) {
+    // Single tap: movement < 15px and duration < 400ms
+    if (dx > 15 || dy > 15 || duration > 400) {
       touchStartRef.current = null;
       return;
     }
 
-    // Check if user has an active text selection (drag-to-select) — don't intercept
-    const selection = window.getSelection();
-    if (selection && selection.toString().trim().length > 0) {
-      touchStartRef.current = null;
-      return;
-    }
-
-    // Clean the word: remove punctuation from edges
-    const rawWord = touchWordRef.current;
-    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
-    if (!cleanWord || cleanWord.length < 2) {
-      touchStartRef.current = null;
-      return;
-    }
-
-    // Prevent the default and the selection handler from firing
+    // Clear any accidental browser text selection from the tap
+    window.getSelection()?.removeAllRanges();
     e.preventDefault();
 
-    const rect = touchTargetRef.current.getBoundingClientRect();
-    const popupMinHeight = 250;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
-
-    const top = showAbove
-      ? rect.top + window.scrollY - popupMinHeight - 10
-      : rect.bottom + window.scrollY + 10;
-
-    if (defPosition && selectedTerm) {
-      // Already have a popup open — replace it (mobile stacking prevention)
-      setMiniDefPosition(null);
-      setMiniSelectedTerm(null);
-      setSelectedTerm(cleanWord);
-      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
-      fetchDefinition(cleanWord, defText, defComplexity, false);
-    } else {
-      // No popup — open new one
-      setSelectedTerm(cleanWord);
-      setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
-      const context = isAnalogyVisualMode
-        ? segments.map(s => s.analogy).join(' ')
-        : segments.map(s => s.tech).join(' ');
-      fetchDefinition(cleanWord, context, defComplexity, false);
-    }
+    defineWordFromSpan(touchTargetRef.current);
 
     // Reset refs
     touchStartRef.current = null;
     touchWordRef.current = null;
     touchTargetRef.current = null;
-  }, [isMobile, viewMode, defPosition, selectedTerm, defText, defComplexity, isAnalogyVisualMode, segments]);
+  }, [isMobile, viewMode, defineWordFromSpan]);
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
     if (isMini) {
@@ -4084,6 +4119,7 @@ export default function App() {
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
                   onTouchStart={(e) => { handleSelectionStart(); handleContentTouchStart(e); }}
+                  onTouchMove={handleContentTouchMove}
                   onTouchEnd={(e) => { handleContentTouchEnd(e); handleSelectionEnd(e); }}
                 >
                   {/* Attention Meter - locked at top of content area, collapsible */}
@@ -4432,7 +4468,7 @@ export default function App() {
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                     <BookOpen size={12} />
-                    <span>{isMobile ? 'Tap any word to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
+                    <span>{isMobile ? 'Tap or slide over words to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
                   </div>
                 </div>
                 )}
