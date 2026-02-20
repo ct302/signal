@@ -199,6 +199,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const explanationContentRef = useRef<HTMLDivElement>(null);
 
   // Foundational mapping cache (pre-generated on mount)
   const [foundationalMappingCache, setFoundationalMappingCache] = useState<Map<number, string>>(new Map());
@@ -258,6 +259,13 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, isFullScreen]);
+
+  // Auto-scroll Deep Dive content to top when concept changes
+  useEffect(() => {
+    if (selectedConcept !== null && explanationContentRef.current) {
+      explanationContentRef.current.scrollTo({ top: 0 });
+    }
+  }, [selectedConcept]);
 
   // Pre-generate foundational mappings for ALL concepts on mount
   useEffect(() => {
@@ -469,14 +477,22 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
         </div>
         )}
 
+        {/* Mobile backdrop for Deep Dive */}
+        {isMobile && showExplanation && selectedConceptData && (
+          <div
+            className="fixed inset-0 bg-black/40 z-[85]"
+            onClick={() => setShowExplanation(false)}
+          />
+        )}
+
         {/* Explanation Panel - Desktop: Side Panel | Mobile: Bottom Sheet */}
         {showExplanation && selectedConceptData && (
           <div className={`
             ${isMobile
-              ? 'fixed bottom-0 left-0 right-0 max-h-[75vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
+              ? 'fixed bottom-0 left-0 right-0 h-[92vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
-            ${isDarkMode ? 'border-neutral-600 bg-neutral-800/98' : 'border-neutral-200 bg-white/98'}
+            ${isDarkMode ? 'border-neutral-600 bg-neutral-800' : 'border-neutral-200 bg-white'}
             ${isFullScreen && !isMobile ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-300
           `}>
             {/* Mobile Drag Handle */}
@@ -539,8 +555,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             </div>
 
             {/* Concept Comparison - Scrollable content area */}
-            <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
-              isMobile ? 'max-h-[calc(75vh-80px)]' : 'max-h-[calc(100vh-140px)]'
+            <div ref={explanationContentRef} className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
+              isMobile ? 'max-h-[calc(92vh-80px)]' : 'max-h-[calc(100vh-140px)]'
             } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
               {/* Expertise Term */}
               <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-amber-900/30 border border-amber-700/60' : 'bg-amber-50 border border-amber-200'}`}>

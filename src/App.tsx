@@ -86,7 +86,7 @@ import {
 import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters } from './utils';
 
 // Hooks
-import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
+import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition, useBottomSheetDrag } from './hooks';
 
 // Services
 import {
@@ -328,6 +328,26 @@ export default function App() {
   const [defThreshold, setDefThreshold] = useState(0.3);
   const [isDefColorMode, setIsDefColorMode] = useState(false);
 
+  // Bottom sheet drag for Definition Popup (mobile)
+  const defSheet = useBottomSheetDrag({
+    initialHeight: 60,
+    minHeight: 25,
+    maxHeight: 90,
+    dismissThreshold: 20,
+    onDismiss: () => {
+      setDefPosition(null);
+      setSelectedTerm(null);
+      setMiniDefPosition(null);
+    },
+    snapPoints: [40, 60, 85],
+  });
+
+  // Reset definition sheet height when a new definition opens
+  useEffect(() => {
+    if (selectedTerm) defSheet.setSheetHeight(60);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTerm]);
+
   // Mini Definition State
   const [miniSelectedTerm, setMiniSelectedTerm] = useState<string | null>(null);
   const [miniDefText, setMiniDefText] = useState("");
@@ -376,6 +396,26 @@ export default function App() {
   const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
   const symbolGuideDragStart = useRef({ x: 0, y: 0 });
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+
+  // Bottom sheet drag for Symbol Guide (mobile)
+  const symbolSheet = useBottomSheetDrag({
+    initialHeight: 70,
+    minHeight: 25,
+    maxHeight: 85,
+    dismissThreshold: 20,
+    onDismiss: () => {
+      setShowSymbolGlossary(false);
+      setSymbolGuidePos({ x: 0, y: 0 });
+      setIsSymbolGuideMinimized(false);
+    },
+    snapPoints: [40, 70, 85],
+  });
+
+  // Reset symbol guide sheet height when it opens
+  useEffect(() => {
+    if (showSymbolGlossary) symbolSheet.setSheetHeight(70);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSymbolGlossary]);
 
   // Free Tier State
   const [freeTierRemaining, setFreeTierRemaining] = useState<number | null>(null);
@@ -522,6 +562,7 @@ export default function App() {
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const tutorResponseRef = useRef<HTMLDivElement>(null);
+  const followUpContainerRef = useRef<HTMLDivElement>(null);
 
   // Touch-tap-to-define refs (mobile word tap detection)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -1426,8 +1467,8 @@ export default function App() {
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
-    if (viewMode === 'morph') return;
+    // Only allow definitions in Tech Lock mode
+    if (viewMode !== 'tech') return;
 
     let target = e.target as HTMLElement;
 
@@ -1502,7 +1543,7 @@ export default function App() {
 
   // Mobile: tap-to-define handlers
   const handleContentTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || viewMode === 'morph') return;
+    if (!isMobile || viewMode !== 'tech') return;
     const touch = e.touches[0];
     if (!touch) return;
 
@@ -1531,7 +1572,7 @@ export default function App() {
   }, [isMobile, viewMode]);
 
   const handleContentTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || viewMode === 'morph') return;
+    if (!isMobile || viewMode !== 'tech') return;
     if (!touchStartRef.current || !touchWordRef.current || !touchTargetRef.current) return;
 
     const touch = e.changedTouches[0];
@@ -1695,8 +1736,8 @@ export default function App() {
 
   // Handle selection end (mouseup/touchend) - detect selection and show button
   const handleSelectionEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
-    if (viewMode === 'morph') {
+    // Only allow definitions in Tech Lock mode
+    if (viewMode !== 'tech') {
       setMorphLockedForSelection(false);
       setIsSelectingText(false);
       return;
@@ -2254,6 +2295,15 @@ export default function App() {
       setIsTutorLoading(false);
     }
   };
+
+  // Auto-scroll follow-up input into view when Ask is toggled on mobile
+  useEffect(() => {
+    if (showFollowUp && isMobile && followUpContainerRef.current) {
+      setTimeout(() => {
+        followUpContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showFollowUp, isMobile]);
 
   const copyToClipboard = (text: string, id: string) => {
     if (!text) return;
@@ -4378,7 +4428,7 @@ export default function App() {
                 </div>
 
                 {/* Content Footer - Selection hint only (attention meter moved to top of content) */}
-                {!(showCondensedView && isFirstPrinciplesMode) && viewMode !== 'morph' && (
+                {!(showCondensedView && isFirstPrinciplesMode) && viewMode === 'tech' && (
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                     <BookOpen size={12} />
@@ -4411,7 +4461,7 @@ export default function App() {
 
               {/* Follow-up Section */}
               {!isStudyGuideMode && showFollowUp && (
-                <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                <div ref={followUpContainerRef} className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
                   {/* Header with minimize and history buttons */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -4661,6 +4711,13 @@ export default function App() {
           domainIntuition={defDomainIntuition}
           analogyDomain={analogyDomain}
           domainEmoji={domainEmoji}
+          sheetHeight={defSheet.sheetHeight}
+          isDraggingSheet={defSheet.isDragging}
+          onSheetDragHandlers={{
+            handleTouchStart: defSheet.handleTouchStart,
+            handleTouchMove: defSheet.handleTouchMove,
+            handleTouchEnd: defSheet.handleTouchEnd,
+          }}
           onClose={() => {
             setDefPosition(null);
             setSelectedTerm(null);
@@ -4905,7 +4962,8 @@ export default function App() {
           }`}
           style={isMobile
             ? {
-                maxHeight: isSymbolGuideMinimized ? 'auto' : '70vh',
+                height: isSymbolGuideMinimized ? 'auto' : `${symbolSheet.sheetHeight}vh`,
+                transition: symbolSheet.isDragging ? 'none' : 'height 0.2s ease-out',
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               }
             : {
@@ -4919,7 +4977,12 @@ export default function App() {
         >
           {/* Mobile drag handle bar */}
           {isMobile && (
-            <div className="flex justify-center pt-2 pb-1">
+            <div
+              className="flex justify-center pt-2 pb-1 touch-none"
+              onTouchStart={symbolSheet.handleTouchStart}
+              onTouchMove={symbolSheet.handleTouchMove}
+              onTouchEnd={symbolSheet.handleTouchEnd}
+            >
               <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} />
             </div>
           )}

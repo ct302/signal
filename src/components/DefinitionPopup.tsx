@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, BookOpen, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react';
 import { Position, Size, ConceptMapItem, SymbolGuideEntry } from '../types';
 
+interface BottomSheetDragHandlers {
+  handleTouchStart: (e: React.TouchEvent) => void;
+  handleTouchMove: (e: React.TouchEvent) => void;
+  handleTouchEnd: (e: React.TouchEvent) => void;
+}
+
 interface DefinitionPopupProps {
   selectedTerm: string;
   defText: string;
@@ -15,6 +21,9 @@ interface DefinitionPopupProps {
   isDefColorMode: boolean;
   setIsDefColorMode: React.Dispatch<React.SetStateAction<boolean>>;
   isMobile: boolean;
+  sheetHeight?: number;
+  isDraggingSheet?: boolean;
+  onSheetDragHandlers?: BottomSheetDragHandlers;
   copiedId: string | null;
   symbolGuide?: SymbolGuideEntry[];  // API-provided context-aware symbol explanations
   domainIntuition?: string | null;   // Domain-mapped intuition for the entire concept
@@ -53,6 +62,9 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
   isDefColorMode,
   setIsDefColorMode,
   isMobile,
+  sheetHeight,
+  isDraggingSheet,
+  onSheetDragHandlers,
   copiedId,
   symbolGuide = [],  // API-provided context-aware symbols
   domainIntuition,
@@ -169,9 +181,10 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         left: 0,
         right: 0,
         width: '100%',
-        height: '60vh',
+        height: `${sheetHeight ?? 60}vh`,
         transform: 'none',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        transition: isDraggingSheet ? 'none' : 'height 0.2s ease-out',
       }
     : {
         top: defPos ? defPos.top : defPosition.top,
@@ -194,8 +207,17 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
         }`}
         style={{ height: '100%' }}
       >
-        {/* Drag grip indicator */}
-        {!isMobile && (
+        {/* Drag handle — touch-drag on mobile, decorative on desktop */}
+        {isMobile ? (
+          <div
+            className="flex justify-center pt-2 pb-1 touch-none"
+            onTouchStart={onSheetDragHandlers?.handleTouchStart}
+            onTouchMove={onSheetDragHandlers?.handleTouchMove}
+            onTouchEnd={onSheetDragHandlers?.handleTouchEnd}
+          >
+            <div className="w-10 h-1 rounded-full bg-neutral-600" />
+          </div>
+        ) : (
           <div className="flex justify-center -mt-1 mb-0 text-neutral-600 pointer-events-none">
             <GripHorizontal size={14} />
           </div>
