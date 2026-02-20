@@ -232,6 +232,9 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             <span className="font-bold text-sm text-yellow-200 truncate">
               {renderRichText(prepareTermForHeader(selectedTerm), "text-yellow-200")}
             </span>
+            {isLoadingDef && (
+              <span className="ml-1.5 inline-block w-3 h-3 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin flex-shrink-0" />
+            )}
           </div>
           <div className="flex gap-1 text-neutral-400 items-center flex-shrink-0 ml-2">
             {/* Text Scale Controls */}
@@ -263,7 +266,7 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
             className="text-sm leading-relaxed text-neutral-200"
             style={{ fontSize: `${textScale}em` }}
           >
-            {isLoadingDef ? (
+            {isLoadingDef && !defText ? (
               <span className="italic text-neutral-400">Defining...</span>
             ) : (
               renderAttentiveText(

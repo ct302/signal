@@ -342,9 +342,13 @@ export default function App() {
     snapPoints: [40, 60, 85],
   });
 
-  // Reset definition sheet height when a new definition opens
+  // Reset definition sheet height only on FIRST open (null → value), not on every term change
+  const prevSelectedTermRef = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedTerm) defSheet.setSheetHeight(60);
+    if (selectedTerm && !prevSelectedTermRef.current) {
+      defSheet.setSheetHeight(60);
+    }
+    prevSelectedTermRef.current = selectedTerm;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTerm]);
 
@@ -564,11 +568,13 @@ export default function App() {
   const tutorResponseRef = useRef<HTMLDivElement>(null);
   const followUpContainerRef = useRef<HTMLDivElement>(null);
 
-  // Touch-slide-to-define refs (mobile: slide finger over words to define)
+  // Press-and-hold → slide → release define refs (mobile)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const touchWordRef = useRef<string | null>(null);
   const touchTargetRef = useRef<HTMLElement | null>(null);
-  const isTouchDefiningRef = useRef(false); // true once a word is identified during touch
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInDefineModeRef = useRef(false);       // true only after 300ms hold
+  const highlightedSpanRef = useRef<HTMLElement | null>(null); // tracks DOM highlight
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -1542,7 +1548,7 @@ export default function App() {
     }
   };
 
-  // Mobile: tap-to-define handlers
+  // Mobile: press-and-hold → slide → release to define
   // Helper: find word span at a given touch point (walks DOM tree)
   const findWordSpanAtPoint = useCallback((clientX: number, clientY: number): HTMLElement | null => {
     const el = document.elementFromPoint(clientX, clientY);
@@ -1555,7 +1561,7 @@ export default function App() {
     return null;
   }, []);
 
-  // Helper: define a word from a word span element
+  // Helper: define a word from a word span element (called ONCE on finger lift)
   const defineWordFromSpan = useCallback((wordSpan: HTMLElement) => {
     const rawWord = wordSpan.textContent?.trim() || '';
     const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
@@ -1591,9 +1597,12 @@ export default function App() {
     const touch = e.touches[0];
     if (!touch) return;
 
+    // Clear any previous hold timer
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+
     // Record touch start position and time
     touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    isTouchDefiningRef.current = false;
+    isInDefineModeRef.current = false;
 
     // Find the word span under the touch point
     const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
@@ -1604,6 +1613,22 @@ export default function App() {
       touchWordRef.current = null;
       touchTargetRef.current = null;
     }
+
+    // Start 300ms press-and-hold timer — only enters define mode if user holds still
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      isInDefineModeRef.current = true;
+
+      // Haptic feedback (supported on Android Chrome, ignored elsewhere)
+      try { navigator.vibrate?.(10); } catch {}
+
+      // Highlight word under finger (direct DOM, zero re-renders)
+      const currentSpan = touchTargetRef.current;
+      if (currentSpan) {
+        currentSpan.classList.add('touch-define-highlight');
+        highlightedSpanRef.current = currentSpan;
+      }
+    }, 300);
   }, [isMobile, viewMode, findWordSpanAtPoint]);
 
   const handleContentTouchMove = useCallback((e: React.TouchEvent) => {
@@ -1612,64 +1637,56 @@ export default function App() {
     const touch = e.touches[0];
     if (!touch) return;
 
-    // Check if finger has moved enough to be a slide (not just a tap tremor)
-    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
-    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-    if (dx < 15 && dy < 15) return; // Wait for intentional movement
+    // PHASE 1: Hold timer still pending — user hasn't held long enough
+    if (!isInDefineModeRef.current) {
+      // If user moves before 300ms, they intend to scroll — cancel hold timer
+      const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+      if (dx > 10 || dy > 10) {
+        if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      }
+      // Do NOT call e.preventDefault() — let native scroll happen
+      return;
+    }
 
-    // Now in slide-to-define mode — prevent scrolling and text selection
+    // PHASE 2: In define mode (hold timer fired) — lock scroll, highlight words
     e.preventDefault();
     window.getSelection()?.removeAllRanges();
-    isTouchDefiningRef.current = true;
 
     // Find word span under current finger position
     const wordSpan = findWordSpanAtPoint(touch.clientX, touch.clientY);
-    if (wordSpan && wordSpan !== touchTargetRef.current) {
+    if (wordSpan && wordSpan !== highlightedSpanRef.current) {
+      // Move highlight (direct DOM — zero re-renders)
+      highlightedSpanRef.current?.classList.remove('touch-define-highlight');
+      wordSpan.classList.add('touch-define-highlight');
+      highlightedSpanRef.current = wordSpan;
       touchTargetRef.current = wordSpan;
       touchWordRef.current = wordSpan.textContent?.trim() || null;
-      defineWordFromSpan(wordSpan);
     }
-  }, [isMobile, viewMode, findWordSpanAtPoint, defineWordFromSpan]);
+    // NO defineWordFromSpan(). NO fetchDefinition(). NO state updates during slide.
+  }, [isMobile, viewMode, findWordSpanAtPoint]);
 
   const handleContentTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!isMobile || viewMode !== 'tech') return;
-    if (!touchStartRef.current) return;
 
-    // If we were sliding, the word is already defined — just clean up
-    if (isTouchDefiningRef.current) {
-      isTouchDefiningRef.current = false;
-      touchStartRef.current = null;
-      touchWordRef.current = null;
-      touchTargetRef.current = null;
-      return;
+    // Always clear hold timer
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+
+    // Remove visual highlight (direct DOM cleanup)
+    if (highlightedSpanRef.current) {
+      highlightedSpanRef.current.classList.remove('touch-define-highlight');
+      highlightedSpanRef.current = null;
     }
 
-    // Otherwise treat as a single tap
-    if (!touchWordRef.current || !touchTargetRef.current) {
-      touchStartRef.current = null;
-      return;
+    // If we were in define mode → trigger SINGLE definition fetch for last word
+    if (isInDefineModeRef.current && touchTargetRef.current) {
+      window.getSelection()?.removeAllRanges();
+      e.preventDefault();
+      defineWordFromSpan(touchTargetRef.current);
     }
 
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-
-    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
-    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-    const duration = Date.now() - touchStartRef.current.time;
-
-    // Single tap: movement < 15px and duration < 400ms
-    if (dx > 15 || dy > 15 || duration > 400) {
-      touchStartRef.current = null;
-      return;
-    }
-
-    // Clear any accidental browser text selection from the tap
-    window.getSelection()?.removeAllRanges();
-    e.preventDefault();
-
-    defineWordFromSpan(touchTargetRef.current);
-
-    // Reset refs
+    // Reset all refs
+    isInDefineModeRef.current = false;
     touchStartRef.current = null;
     touchWordRef.current = null;
     touchTargetRef.current = null;
@@ -1682,9 +1699,7 @@ export default function App() {
       setMiniDefComplexity(level);
     } else {
       setIsLoadingDef(true);
-      setDefText("");
-      setDefSymbolGuide([]); // Clear previous symbol guide
-      setDefDomainIntuition(null); // Clear previous domain intuition
+      // Keep previous definition visible while new one loads (overwritten on API response)
       setDefComplexity(level);
     }
 
@@ -4468,7 +4483,7 @@ export default function App() {
                 <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
                   <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                     <BookOpen size={12} />
-                    <span>{isMobile ? 'Tap or slide over words to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
+                    <span>{isMobile ? 'Press & hold any word to define' : 'Select any text to define • Double-click words for quick definitions'}</span>
                   </div>
                 </div>
                 )}

@@ -36,3 +36,11 @@
     transform: rotate(360deg);
   }
 }
+
+/* Touch-to-define: highlight word under finger during press-and-hold slide */
+.touch-define-highlight {
+  background-color: rgba(250, 204, 21, 0.35) !important;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.25);
+  transition: background-color 0.1s ease;
+}
