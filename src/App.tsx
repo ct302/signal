@@ -3510,22 +3510,19 @@ export default function App() {
                           ))}
                         </div>
                       )}
-                      {/* Mobile: Settings + "More" toggle — always visible on mobile */}
+                      {/* Mobile: "More" toggle — only on mobile when content has loaded */}
                       {isMobile && hasStarted && (
-                        <>
-                          <Settings isDarkMode={isDarkMode} />
-                          <button
-                            onClick={() => setShowMoreTools(!showMoreTools)}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                              showMoreTools
-                                ? (isDarkMode ? 'bg-neutral-600 text-white' : 'bg-neutral-300 text-neutral-800')
-                                : (isDarkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')
-                            }`}
-                            title="More tools"
-                          >
-                            <ChevronDown size={14} className={`transition-transform ${showMoreTools ? 'rotate-180' : ''}`} />
-                          </button>
-                        </>
+                        <button
+                          onClick={() => setShowMoreTools(!showMoreTools)}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            showMoreTools
+                              ? (isDarkMode ? 'bg-neutral-600 text-white' : 'bg-neutral-300 text-neutral-800')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')
+                          }`}
+                          title="More tools"
+                        >
+                          <ChevronDown size={14} className={`transition-transform ${showMoreTools ? 'rotate-180' : ''}`} />
+                        </button>
                       )}
                       {/* Desktop: show ALL remaining buttons inline (no change from before) */}
                       {/* Mobile: these go into collapsible section below */}
@@ -4882,6 +4879,10 @@ export default function App() {
           >
             <span className="text-base font-bold">∑</span>
           </button>
+        )}
+        {/* Settings — always accessible on mobile (no need to expand toolbar) */}
+        {isMobile && (
+          <Settings isDarkMode={isDarkMode} />
         )}
         <button
           ref={controlsButtonRef}
