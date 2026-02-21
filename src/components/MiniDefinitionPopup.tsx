@@ -21,6 +21,7 @@ interface MiniDefinitionPopupProps {
   onStartResize: (e: React.MouseEvent, target: string) => void;
   onEliClick: (level: number) => void;
   onCopy: (text: string, id: string) => void;
+  onWordClick?: (word: string, rect: DOMRect) => void;
   renderAttentiveText: (
     text: string,
     threshold: number,
@@ -29,7 +30,8 @@ interface MiniDefinitionPopupProps {
     setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
     customMap: ConceptMapItem[] | null,
     textColor: string,
-    textScale?: number
+    textScale?: number,
+    onWordClick?: (word: string, rect: DOMRect) => void
   ) => React.ReactNode;
   renderRichText: (text: string, colorClass?: string) => React.ReactNode;
 }
@@ -53,6 +55,7 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
   onStartResize,
   onEliClick,
   onCopy,
+  onWordClick,
   renderAttentiveText,
   renderRichText
 }) => {
@@ -140,8 +143,14 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
             setIsMiniDefColorMode,
             null,
             "text-neutral-300",
-            textScale
+            textScale,
+            onWordClick
           )
+        )}
+        {onWordClick && !isLoadingMiniDef && (
+          <div className="text-xs text-neutral-600 mt-1 text-center">
+            {isMobile ? 'Tap' : 'Click'} any word to redefine
+          </div>
         )}
       </div>
 

@@ -1654,6 +1654,17 @@ export default function App() {
     }
   };
 
+  // Handle word click in MINI definition popup — refreshes mini popup in-place (no 3rd level)
+  const handleMiniDefWordClick = (word: string, _rect: DOMRect) => {
+    if (!miniDefPosition) return;  // Safety: only works when mini popup is open
+
+    // Refresh mini popup in-place with new term
+    setMiniSelectedTerm(word);
+    setMiniDefText("");
+    setMiniDefTitle(null);
+    fetchDefinition(word, miniDefText, miniDefComplexity, true);  // isMini=true
+  };
+
   // === Selection Handlers for Multi-Word Definition ===
 
   // Clear selection state
@@ -4879,6 +4890,7 @@ export default function App() {
           onStartResize={startResize}
           onEliClick={(level) => handleDefEliClick(level, true)}
           onCopy={copyToClipboard}
+          onWordClick={handleMiniDefWordClick}
           renderAttentiveText={renderAttentiveText}
           renderRichText={renderRichText}
         />
