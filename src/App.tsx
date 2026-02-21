@@ -1996,12 +1996,26 @@ export default function App() {
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
           break;
+        case 'n':
+          // Toggle Intuition modal
+          if (!hasStarted) return;
+          setShowIntuitionModal(!showIntuitionModal);
+          break;
+        case 'x':
+          // Cycle text size: 1 → 1.25 → 1.5 → 2 → 1
+          if (!hasStarted) return;
+          {
+            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+            const idx = scales.indexOf(textScale);
+            setTextScale(scales[(idx + 1) % scales.length]);
+          }
+          break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode, showFontPicker]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode, showFontPicker, showIntuitionModal]);
 
   // Noise generator for Study Mode (white, pink, brown noise)
   useEffect(() => {
@@ -3745,7 +3759,7 @@ export default function App() {
                                   ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
                                   : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                               }`}
-                              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
+                              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (X)`}
                             >
                               <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
                               <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
@@ -4049,6 +4063,153 @@ export default function App() {
                     />
                   </div>
                 )}
+
+                {/* Follow-up Section - positioned near top for easy access */}
+              {!isStudyGuideMode && showFollowUp && (
+                <div ref={followUpContainerRef} className={`rounded-xl p-4 border mx-4 mt-3 ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                  {/* Header with minimize and history buttons */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
+                      <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {/* History toggle button - only show if there's history */}
+                      {tutorHistory.length > 0 && (
+                        <button
+                          onClick={() => setShowTutorHistory(!showTutorHistory)}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            showTutorHistory
+                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-600')
+                              : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100')
+                          }`}
+                          title="View conversation history"
+                        >
+                          <History size={14} />
+                        </button>
+                      )}
+                      {/* Minimize button */}
+                      <button
+                        onClick={() => setShowFollowUp(false)}
+                        className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'}`}
+                        title="Minimize"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* History Panel - clickable Q&A pairs for branching */}
+                  {showTutorHistory && tutorHistory.length > 0 && (
+                    <div className={`mb-3 p-3 rounded-lg max-h-64 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                      <div className="space-y-2">
+                        {(() => {
+                          // Group history into Q&A pairs
+                          const pairs: { question: string; answer: string; originalIndex: number }[] = [];
+                          for (let i = 0; i < tutorHistory.length; i += 2) {
+                            if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
+                              pairs.push({
+                                question: tutorHistory[i].text,
+                                answer: tutorHistory[i + 1].text,
+                                originalIndex: Math.floor(i / 2)
+                              });
+                            }
+                          }
+                          // Show last 5 pairs
+                          const displayPairs = pairs.slice(-5);
+                          return displayPairs.map((pair) => {
+                            const isSelected = selectedHistoryBranch === pair.originalIndex;
+                            return (
+                              <div
+                                key={pair.originalIndex}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    // Deselect - go back to latest
+                                    setSelectedHistoryBranch(null);
+                                    // Show the latest response
+                                    const lastPair = pairs[pairs.length - 1];
+                                    if (lastPair) {
+                                      setTutorResponse({ question: lastPair.question, answer: lastPair.answer, mode: "Tutor" });
+                                    }
+                                  } else {
+                                    // Select this branch point
+                                    setSelectedHistoryBranch(pair.originalIndex);
+                                    // Show full Q&A as current response
+                                    setTutorResponse({ question: pair.question, answer: pair.answer, mode: "Tutor" });
+                                  }
+                                }}
+                                className={`text-xs p-2 rounded cursor-pointer transition-all ${
+                                  isSelected
+                                    ? (isDarkMode ? 'bg-blue-900/50 border border-blue-500/50 ring-1 ring-blue-500/30' : 'bg-blue-100 border border-blue-300')
+                                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-white hover:bg-neutral-50')
+                                }`}
+                              >
+                                <p className={`font-medium mb-1 ${isSelected ? (isDarkMode ? 'text-blue-200' : 'text-blue-700') : (isDarkMode ? 'text-blue-300' : 'text-blue-600')}`}>
+                                  Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
+                                </p>
+                                <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
+                                  A: {isSelected ? stripMathSymbols(pair.answer) : (pair.answer.length > 120 ? stripMathSymbols(pair.answer.slice(0, 120)) + '...' : stripMathSymbols(pair.answer))}
+                                </p>
+                                {isSelected && (
+                                  <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                    ↳ Branch from here - your next question will continue from this point
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      {selectedHistoryBranch !== null && (
+                        <div className={`mt-2 pt-2 border-t text-xs ${isDarkMode ? 'border-neutral-700 text-amber-400' : 'border-neutral-200 text-amber-600'}`}>
+                          ⚡ Branching mode: Next question will fork from selected point
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Input area */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={followUpQuery}
+                      onChange={(e) => setFollowUpQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAskTutor()}
+                      placeholder="e.g., Can you explain this differently?"
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm ${isDarkMode ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500' : 'border-neutral-200'}`}
+                    />
+                    <button
+                      onClick={() => handleAskTutor()}
+                      disabled={isTutorLoading || !followUpQuery.trim()}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                    >
+                      {isTutorLoading ? <Loader2 className="animate-spin" size={16} /> : 'Ask'}
+                    </button>
+                  </div>
+
+                  {/* Current response with attention controls */}
+                  {tutorResponse && (
+                    <div ref={tutorResponseRef} className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
+                      <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
+
+                      {/* Answer with attention rendering - strip math symbols for clean prose */}
+                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
+                        {renderAttentiveText(
+                          stripMathSymbols(tutorResponse.answer),
+                          tutorThreshold,
+                          setTutorThreshold,
+                          isTutorColorMode,
+                          setIsTutorColorMode,
+                          conceptMap,
+                          isDarkMode ? 'text-neutral-200' : 'text-neutral-700',
+                          1.0,
+                          undefined
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
                 {/* Content Body + Footer - hidden when Study Guide is active */}
                 {!isStudyGuideMode ? (<>
@@ -4500,152 +4661,6 @@ export default function App() {
                 />
               )}
 
-              {/* Follow-up Section */}
-              {!isStudyGuideMode && showFollowUp && (
-                <div ref={followUpContainerRef} className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-                  {/* Header with minimize and history buttons */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
-                      <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {/* History toggle button - only show if there's history */}
-                      {tutorHistory.length > 0 && (
-                        <button
-                          onClick={() => setShowTutorHistory(!showTutorHistory)}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            showTutorHistory
-                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-600')
-                              : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100')
-                          }`}
-                          title="View conversation history"
-                        >
-                          <History size={14} />
-                        </button>
-                      )}
-                      {/* Minimize button */}
-                      <button
-                        onClick={() => setShowFollowUp(false)}
-                        className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'}`}
-                        title="Minimize"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* History Panel - clickable Q&A pairs for branching */}
-                  {showTutorHistory && tutorHistory.length > 0 && (
-                    <div className={`mb-3 p-3 rounded-lg max-h-64 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
-                      <div className="space-y-2">
-                        {(() => {
-                          // Group history into Q&A pairs
-                          const pairs: { question: string; answer: string; originalIndex: number }[] = [];
-                          for (let i = 0; i < tutorHistory.length; i += 2) {
-                            if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
-                              pairs.push({
-                                question: tutorHistory[i].text,
-                                answer: tutorHistory[i + 1].text,
-                                originalIndex: Math.floor(i / 2)
-                              });
-                            }
-                          }
-                          // Show last 5 pairs
-                          const displayPairs = pairs.slice(-5);
-                          return displayPairs.map((pair) => {
-                            const isSelected = selectedHistoryBranch === pair.originalIndex;
-                            return (
-                              <div
-                                key={pair.originalIndex}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    // Deselect - go back to latest
-                                    setSelectedHistoryBranch(null);
-                                    // Show the latest response
-                                    const lastPair = pairs[pairs.length - 1];
-                                    if (lastPair) {
-                                      setTutorResponse({ question: lastPair.question, answer: lastPair.answer, mode: "Tutor" });
-                                    }
-                                  } else {
-                                    // Select this branch point
-                                    setSelectedHistoryBranch(pair.originalIndex);
-                                    // Show full Q&A as current response
-                                    setTutorResponse({ question: pair.question, answer: pair.answer, mode: "Tutor" });
-                                  }
-                                }}
-                                className={`text-xs p-2 rounded cursor-pointer transition-all ${
-                                  isSelected
-                                    ? (isDarkMode ? 'bg-blue-900/50 border border-blue-500/50 ring-1 ring-blue-500/30' : 'bg-blue-100 border border-blue-300')
-                                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-white hover:bg-neutral-50')
-                                }`}
-                              >
-                                <p className={`font-medium mb-1 ${isSelected ? (isDarkMode ? 'text-blue-200' : 'text-blue-700') : (isDarkMode ? 'text-blue-300' : 'text-blue-600')}`}>
-                                  Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
-                                </p>
-                                <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
-                                  A: {isSelected ? stripMathSymbols(pair.answer) : (pair.answer.length > 120 ? stripMathSymbols(pair.answer.slice(0, 120)) + '...' : stripMathSymbols(pair.answer))}
-                                </p>
-                                {isSelected && (
-                                  <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
-                                    ↳ Branch from here - your next question will continue from this point
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                      {selectedHistoryBranch !== null && (
-                        <div className={`mt-2 pt-2 border-t text-xs ${isDarkMode ? 'border-neutral-700 text-amber-400' : 'border-neutral-200 text-amber-600'}`}>
-                          ⚡ Branching mode: Next question will fork from selected point
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Input area */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={followUpQuery}
-                      onChange={(e) => setFollowUpQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAskTutor()}
-                      placeholder="e.g., Can you explain this differently?"
-                      className={`flex-1 px-3 py-2 rounded-lg border text-sm ${isDarkMode ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500' : 'border-neutral-200'}`}
-                    />
-                    <button
-                      onClick={() => handleAskTutor()}
-                      disabled={isTutorLoading || !followUpQuery.trim()}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                    >
-                      {isTutorLoading ? <Loader2 className="animate-spin" size={16} /> : 'Ask'}
-                    </button>
-                  </div>
-
-                  {/* Current response with attention controls */}
-                  {tutorResponse && (
-                    <div ref={tutorResponseRef} className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
-                      <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
-
-                      {/* Answer with attention rendering - strip math symbols for clean prose */}
-                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
-                        {renderAttentiveText(
-                          stripMathSymbols(tutorResponse.answer),
-                          tutorThreshold,
-                          setTutorThreshold,
-                          isTutorColorMode,
-                          setIsTutorColorMode,
-                          conceptMap,
-                          isDarkMode ? 'text-neutral-200' : 'text-neutral-700',
-                          1.0,
-                          undefined
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
             </div>
           )}
@@ -4976,6 +4991,14 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>F</kbd>
                   <span>Font Picker</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>N</kbd>
+                  <span>Intuition</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>X</kbd>
+                  <span>Text Size</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Ambiance</div>

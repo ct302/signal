@@ -876,12 +876,17 @@ REQUIRED JSON STRUCTURE (strict compliance):
       {"word": "significant word or multi-word phrase (keep compound concepts together; keep names together: 'New England Patriots' not 'New','England','Patriots')", "weight": 0.0-1.0}
     ]
   },
+  CONTEXT CARD RULES:
+  - The "context" object MUST be about "${topic}" specifically — NOT about any other concept
+  - Generate ORIGINAL content. Do NOT copy examples from these instructions.
+  - "why" and "real_world" must reference ${topic} by name at least once
+
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
-    "why": "2-3 sentences explaining WHY this concept matters — grounded in the user's domain (${domain || 'everyday life'}). NO generic academic filler. Write like you're explaining to a friend over lunch using their world. e.g. for derivatives + NFL: 'Every yard gained tells a story — the derivative is WHICH play made the difference between a first down and a punt.'",
-    "real_world": "2-3 sentences with a VIVID, SPECIFIC, EVERYDAY scenario using the user's domain (${domain || 'daily life'}). Make it visceral and relatable — like a Chick-fil-A order, a Netflix binge, or a bad Uber ride. NO textbook language. e.g. for partial derivatives + fast food: 'You order your usual combo meal — nuggets, fries, lemonade, 5 sauces. Today they only give you 3 sauces. How much angrier are you JUST about the sauces, ignoring everything else? That's a partial derivative — measuring how one change affects your satisfaction while holding everything else constant.'",
-    "narrative": "A punchy one-liner that maps the concept to the user's domain (${domain || 'real life'}) — visceral, memorable, zero jargon. e.g. 'A single yard can flip a game, just as a single instant can flip a curve.'"
+    "why": "2-3 sentences explaining WHY ${topic} matters — grounded in the user's domain (${domain || 'everyday life'}). Write like explaining to a friend using THEIR world. Must be SPECIFICALLY about ${topic}, not any other concept.",
+    "real_world": "2-3 sentences with a VIVID, SPECIFIC, EVERYDAY scenario showing ${topic} in action using ${domain || 'daily life'} vocabulary. Make it visceral and relatable. Must demonstrate how ${topic} works in practice — not a different concept.",
+    "narrative": "A punchy one-liner mapping ${topic} to ${domain || 'real life'} — visceral, memorable, zero jargon. Must be ABOUT ${topic} specifically."
   },
   "synthesis": {
     "summary": "2-3 sentence integration of both perspectives",
