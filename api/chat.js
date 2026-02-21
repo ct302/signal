@@ -1,16 +1,16 @@
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 25;
 
-// Primary model: cheap, reliable, paid model (~$0.001 per search)
-// Google Gemini 2.5 Flash Lite: $0.10/M in, $0.40/M out - fast, supports JSON mode
-const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
+// Primary model: free, capable model — saves OpenRouter credits
+// Arcee Trinity Large: free on OpenRouter, strong general-purpose model
+const FREE_TIER_DEFAULT_MODEL = 'arcee-ai/trinity-large-preview:free';
 
-// Fallback chain: try paid cheap models first, then free models as last resort
+// Fallback chain: free model first, then cheap paid models as backup
 const FREE_TIER_MODELS = [
-  'google/gemini-2.5-flash-lite',        // Primary: cheap + reliable + fast
-  'google/gemini-2.0-flash-lite-001',    // Fallback 1: even cheaper
-  'meta-llama/llama-4-scout',            // Fallback 2: cheap paid Llama
-  'meta-llama/llama-4-scout:free',       // Fallback 3: free (unreliable)
+  'arcee-ai/trinity-large-preview:free', // Primary: free + capable
+  'google/gemini-2.5-flash-lite',        // Fallback 1: cheap paid
+  'google/gemini-2.0-flash-lite-001',    // Fallback 2: even cheaper
+  'meta-llama/llama-4-scout:free',       // Fallback 3: free Llama
   'openrouter/free'                       // Last resort: auto-router
 ];
 
@@ -137,6 +137,7 @@ function checkBurstLimit(ip) {
 
 // Models known to NOT support response_format: { type: "json_object" }
 const NO_JSON_MODE_MODELS = new Set([
+  'arcee-ai/trinity-large-preview:free',
   'openrouter/free'
 ]);
 
