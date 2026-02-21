@@ -267,6 +267,20 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     }
   }, [selectedConcept]);
 
+  // Hide body scrollbar while Knowledge Bridge overlay is mounted
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Auto-expand Causal Mechanics when entering fullscreen on desktop
+  useEffect(() => {
+    if (isFullScreen && !isMobile) {
+      setShowCausalMechanics(true);
+    }
+  }, [isFullScreen, isMobile]);
+
   // Pre-generate foundational mappings for ALL concepts on mount
   useEffect(() => {
     if (!onFetchFoundationalMapping || conceptData.length === 0) return;
@@ -557,7 +571,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             {/* Concept Comparison - Scrollable content area */}
             <div ref={explanationContentRef} className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
               isMobile ? 'max-h-[calc(92vh-80px)]' : 'max-h-[calc(100vh-140px)]'
-            } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
+            } ${isFullScreen && !isMobile ? 'max-w-[92vw] mx-auto px-5' : ''}`}>
               {/* Expertise Term */}
               <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-amber-900/30 border border-amber-700/60' : 'bg-amber-50 border border-amber-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -719,11 +733,92 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   </button>
                   {showCausalMechanics && (
                     <div className={`p-4 border-t ${isDarkMode ? 'bg-neutral-800/50 border-neutral-600' : 'bg-white border-neutral-200'}`}>
+                      {/* Causal explanation text */}
                       <div className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                         {renderRichText
                           ? renderRichText(selectedConceptData.concept.causal_explanation || '', isDarkMode ? 'text-neutral-300' : 'text-neutral-700')
                           : selectedConceptData.concept.causal_explanation
                         }
+                      </div>
+
+                      {/* Isomorphic Mapping State Machine Diagram */}
+                      <div className={`mt-4 pt-4 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                        <div className={`text-[10px] font-medium uppercase tracking-wider mb-3 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          Structural Mapping
+                        </div>
+                        <div className="flex items-center gap-2 md:gap-3">
+                          {/* Source State Node — What You Know */}
+                          <div
+                            className={`flex-1 rounded-xl p-3 border-2 text-center transition-colors ${
+                              isDarkMode ? 'bg-neutral-700/40' : 'bg-amber-50/80'
+                            }`}
+                            style={{ borderColor: selectedConceptData.color + '50' }}
+                          >
+                            <div className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+                              isDarkMode ? 'text-amber-400/70' : 'text-amber-600/70'
+                            }`}>
+                              What You Know
+                            </div>
+                            <div className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              {cleanLabel(selectedConceptData.concept.analogy_term)}
+                            </div>
+                            <div className={`text-[10px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                              {getShortName(domainName || 'Domain')}
+                            </div>
+                          </div>
+
+                          {/* Arrow with relationship label */}
+                          <div className="flex flex-col items-center gap-1 flex-shrink-0 min-w-[60px] md:min-w-[100px]">
+                            <div
+                              className="w-full h-px"
+                              style={{ backgroundColor: selectedConceptData.color + '50' }}
+                            />
+                            <div
+                              className="px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap"
+                              style={{
+                                backgroundColor: selectedConceptData.color + '15',
+                                color: selectedConceptData.color
+                              }}
+                            >
+                              {selectedConceptData.relationshipLabel}
+                            </div>
+                            <div className="relative w-full">
+                              <div
+                                className="w-full h-px"
+                                style={{ backgroundColor: selectedConceptData.color + '50' }}
+                              />
+                              {/* CSS triangle arrowhead */}
+                              <div
+                                className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0"
+                                style={{
+                                  borderTop: '4px solid transparent',
+                                  borderBottom: '4px solid transparent',
+                                  borderLeft: `6px solid ${selectedConceptData.color}`
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Target State Node — What You're Learning */}
+                          <div
+                            className={`flex-1 rounded-xl p-3 border-2 text-center transition-colors ${
+                              isDarkMode ? 'bg-neutral-700/40' : 'bg-blue-50/80'
+                            }`}
+                            style={{ borderColor: selectedConceptData.color + '50' }}
+                          >
+                            <div className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+                              isDarkMode ? 'text-blue-400/70' : 'text-blue-600/70'
+                            }`}>
+                              What You're Learning
+                            </div>
+                            <div className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              {cleanLabel(selectedConceptData.concept.tech_term)}
+                            </div>
+                            <div className={`text-[10px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                              {getShortName(topicName || 'Topic')}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
