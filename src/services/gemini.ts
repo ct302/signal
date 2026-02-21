@@ -889,7 +889,9 @@ REQUIRED JSON STRUCTURE (strict compliance):
     "narrative": "A punchy one-liner mapping ${topic} to ${domain || 'real life'} — visceral, memorable, zero jargon. Must be ABOUT ${topic} specifically."
   },
   "synthesis": {
-    "summary": "2-3 sentence integration of both perspectives",
+    "one_liner": "ONE punchy sentence — the simplest possible bridge between ${topic} and ${domain || 'real life'}. Visceral, zero jargon, a complete 'aha' in one breath.",
+    "core": "2-3 sentence integration showing HOW ${topic} connects to ${domain || 'real life'} through specific shared mechanics. Build on the one_liner with concrete detail.",
+    "deep": "3-4 sentences revealing the STRUCTURAL mechanics — WHY this mapping works at a fundamental level. What shared patterns, constraints, or dynamics drive both ${topic} and ${domain || 'real life'} concepts. This is the 'engineer\\'s view' of the analogy.",
     "citation": "A memorable quote or principle that ties it together"
   },
   "condensed": {

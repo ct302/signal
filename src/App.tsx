@@ -39,7 +39,9 @@ import {
   Lightbulb,
   Sun,
   Moon,
-  Search
+  Search,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 // Types
@@ -250,6 +252,13 @@ export default function App() {
     stopListening,
     isBrowserSupported: isMicSupported
   } = useSpeechRecognition();
+  const {
+    isListening: isAskListening,
+    transcript: askTranscript,
+    startListening: startAskListening,
+    stopListening: stopAskListening,
+    isBrowserSupported: isAskMicSupported
+  } = useSpeechRecognition();
 
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
@@ -271,6 +280,13 @@ export default function App() {
     }
   }, [transcript]);
 
+  // Voice input: auto-populate Ask follow-up when speech recognition completes
+  useEffect(() => {
+    if (askTranscript) {
+      setFollowUpQuery(askTranscript);
+    }
+  }, [askTranscript]);
+
   // Content State
   const [segments, setSegments] = useState<Segment[]>([]);
   const [conceptMap, setConceptMap] = useState<ConceptMapItem[]>([]);
@@ -285,7 +301,9 @@ export default function App() {
   const [analogyProcessedWords, setAnalogyProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
+  const [synthesisOneLiner, setSynthesisOneLiner] = useState("");
   const [synthesisSummary, setSynthesisSummary] = useState("");
+  const [synthesisDeep, setSynthesisDeep] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
@@ -1004,7 +1022,9 @@ export default function App() {
     }
 
     if (synthesis) {
-      setSynthesisSummary(stripMathSymbols(cleanText(fixUnicode(synthesis.summary || ""))));
+      setSynthesisOneLiner(stripMathSymbols(cleanText(fixUnicode(synthesis.one_liner || ""))));
+      setSynthesisSummary(stripMathSymbols(cleanText(fixUnicode(synthesis.core || synthesis.summary || ""))));
+      setSynthesisDeep(stripMathSymbols(cleanText(fixUnicode(synthesis.deep || ""))));
       setSynthesisCitation(stripMathSymbols(cleanText(fixUnicode(synthesis.citation || ""))));
     }
 
@@ -2433,7 +2453,9 @@ export default function App() {
     setAnalogyExplanation("");
     setContextData(null);
     setCondensedData(null);
+    setSynthesisOneLiner("");
     setSynthesisSummary("");
+    setSynthesisDeep("");
     setSynthesisCitation("");
 
     // UI State
@@ -4185,6 +4207,21 @@ export default function App() {
                       placeholder="e.g., Can you explain this differently?"
                       className={`flex-1 px-3 py-2 rounded-lg border text-sm ${isDarkMode ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500' : 'border-neutral-200'}`}
                     />
+                    {isAskMicSupported && (
+                      <button
+                        onClick={isAskListening ? stopAskListening : startAskListening}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isAskListening
+                            ? 'bg-red-500 text-white animate-pulse'
+                            : isDarkMode
+                              ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                              : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                        }`}
+                        title={isAskListening ? "Stop listening" : "Voice input"}
+                      >
+                        {isAskListening ? <MicOff size={16} /> : <Mic size={16} />}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleAskTutor()}
                       disabled={isTutorLoading || !followUpQuery.trim()}
@@ -4738,9 +4775,11 @@ export default function App() {
       )}
 
       {/* Synthesis Modal */}
-      {showSynthesis && synthesisSummary && (
+      {showSynthesis && (synthesisOneLiner || synthesisSummary) && (
         <SynthesisModal
+          synthesisOneLiner={synthesisOneLiner}
           synthesisSummary={synthesisSummary}
+          synthesisDeep={synthesisDeep}
           synthesisCitation={synthesisCitation}
           synthPos={synthPos}
           isMobile={isMobile}
