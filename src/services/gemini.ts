@@ -1443,8 +1443,9 @@ ${config.style}
 
 Return JSON in this EXACT format:
 {
+  "title": "Concise 2-5 word canonical name for this concept. If the user selected a long phrase, distill it to the proper term (e.g. 'Instantaneous Rate of Change' or 'Derivative'). If a single word, just capitalize it.",
   "definition": "Your definition here...",${includeDomain ? `
-  "domain_intuition": "One visceral sentence mapping this ENTIRE concept to ${domain}. Must feel like an 'aha' moment — physical, gut-level, zero jargon. Example for derivatives + NFL: 'The derivative is the exact moment a receiver plants his foot and cuts — it captures that split-second change in direction.'",` : ''}
+  "domain_intuition": "One visceral sentence mapping this ENTIRE concept to ${domain}. Must feel like an 'aha' moment — physical, gut-level, zero jargon. Must be SPECIFICALLY about the concept being defined.",` : ''}
   "symbol_guide": [${includeSymbolGuide ? `
     {
       "symbol": "symbol as written",
@@ -1467,8 +1468,6 @@ ${includeDomain ? `
 DOMAIN_ANALOGY RULES:
 - Map each symbol to a specific ${domain} concept — visceral and physical, not abstract
 - One sentence maximum, make it hit the gut
-- Example for ∂ (partial derivative) + NFL: "Like tracking just one receiver's speed while the whole offense runs"
-- Example for ∫ (integral) + Cooking: "Like adding up every tiny taste-test into the final flavor profile"
 - CRITICAL: Every symbol MUST reference a DIFFERENT moment/character/element from ${domain} — NEVER reuse the same analogy
 - If the domain is a specific episode, season, or event, reference specific scenes, characters, or plot points unique to it
 - NO generic filler — every analogy must be specific to ${domain}

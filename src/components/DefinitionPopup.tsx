@@ -9,6 +9,7 @@ interface BottomSheetDragHandlers {
 }
 
 interface DefinitionPopupProps {
+  defTitle?: string | null;
   selectedTerm: string;
   defText: string;
   isLoadingDef: boolean;
@@ -50,6 +51,7 @@ interface DefinitionPopupProps {
 }
 
 export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
+  defTitle,
   selectedTerm,
   defText,
   isLoadingDef,
@@ -230,7 +232,10 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <CornerDownRight size={14} className="text-yellow-400 flex-shrink-0" />
             <span className="font-bold text-sm text-yellow-200 truncate">
-              {renderRichText(prepareTermForHeader(selectedTerm), "text-yellow-200")}
+              {defTitle
+                ? renderRichText(defTitle, "text-yellow-200")
+                : renderRichText(prepareTermForHeader(selectedTerm), "text-yellow-200")
+              }
             </span>
             {isLoadingDef && (
               <span className="ml-1.5 inline-block w-3 h-3 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin flex-shrink-0" />

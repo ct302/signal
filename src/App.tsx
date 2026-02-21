@@ -290,6 +290,8 @@ export default function App() {
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defDomainIntuition, setDefDomainIntuition] = useState<string | null>(null);
+  const [defTitle, setDefTitle] = useState<string | null>(null);
+  const [miniDefTitle, setMiniDefTitle] = useState<string | null>(null);
   const [technicalExplanation, setTechnicalExplanation] = useState<string>(""); // Full 250+ word technical explanation
   const [analogyExplanation, setAnalogyExplanation] = useState<string>(""); // Full 250+ word analogy explanation
 
@@ -1556,26 +1558,31 @@ export default function App() {
     if (isMini) {
       setIsLoadingMiniDef(true);
       setMiniDefText("");
+      setMiniDefTitle(null);
       setMiniDefComplexity(level);
     } else {
       setIsLoadingDef(true);
+      setDefTitle(null);
       // Keep previous definition visible while new one loads (overwritten on API response)
       setDefComplexity(level);
     }
 
     try {
       const result = await fetchDefinitionApi(term, context, level, analogyDomain);
-      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[], domain_intuition?: string }
+      // Result is now { title?: string, definition: string, symbol_guide: SymbolGuideEntry[], domain_intuition?: string }
       const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
       const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
       const domainIntuition = typeof result === 'object' && result.domain_intuition ? result.domain_intuition : null;
+      const title = typeof result === 'object' && result.title ? result.title : null;
 
       if (isMini) {
         setMiniDefText(definition);
+        setMiniDefTitle(title);
       } else {
         setDefText(definition);
         setDefSymbolGuide(symbolGuideData);
         setDefDomainIntuition(domainIntuition);
+        setDefTitle(title);
       }
     } catch (e) {
       const errText = "Could not load definition.";
@@ -4750,6 +4757,7 @@ export default function App() {
       {/* Definition Popup */}
       {defPosition && selectedTerm && (
         <DefinitionPopup
+          defTitle={defTitle}
           selectedTerm={selectedTerm}
           defText={defText}
           isLoadingDef={isLoadingDef}
@@ -4814,6 +4822,7 @@ export default function App() {
       {/* Mini Definition Popup */}
       {miniDefPosition && miniSelectedTerm && (
         <MiniDefinitionPopup
+          miniDefTitle={miniDefTitle}
           miniSelectedTerm={miniSelectedTerm}
           miniDefText={miniDefText}
           isLoadingMiniDef={isLoadingMiniDef}

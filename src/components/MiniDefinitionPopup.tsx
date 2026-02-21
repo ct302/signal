@@ -3,6 +3,7 @@ import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, GripHorizontal } from
 import { Position, Size, ConceptMapItem } from '../types';
 
 interface MiniDefinitionPopupProps {
+  miniDefTitle?: string | null;
   miniSelectedTerm: string;
   miniDefText: string;
   isLoadingMiniDef: boolean;
@@ -34,6 +35,7 @@ interface MiniDefinitionPopupProps {
 }
 
 export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
+  miniDefTitle,
   miniSelectedTerm,
   miniDefText,
   isLoadingMiniDef,
@@ -93,7 +95,10 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <CornerDownRight size={14} className="text-blue-400 flex-shrink-0" />
           <span className="font-bold text-sm text-blue-200 truncate">
-            {renderRichText(miniSelectedTerm, "text-blue-200")}
+            {miniDefTitle
+              ? renderRichText(miniDefTitle, "text-blue-200")
+              : renderRichText(miniSelectedTerm, "text-blue-200")
+            }
           </span>
         </div>
         <div className="flex gap-1 text-neutral-400 items-center flex-shrink-0 ml-2">
