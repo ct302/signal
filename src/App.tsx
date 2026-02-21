@@ -1987,6 +1987,11 @@ export default function App() {
           if (!hasStarted || isLoading) return;
           setIsStudyGuideMode(!isStudyGuideMode);
           break;
+        case 'f':
+          // Toggle font picker
+          if (!hasStarted) return;
+          setShowFontPicker(!showFontPicker);
+          break;
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
@@ -4942,8 +4947,12 @@ export default function App() {
                   <span>Dual Pane</span>
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
-                  <span>Text Size</span>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>U</kbd>
+                  <span>Mastery Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Y</kbd>
+                  <span>Study Guide</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>
@@ -4963,6 +4972,10 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>H</kbd>
                   <span>History</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>F</kbd>
+                  <span>Font Picker</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Ambiance</div>
@@ -5151,6 +5164,9 @@ export default function App() {
                   !linearAlgebra.includes(s)
                 );
 
+                // Track seen domain_analogy texts to skip duplicates (LLM sometimes repeats)
+                const seenAnalogies = new Set<string>();
+
                 const renderCategory = (title: string, symbols: typeof detectedSymbols) => {
                   if (symbols.length === 0) return null;
                   return (
@@ -5209,12 +5225,15 @@ export default function App() {
                                 <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
                                   💡 {renderRichText(simple, isDarkMode ? 'text-emerald-400' : 'text-emerald-600')}
                                 </p>
-                                {/* Domain analogy — from API-generated symbol guide */}
-                                {apiEntry?.domain_analogy && (
-                                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-                                    {domainEmoji || '🧠'} {renderRichText(apiEntry.domain_analogy, isDarkMode ? 'text-amber-400' : 'text-amber-600')}
-                                  </p>
-                                )}
+                                {/* Domain analogy — from API-generated symbol guide (dedup: skip if already shown) */}
+                                {apiEntry?.domain_analogy && !seenAnalogies.has(apiEntry.domain_analogy) && (() => {
+                                  seenAnalogies.add(apiEntry.domain_analogy!);
+                                  return (
+                                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                                      {domainEmoji || '🧠'} {renderRichText(apiEntry.domain_analogy!, isDarkMode ? 'text-amber-400' : 'text-amber-600')}
+                                    </p>
+                                  );
+                                })()}
                               </div>
                             </div>
                           );

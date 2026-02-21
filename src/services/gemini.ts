@@ -915,16 +915,19 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "meaning": "What this symbol represents in THIS specific context",
       "simple": "Plain English explanation a beginner would understand",
       "formula": "$LaTeX expression showing this symbol used in a compound expression from your technical_explanation$ (ONLY include for symbols that appear in fractions, sums, integrals, or other compound expressions — omit entirely for standalone symbols like Greek letters)"${domain ? `,
-      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${shortDomain}. Be specific to what the symbol DOES in this context."` : ''}
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Reference a SPECIFIC moment, character, or element — never generic."` : ''}
     }
   ]
 }
 
 ${domain ? `SYMBOL_GUIDE DOMAIN_ANALOGY RULES:
-- Map each symbol to a specific ${shortDomain} concept — visceral, gut-level, zero jargon
+- Map each symbol to a specific ${domain} concept — visceral, gut-level, zero jargon
 - One sentence max per symbol
 - Every analogy must be specific to what the symbol DOES in this context
-- Must feel like an "aha" moment connecting the abstract to lived ${shortDomain} experience
+- Must feel like an "aha" moment connecting the abstract to lived ${domain} experience
+- CRITICAL: Every symbol MUST reference a DIFFERENT moment/character/element from ${domain} — NEVER reuse the same analogy
+- If the domain is a specific episode, season, or event, reference specific scenes, characters, or plot points unique to it
+- NO generic filler like "like a scheduling principle" — each analogy must be so specific it could ONLY apply to ${domain}
 ` : ''}${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
 ALLOWED LaTeX (use these ONLY):
 - Variables and subscripts: $x$, $T_{ij}$, $v^k$
@@ -1444,7 +1447,7 @@ Return JSON in this EXACT format:
       "meaning": "What it represents in THIS context",
       "simple": "Plain English for beginners",
       "formula": "$LaTeX compound expression from your definition$ (only for symbols in fractions/sums/integrals — omit for standalone)"${includeDomain ? `,
-      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Be specific to what the symbol DOES."` : ''}
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Reference a SPECIFIC moment, character, or element — never generic."` : ''}
     }
   ` : ''}]
 }
@@ -1461,6 +1464,8 @@ DOMAIN_ANALOGY RULES:
 - One sentence maximum, make it hit the gut
 - Example for ∂ (partial derivative) + NFL: "Like tracking just one receiver's speed while the whole offense runs"
 - Example for ∫ (integral) + Cooking: "Like adding up every tiny taste-test into the final flavor profile"
+- CRITICAL: Every symbol MUST reference a DIFFERENT moment/character/element from ${domain} — NEVER reuse the same analogy
+- If the domain is a specific episode, season, or event, reference specific scenes, characters, or plot points unique to it
 - NO generic filler — every analogy must be specific to ${domain}
 
 DOMAIN_INTUITION RULES (top-level field):
