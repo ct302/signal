@@ -446,12 +446,9 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 className={`flex-1 rounded-xl p-3 border-l-4 bridge-node-left ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
                                 style={{ borderLeftColor: color, boxShadow: `0 0 12px ${color}15` }}
                               >
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className={`text-xs uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Technical</span>
-                                </div>
-                                <p className="text-sm font-semibold" style={{ color }}>{techTerm}</p>
+                                <p className="text-base font-semibold" style={{ color }}>{techTerm}</p>
                                 {sixWordDef && (
-                                  <p className={`text-[11px] italic mt-1 leading-snug ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                  <p className={`text-sm italic mt-1 leading-snug ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                                     "{sixWordDef}"
                                   </p>
                                 )}
@@ -465,7 +462,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                   >
                                     <div className={`w-3 h-3 rounded-full m-1 ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`} />
                                   </div>
-                                  <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
+                                  <span className={`text-sm font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
                                 </div>
                               </div>
 
@@ -486,14 +483,11 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 className={`flex-1 rounded-xl p-3 border-r-4 bridge-node-right ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
                                 style={{ borderRightColor: color, boxShadow: `0 0 12px ${color}15` }}
                               >
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className={`text-xs uppercase tracking-wider font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{analogyDomain}</span>
-                                </div>
-                                <p className="text-sm font-semibold" style={{ color }}>
+                                <p className="text-base font-semibold" style={{ color }}>
                                   {domainEmoji && <span className="mr-1">{domainEmoji}</span>}
                                   {analogyTerm}
                                 </p>
-                                <p className={`text-[11px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                                   maps to {techTerm}
                                 </p>
                               </div>
@@ -502,7 +496,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                             {/* Bridge label pill */}
                             <div className="text-center -mt-1 mb-1">
                               <span
-                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bridge-node-label ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-100 border border-neutral-200'}`}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bridge-node-label ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-100 border border-neutral-200'}`}
                               >
                                 <Sparkles size={10} style={{ color }} />
                                 <span className={isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}>{bridgeLabel}</span>
@@ -519,11 +513,11 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                           <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700' : 'bg-gradient-to-br from-amber-50 to-blue-50 border border-neutral-200'}`}>
                             <div className="flex items-center gap-2 mb-3">
                               <BookOpen size={16} style={{ color }} />
-                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              <h4 className={`font-semibold text-base ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                                 The Connection
                               </h4>
                             </div>
-                            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                            <p className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                               {narrativeMapping || generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
                             </p>
                           </div>
@@ -536,14 +530,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 {/* Structural insight - WHY it works */}
                                 <div className="flex items-start gap-2">
                                   <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
-                                  <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                                     {structural}
                                   </p>
                                 </div>
                                 {/* Transfer tip - actionable memory hook */}
                                 <div className={`flex items-start gap-2 pt-2 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-100'}`}>
                                   <Zap size={12} style={{ color }} className="mt-0.5 flex-shrink-0 opacity-70" />
-                                  <p className={`text-xs italic leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                  <p className={`text-sm italic leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                                     {transferTip}
                                   </p>
                                 </div>
@@ -555,7 +549,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                           <div className="text-center">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: color + '20' }}>
                               <Sparkles size={12} style={{ color }} />
-                              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
                                 {analogyTerm} = {techTerm}
                               </span>
                             </div>
@@ -565,7 +559,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
                       {/* Click hint when hovering but not selected */}
                       {!isExpanded && (
-                        <p className={`text-xs mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                        <p className={`text-sm mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                           Click to explore the connection
                         </p>
                       )}

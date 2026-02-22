@@ -242,6 +242,7 @@ export default function App() {
     setSynthPos,
     defSize,
     miniDefSize,
+    synthSize,
     miniDefPosition,
     setMiniDefPosition,
     startDrag,
@@ -365,7 +366,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'morph' | 'nfl' | 'tech'>('morph');
   const [mode, setMode] = useState<'opacity' | 'size' | 'heatmap'>('opacity');
   const [threshold, setThreshold] = useState(0.3);
-  const [isAttentionMeterCollapsed, setIsAttentionMeterCollapsed] = useState(false);
+  const [isAttentionMeterCollapsed, setIsAttentionMeterCollapsed] = useState(true);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isBulletMode, setIsBulletMode] = useState(false); // Bullet point mode for Tech Lock
   const [activeBulletIndex, setActiveBulletIndex] = useState<number | null>(null); // Bullet analogy tooltip
@@ -4884,6 +4885,8 @@ export default function App() {
           setIsSynthesisColorMode={setIsSynthesisColorMode}
           onClose={() => setShowSynthesis(false)}
           onStartDrag={startDrag}
+          onStartResize={startResize}
+          synthSize={synthSize}
           onTouchStart={handleSynthTouchStart}
           onTouchMove={handleSynthTouchMove}
           onTouchEnd={handleSynthTouchEnd}

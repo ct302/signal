@@ -11,6 +11,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const [synthPos, setSynthPos] = useState<Position | null>(null);
   const [defSize, setDefSize] = useState<Size>({ width: 340 });
   const [miniDefSize, setMiniDefSize] = useState<Size>({ width: 280 });
+  const [synthSize, setSynthSize] = useState<Size>({ width: 512, height: 500 });
   const [miniDefPosition, setMiniDefPosition] = useState<Position | null>(null);
 
   const isDraggingRef = useRef(false);
@@ -56,8 +57,16 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     } else if (target.startsWith('mini')) {
       resizeStartWidthRef.current = miniDefSize.width;
       resizeStartHeightRef.current = 0;
+    } else if (target.startsWith('synth')) {
+      resizeStartWidthRef.current = synthSize.width;
+      if (synthSize.height) {
+        resizeStartHeightRef.current = synthSize.height;
+      } else {
+        const el = (e.currentTarget as HTMLElement).closest('.synthesis-window');
+        resizeStartHeightRef.current = el ? el.getBoundingClientRect().height : 500;
+      }
     }
-  }, [isMobile, defSize.width, defSize.height, miniDefSize.width]);
+  }, [isMobile, defSize.width, defSize.height, miniDefSize.width, synthSize.width, synthSize.height]);
 
   const handleMiniHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile || !(e.target as HTMLElement).closest('.header-drag-area')) return;
@@ -127,6 +136,15 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
                 prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
               );
             }
+          } else if (target.startsWith('synth')) {
+            const synthClampedWidth = Math.max(300, Math.min(800, newWidth));
+            setSynthSize(prev => ({ ...prev, width: synthClampedWidth }));
+            if (isLeft && synthPos) {
+              const widthDelta = synthSize.width - synthClampedWidth;
+              setSynthPos(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
           }
         }
 
@@ -136,6 +154,10 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
             const newHeight = resizeStartHeightRef.current + deltaY;
             const clampedHeight = Math.max(200, Math.min(window.innerHeight * 0.85, newHeight));
             setDefSize(prev => ({ ...prev, height: clampedHeight }));
+          } else if (target.startsWith('synth')) {
+            const newHeight = resizeStartHeightRef.current + deltaY;
+            const clampedHeight = Math.max(250, Math.min(window.innerHeight * 0.85, newHeight));
+            setSynthSize(prev => ({ ...prev, height: clampedHeight }));
           }
         }
       }
@@ -154,7 +176,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [defSize.width, defSize.height, miniDefSize.width, defPos, miniDefPosition]);
+  }, [defSize.width, defSize.height, miniDefSize.width, defPos, miniDefPosition, synthSize.width, synthSize.height, synthPos]);
 
   return {
     defPos,
@@ -167,6 +189,8 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     setDefSize,
     miniDefSize,
     setMiniDefSize,
+    synthSize,
+    setSynthSize,
     miniDefPosition,
     setMiniDefPosition,
     startDrag,

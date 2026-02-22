@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BrainCircuit, X, GripHorizontal, ZoomIn, ZoomOut, ChevronDown } from 'lucide-react';
-import { Position, ConceptMapItem } from '../types';
+import { Position, Size, ConceptMapItem } from '../types';
 
 interface SynthesisModalProps {
   synthesisOneLiner?: string;
@@ -15,6 +15,8 @@ interface SynthesisModalProps {
   setIsSynthesisColorMode: React.Dispatch<React.SetStateAction<boolean>>;
   onClose: () => void;
   onStartDrag: (e: React.MouseEvent, target: string) => void;
+  onStartResize?: (e: React.MouseEvent, target: string) => void;
+  synthSize?: Size;
   onTouchStart?: (e: React.TouchEvent) => void;
   onTouchMove?: (e: React.TouchEvent) => void;
   onTouchEnd?: (e: React.TouchEvent) => void;
@@ -42,6 +44,8 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
   setIsSynthesisColorMode,
   onClose,
   onStartDrag,
+  onStartResize,
+  synthSize,
   onTouchStart,
   onTouchMove,
   onTouchEnd,
@@ -54,21 +58,24 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
 
   return (
     <div
-      className="synthesis-window fixed z-[200] w-full max-w-lg px-4 flex flex-col cursor-move signal-font"
+      className={`synthesis-window fixed z-[200] px-4 flex flex-col cursor-move signal-font ${isMobile ? 'w-full' : ''}`}
       style={{
         top: isMobile ? 'auto' : (synthPos ? synthPos.top : '50%'),
         bottom: isMobile ? 0 : 'auto',
         left: isMobile ? 0 : (synthPos ? synthPos.left : '50%'),
         transform: isMobile ? 'none' : (synthPos ? 'none' : 'translate(-50%, -50%)'),
-        width: isMobile ? '100%' : 'auto',
+        width: isMobile ? '100%' : (synthSize ? `${synthSize.width}px` : '512px'),
         maxHeight: isMobile ? '80vh' : undefined,
         paddingBottom: isMobile ? 'env(safe-area-inset-bottom, 0px)' : undefined
       }}
     >
       <div
-        className={`bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-2xl border border-slate-600/40 flex flex-col relative select-none max-h-[70vh] ${
+        className={`bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-2xl border border-slate-600/40 flex flex-col relative select-none ${
           isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
+        style={{
+          maxHeight: !isMobile && synthSize?.height ? `${synthSize.height}px` : '70vh',
+        }}
       >
         {/* Header */}
         <div
@@ -204,6 +211,37 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
           <div className="absolute top-1 left-1/2 transform -translate-x-1/2 text-slate-500/50 pointer-events-none">
             <GripHorizontal size={12} />
           </div>
+        )}
+
+        {/* Resize Handles (desktop only) */}
+        {!isMobile && onStartResize && (
+          <>
+            {/* Left edge - horizontal resize */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 transition-colors"
+              onMouseDown={(e) => onStartResize(e, 'synth-left')}
+            />
+            {/* Right edge - horizontal resize */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 transition-colors"
+              onMouseDown={(e) => onStartResize(e, 'synth-right')}
+            />
+            {/* Bottom edge - vertical resize */}
+            <div
+              className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize hover:bg-white/10 transition-colors"
+              onMouseDown={(e) => onStartResize(e, 'synth-bottom')}
+            />
+            {/* Bottom-right corner - diagonal resize */}
+            <div
+              className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-white/10 transition-colors rounded-bl"
+              onMouseDown={(e) => onStartResize(e, 'synth-corner')}
+            />
+            {/* Bottom-left corner - diagonal resize */}
+            <div
+              className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-white/10 transition-colors rounded-br"
+              onMouseDown={(e) => onStartResize(e, 'synth-left-corner')}
+            />
+          </>
         )}
       </div>
     </div>
