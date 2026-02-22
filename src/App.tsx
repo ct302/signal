@@ -602,6 +602,8 @@ export default function App() {
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
   const [isDisambiguating, setIsDisambiguating] = useState(false);
+  // Cache last disambiguation result so cancel + re-search shows it again (LLM is non-deterministic)
+  const disambiguationCacheRef = useRef<{ topic: string; data: DisambiguationData } | null>(null);
 
   // Proximity Warning State
   const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
@@ -1138,13 +1140,22 @@ export default function App() {
     // Clear history view mode - this is a fresh search
     setIsViewingFromHistory(false);
 
+    // Check disambiguation cache first — if user cancelled and re-searched the same topic, show cached result
+    const trimmedTopic = topic.trim().toLowerCase();
+    if (disambiguationCacheRef.current && disambiguationCacheRef.current.topic === trimmedTopic) {
+      setDisambiguation(disambiguationCacheRef.current.data);
+      return;
+    }
+
     // Immediate loading feedback - user sees spinner instantly
     setIsLoading(true);
 
     try {
       const result = await checkAmbiguity(topic, 'topic');
       if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-        setDisambiguation({ type: 'topic', options: result.options || [], original: topic });
+        const disambigData: DisambiguationData = { type: 'topic', options: result.options || [], original: topic };
+        disambiguationCacheRef.current = { topic: trimmedTopic, data: disambigData };
+        setDisambiguation(disambigData);
         setIsLoading(false); // Stop loading on disambiguation
         return;
       }
@@ -1155,6 +1166,8 @@ export default function App() {
       }
 
       const confirmedTopic = result.corrected || topic;
+      // Topic passed ambiguity check — clear any stale disambiguation cache
+      disambiguationCacheRef.current = null;
 
       // Check if topic is too close to the domain
       const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
@@ -1431,12 +1444,23 @@ export default function App() {
       return;
     }
 
+    // Check disambiguation cache first — if user cancelled domain disambiguation and re-submitted
+    const trimmedDomain = inputToUse.trim().toLowerCase();
+    if (disambiguationCacheRef.current &&
+        disambiguationCacheRef.current.topic === trimmedDomain &&
+        disambiguationCacheRef.current.data.type === 'domain') {
+      setDisambiguation(disambiguationCacheRef.current.data);
+      return;
+    }
+
     setIsSettingDomain(true);
     setDomainError("");
 
     const result = await checkAmbiguity(inputToUse, 'domain');
     if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-      setDisambiguation({ type: 'domain', options: result.options || [], original: inputToUse });
+      const disambigData: DisambiguationData = { type: 'domain', options: result.options || [], original: inputToUse };
+      disambiguationCacheRef.current = { topic: trimmedDomain, data: disambigData };
+      setDisambiguation(disambigData);
       setIsSettingDomain(false);
       return;
     }
@@ -1446,6 +1470,8 @@ export default function App() {
       return;
     }
 
+    // Domain passed ambiguity check — clear any stale disambiguation cache
+    disambiguationCacheRef.current = null;
     const finalDomain = result.corrected || inputToUse;
     setDomainEmoji(result.emoji || "🧠");
     setAnalogyDomain(finalDomain);
@@ -3422,6 +3448,8 @@ export default function App() {
           isLoading={isDisambiguating}
           onSelect={async (opt) => {
             setIsDisambiguating(true);
+            // Clear disambiguation cache — user has made their choice
+            disambiguationCacheRef.current = null;
             // Clear current state before proceeding
             resetAllState({ keepDomain: true, keepTopic: true });
 
@@ -3435,6 +3463,7 @@ export default function App() {
             setIsDisambiguating(false);
           }}
           onCancel={() => {
+            // Keep cache intact so re-submitting the same topic shows disambiguation again
             setDisambiguation(null);
             setIsDisambiguating(false);
           }}
@@ -3589,8 +3618,6 @@ export default function App() {
                     ? (isDarkMode ? 'ring-2 ring-blue-500/30' : 'ring-2 ring-blue-400/30')
                     : ''
                 }`}
-                onMouseEnter={handleMouseEnterWrapper}
-                onMouseLeave={handleMouseLeaveWrapper}
                 onClick={handleTouchToggle}
               >
                 {/* Content Header */}
@@ -4378,10 +4405,16 @@ export default function App() {
                   onMouseUp={handleSelectionEnd}
                   onTouchStart={handleSelectionStart}
                   onTouchEnd={(e) => handleSelectionEnd(e)}
+                  onMouseEnter={handleMouseEnterWrapper}
+                  onMouseLeave={handleMouseLeaveWrapper}
                 >
                   {/* Attention Meter - locked at top of content area, collapsible */}
+                  {/* Morph-safe: hovering the meter cancels/pauses the morph timer so users can adjust attention without triggering morph */}
                   {!(showCondensedView && isFirstPrinciplesMode) && (
-                    <div className={`sticky top-0 z-20 ${isAttentionMeterCollapsed ? 'mb-2' : 'pb-3 mb-4 border-b'} ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                    <div
+                      className={`sticky top-0 z-20 ${isAttentionMeterCollapsed ? 'mb-2' : 'pb-3 mb-4 border-b'} ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}
+                      onMouseEnter={() => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); if (viewMode === 'morph') setIsHovering(false); }}
+                    >
                       {isAttentionMeterCollapsed ? (
                         <button
                           onClick={() => setIsAttentionMeterCollapsed(false)}
