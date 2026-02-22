@@ -15,6 +15,9 @@ interface SynthesisModalProps {
   setIsSynthesisColorMode: React.Dispatch<React.SetStateAction<boolean>>;
   onClose: () => void;
   onStartDrag: (e: React.MouseEvent, target: string) => void;
+  onTouchStart?: (e: React.TouchEvent) => void;
+  onTouchMove?: (e: React.TouchEvent) => void;
+  onTouchEnd?: (e: React.TouchEvent) => void;
   renderAttentiveText: (
     text: string,
     threshold: number,
@@ -39,6 +42,9 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
   setIsSynthesisColorMode,
   onClose,
   onStartDrag,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
   renderAttentiveText
 }) => {
   const [textScale, setTextScale] = useState(1);
@@ -60,13 +66,16 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
       }}
     >
       <div
-        className={`bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-2xl border border-slate-600/40 flex flex-col relative select-none ${
+        className={`bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-2xl border border-slate-600/40 flex flex-col relative select-none max-h-[70vh] ${
           isMobile ? 'rounded-t-2xl' : 'rounded-xl'
         }`}
       >
         {/* Header */}
         <div
           onMouseDown={(e) => onStartDrag(e, 'synthesis')}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           className={`header-drag-area ${isMobile ? '' : 'cursor-move'} flex justify-between items-start mb-4 border-b border-slate-700 pb-2`}
         >
           <div className="flex items-center gap-2">
@@ -118,14 +127,14 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
               {synthesisSummary && (
                 <div className="ml-3 pl-4 border-l-2 border-purple-500/30">
                   <button
-                    onClick={() => setExpandedLevel(expandedLevel >= 2 ? 1 : 2)}
+                    onClick={() => setExpandedLevel(expandedLevel === 2 ? 1 : 2)}
                     className="flex items-center gap-2 mb-1.5 hover:opacity-80 transition-opacity w-full text-left"
                   >
                     <span className="text-base">🔗</span>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Core Bridge</span>
-                    <ChevronDown size={12} className={`text-slate-500 transition-transform duration-200 ${expandedLevel >= 2 ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={12} className={`text-slate-500 transition-transform duration-200 ${expandedLevel === 2 ? 'rotate-180' : ''}`} />
                   </button>
-                  {expandedLevel >= 2 && (
+                  {expandedLevel === 2 && (
                     <div className="pl-7 text-sm leading-relaxed mb-3">
                       {renderAttentiveText(
                         synthesisSummary,
@@ -142,17 +151,17 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
               )}
 
               {/* Branch line + Level 3: Deep Structure */}
-              {synthesisDeep && expandedLevel >= 2 && (
+              {synthesisDeep && (
                 <div className="ml-3 pl-4 border-l-2 border-purple-500/30">
                   <button
-                    onClick={() => setExpandedLevel(expandedLevel >= 3 ? 2 : 3)}
+                    onClick={() => setExpandedLevel(expandedLevel === 3 ? 1 : 3)}
                     className="flex items-center gap-2 mb-1.5 hover:opacity-80 transition-opacity w-full text-left"
                   >
                     <span className="text-base">🔬</span>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Deep Structure</span>
-                    <ChevronDown size={12} className={`text-slate-500 transition-transform duration-200 ${expandedLevel >= 3 ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={12} className={`text-slate-500 transition-transform duration-200 ${expandedLevel === 3 ? 'rotate-180' : ''}`} />
                   </button>
-                  {expandedLevel >= 3 && (
+                  {expandedLevel === 3 && (
                     <div className="pl-7 text-sm leading-relaxed mb-3">
                       {renderAttentiveText(
                         synthesisDeep,

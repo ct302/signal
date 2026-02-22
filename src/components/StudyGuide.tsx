@@ -16,7 +16,8 @@ import {
   StudyGuideConcept,
   StudyGuideOutline,
   StudyGuideDetail,
-  StudyGuideDepth
+  StudyGuideDepth,
+  ConceptMapItem
 } from '../types';
 import {
   generateStudyGuideOutline,
@@ -35,6 +36,15 @@ interface StudyGuideProps {
   onClose: () => void;
   cachedOutline?: StudyGuideOutline | null;
   onOutlineGenerated?: (outline: StudyGuideOutline) => void;
+  renderAttentiveText?: (
+    text: string,
+    threshold: number,
+    setThreshold: React.Dispatch<React.SetStateAction<number>> | null,
+    isColorMode: boolean,
+    setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
+    customMap: ConceptMapItem[] | null,
+    textColor: string
+  ) => React.ReactNode;
 }
 
 // ============================================
@@ -74,6 +84,19 @@ interface ConceptItemProps {
   isDarkMode: boolean;
   domainEmoji: string;
   onToggle: () => void;
+  renderAttentiveText?: (
+    text: string,
+    threshold: number,
+    setThreshold: React.Dispatch<React.SetStateAction<number>> | null,
+    isColorMode: boolean,
+    setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
+    customMap: ConceptMapItem[] | null,
+    textColor: string
+  ) => React.ReactNode;
+  studyThreshold: number;
+  setStudyThreshold: React.Dispatch<React.SetStateAction<number>>;
+  isStudyColorMode: boolean;
+  setIsStudyColorMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const ConceptItem: React.FC<ConceptItemProps> = ({
@@ -83,7 +106,12 @@ const ConceptItem: React.FC<ConceptItemProps> = ({
   isLoading,
   isDarkMode,
   domainEmoji,
-  onToggle
+  onToggle,
+  renderAttentiveText,
+  studyThreshold,
+  setStudyThreshold,
+  isStudyColorMode,
+  setIsStudyColorMode
 }) => {
   return (
     <div className={`rounded-lg border transition-all ${
@@ -116,7 +144,7 @@ const ConceptItem: React.FC<ConceptItemProps> = ({
               {domainEmoji} {concept.analogy_term}
             </span>
           </div>
-          <p className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} line-clamp-2`}>
+          <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} line-clamp-2`}>
             {concept.one_liner}
           </p>
         </div>
@@ -143,9 +171,15 @@ const ConceptItem: React.FC<ConceptItemProps> = ({
             <h4 className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isDarkMode ? 'text-amber-400/80' : 'text-amber-600'}`}>
               Technical
             </h4>
-            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-              {detail.tech_explanation}
-            </p>
+            {renderAttentiveText ? (
+              <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {renderAttentiveText(detail.tech_explanation, studyThreshold, setStudyThreshold, isStudyColorMode, setIsStudyColorMode, null, isDarkMode ? "text-neutral-300" : "text-neutral-600")}
+              </div>
+            ) : (
+              <p className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {detail.tech_explanation}
+              </p>
+            )}
           </div>
 
           {/* Domain Explanation */}
@@ -153,9 +187,15 @@ const ConceptItem: React.FC<ConceptItemProps> = ({
             <h4 className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isDarkMode ? 'text-teal-400/80' : 'text-teal-600'}`}>
               {domainEmoji} Through Your Lens
             </h4>
-            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-              {detail.analogy_explanation}
-            </p>
+            {renderAttentiveText ? (
+              <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {renderAttentiveText(detail.analogy_explanation, studyThreshold, setStudyThreshold, isStudyColorMode, setIsStudyColorMode, null, isDarkMode ? "text-neutral-300" : "text-neutral-600")}
+              </div>
+            ) : (
+              <p className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {detail.analogy_explanation}
+              </p>
+            )}
           </div>
 
           {/* Why It Maps */}
@@ -163,14 +203,20 @@ const ConceptItem: React.FC<ConceptItemProps> = ({
             <h4 className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isDarkMode ? 'text-purple-400/80' : 'text-purple-600'}`}>
               Why This Maps
             </h4>
-            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-              {detail.why_it_maps}
-            </p>
+            {renderAttentiveText ? (
+              <div className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {renderAttentiveText(detail.why_it_maps, studyThreshold, setStudyThreshold, isStudyColorMode, setIsStudyColorMode, null, isDarkMode ? "text-neutral-300" : "text-neutral-600")}
+              </div>
+            ) : (
+              <p className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {detail.why_it_maps}
+              </p>
+            )}
           </div>
 
           {/* Key Insight */}
           <div className={`p-2.5 rounded-lg ${isDarkMode ? 'bg-yellow-900/20 border border-yellow-500/20' : 'bg-yellow-50 border border-yellow-200'}`}>
-            <p className={`text-sm font-medium italic ${isDarkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+            <p className={`text-base font-medium italic ${isDarkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
               💡 {detail.key_insight}
             </p>
           </div>
@@ -203,10 +249,13 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({
   isDarkMode,
   onClose,
   cachedOutline,
-  onOutlineGenerated
+  onOutlineGenerated,
+  renderAttentiveText
 }) => {
   // State
   const [depth, setDepth] = useState<StudyGuideDepth>('core');
+  const [studyThreshold, setStudyThreshold] = useState(0.5);
+  const [isStudyColorMode, setIsStudyColorMode] = useState(false);
   const [outline, setOutline] = useState<StudyGuideOutline | null>(cachedOutline || null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +267,7 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({
 
   // Copy feedback
   const [copied, setCopied] = useState(false);
+  const [isCopyLoading, setIsCopyLoading] = useState(false);
 
   // Generate outline on mount if not cached
   const generateOutline = useCallback(async (selectedDepth: StudyGuideDepth) => {
@@ -357,6 +407,57 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({
     document.body.removeChild(textarea);
   }, [formatAsMarkdown]);
 
+  // Expand ALL concepts then copy — ensures complete markdown export
+  const expandAllAndCopy = useCallback(async () => {
+    if (!outline) return;
+    setCopied(false);
+
+    // Find concepts that haven't been expanded yet
+    const unexpanded = outline.concepts.filter(c => !details.has(c.id));
+
+    if (unexpanded.length === 0) {
+      // All already loaded — just copy
+      copyToClipboard();
+      return;
+    }
+
+    // Show loading state
+    setIsCopyLoading(true);
+
+    // Expand all in parallel
+    const promises = unexpanded.map(async (concept) => {
+      try {
+        const detail = await expandStudyGuideConcept(concept, topic, domain);
+        return { id: concept.id, detail };
+      } catch { return null; }
+    });
+
+    const results = await Promise.all(promises);
+
+    // Merge into details map
+    setDetails(prev => {
+      const next = new Map(prev);
+      for (const r of results) {
+        if (r?.detail) next.set(r.id, r.detail);
+      }
+      return next;
+    });
+
+    // Also expand all IDs so the UI shows them
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      for (const r of results) {
+        if (r?.detail) next.add(r.id);
+      }
+      return next;
+    });
+
+    setIsCopyLoading(false);
+
+    // Copy after state update (formatAsMarkdown will pick up new details)
+    setTimeout(() => copyToClipboard(), 100);
+  }, [outline, details, topic, domain, copyToClipboard]);
+
   // Group concepts by category (for complete guides)
   const groupedConcepts = outline?.concepts ? (() => {
     if (outline.depth === 'core' || !outline.concepts.some(c => c.category)) {
@@ -401,19 +502,22 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Copy as Markdown */}
+          {/* Copy as Markdown — auto-expands all concepts first */}
           {outline && (
             <button
-              onClick={copyToClipboard}
+              onClick={expandAllAndCopy}
+              disabled={isCopyLoading}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 copied
                   ? (isDarkMode ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700')
-                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200')
-              }`}
-              title="Copy as Markdown for Obsidian / Notion"
+                  : isCopyLoading
+                    ? (isDarkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-100 text-neutral-400')
+                    : (isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200')
+              } ${isCopyLoading ? 'opacity-70 cursor-wait' : ''}`}
+              title="Expands all concepts, then copies as Markdown"
             >
-              {copied ? <Check size={14} /> : <ClipboardCopy size={14} />}
-              <span>{copied ? 'Copied!' : 'Copy MD'}</span>
+              {isCopyLoading ? <Loader2 size={14} className="animate-spin" /> : copied ? <Check size={14} /> : <ClipboardCopy size={14} />}
+              <span>{isCopyLoading ? 'Loading...' : copied ? 'Copied!' : 'Copy MD'}</span>
             </button>
           )}
           {/* Close */}
@@ -546,6 +650,11 @@ export const StudyGuide: React.FC<StudyGuideProps> = ({
                       isDarkMode={isDarkMode}
                       domainEmoji={domainEmoji}
                       onToggle={() => toggleConcept(concept)}
+                      renderAttentiveText={renderAttentiveText}
+                      studyThreshold={studyThreshold}
+                      setStudyThreshold={setStudyThreshold}
+                      isStudyColorMode={isStudyColorMode}
+                      setIsStudyColorMode={setIsStudyColorMode}
                     />
                   ))}
                 </div>

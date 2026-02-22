@@ -237,6 +237,7 @@ export default function App() {
     setDefPos,
     quizPos,
     synthPos,
+    setSynthPos,
     defSize,
     miniDefSize,
     miniDefPosition,
@@ -259,6 +260,26 @@ export default function App() {
     stopListening: stopAskListening,
     isBrowserSupported: isAskMicSupported
   } = useSpeechRecognition();
+  const {
+    isListening: isDomainListening,
+    transcript: domainTranscript,
+    startListening: startDomainListening,
+    stopListening: stopDomainListening,
+    isBrowserSupported: isDomainMicSupported
+  } = useSpeechRecognition();
+
+  // Synthesis modal touch drag handlers (mobile)
+  const synthTouchRef = useRef<{ startY: number; startTop: number }>({ startY: 0, startTop: 0 });
+  const handleSynthTouchStart = useCallback((e: React.TouchEvent) => {
+    synthTouchRef.current.startY = e.touches[0].clientY;
+    synthTouchRef.current.startTop = typeof synthPos?.top === 'number' ? synthPos.top : window.innerHeight * 0.2;
+  }, [synthPos]);
+  const handleSynthTouchMove = useCallback((e: React.TouchEvent) => {
+    const delta = e.touches[0].clientY - synthTouchRef.current.startY;
+    const newTop = Math.max(10, synthTouchRef.current.startTop + delta);
+    setSynthPos(prev => prev ? { ...prev, top: newTop } : { top: newTop, left: 0 });
+  }, [setSynthPos]);
+  const handleSynthTouchEnd = useCallback(() => {}, []);
 
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
@@ -286,6 +307,13 @@ export default function App() {
       setFollowUpQuery(askTranscript);
     }
   }, [askTranscript]);
+
+  // Voice input: auto-populate domain input when speech recognition completes
+  useEffect(() => {
+    if (domainTranscript) {
+      setTempDomainInput(domainTranscript);
+    }
+  }, [domainTranscript]);
 
   // Content State
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -2384,6 +2412,7 @@ export default function App() {
   // Toggle First Principles view in Tech mode with smooth morph transition
   const toggleFirstPrinciplesMode = () => {
     if (!condensedData) return;
+    if (isStudyGuideMode) setIsStudyGuideMode(false);
 
     // Clear any pending timers
     if (condensedMorphTimerRef.current) {
@@ -3312,6 +3341,9 @@ export default function App() {
         disambiguation={disambiguation}
         setDisambiguation={setDisambiguation}
         handleSetDomain={handleSetDomain}
+        isListening={isDomainListening}
+        onMicClick={isDomainListening ? stopDomainListening : startDomainListening}
+        isMicSupported={isDomainMicSupported}
       />
     );
   }
@@ -3527,6 +3559,7 @@ export default function App() {
                       {hasStarted && (
                         <button
                           onClick={() => {
+                            if (isStudyGuideMode) setIsStudyGuideMode(false);
                             if (!isNarrativeMode) {
                               setIsBulletMode(false);
                               if (isFirstPrinciplesMode) {
@@ -3591,6 +3624,7 @@ export default function App() {
                           {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && (
                             <button
                               onClick={() => {
+                                if (isStudyGuideMode) setIsStudyGuideMode(false);
                                 if (!isBulletMode) {
                                   setIsNarrativeMode(false);
                                   if (isFirstPrinciplesMode) {
@@ -3632,7 +3666,7 @@ export default function App() {
                           {/* Constellation Mode */}
                           {hasStarted && (
                             <button
-                              onClick={() => setIsConstellationMode(!isConstellationMode)}
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsConstellationMode(!isConstellationMode); }}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                                 isConstellationMode
                                   ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
@@ -3647,7 +3681,7 @@ export default function App() {
                           {/* Dual Pane Mode */}
                           {hasStarted && (
                             <button
-                              onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsDualPaneMode(!isDualPaneMode); }}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                                 isDualPaneMode
                                   ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
@@ -3662,7 +3696,7 @@ export default function App() {
                           {/* Mastery Mode */}
                           {hasStarted && conceptMap.length > 0 && (
                             <button
-                              onClick={() => setIsMasteryMode(true)}
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsMasteryMode(true); }}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                                 isMasteryMode
                                   ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
@@ -3725,7 +3759,7 @@ export default function App() {
                             </button>
                           )}
                           {/* Ask */}
-                          {hasStarted && !isStudyGuideMode && (
+                          {hasStarted && (
                             <button
                               onClick={() => setShowFollowUp(!showFollowUp)}
                               disabled={isLoading}
@@ -3743,7 +3777,7 @@ export default function App() {
                             </button>
                           )}
                           {/* Quiz */}
-                          {hasStarted && !isStudyGuideMode && (
+                          {hasStarted && (
                             <button
                               onClick={() => fetchQuiz(false)}
                               disabled={isQuizLoading || isLoading}
@@ -3757,7 +3791,7 @@ export default function App() {
                             </button>
                           )}
                           {/* Synthesis */}
-                          {synthesisSummary && !isStudyGuideMode && (
+                          {synthesisSummary && (
                             <button
                               onClick={() => setShowSynthesis(!showSynthesis)}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -3862,6 +3896,7 @@ export default function App() {
                         {(viewMode === 'tech' || viewMode === 'morph') && (
                           <button
                             onClick={() => {
+                              if (isStudyGuideMode) setIsStudyGuideMode(false);
                               if (!isBulletMode) {
                                 setIsNarrativeMode(false);
                                 if (isFirstPrinciplesMode) {
@@ -3900,7 +3935,7 @@ export default function App() {
                         )}
                         {/* Graph */}
                         <button
-                          onClick={() => setIsConstellationMode(!isConstellationMode)}
+                          onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsConstellationMode(!isConstellationMode); }}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                             isConstellationMode
                               ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
@@ -3912,7 +3947,7 @@ export default function App() {
                         </button>
                         {/* Dual */}
                         <button
-                          onClick={() => setIsDualPaneMode(!isDualPaneMode)}
+                          onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsDualPaneMode(!isDualPaneMode); }}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                             isDualPaneMode
                               ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50')
@@ -3925,7 +3960,7 @@ export default function App() {
                         {/* Mastery */}
                         {conceptMap.length > 0 && (
                           <button
-                            onClick={() => setIsMasteryMode(true)}
+                            onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsMasteryMode(true); }}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                               isMasteryMode
                                 ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50')
@@ -3982,24 +4017,22 @@ export default function App() {
                           </button>
                         )}
                         {/* Ask */}
-                        {!isStudyGuideMode && (
-                          <button
-                            onClick={() => setShowFollowUp(!showFollowUp)}
-                            disabled={isLoading}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                              isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                            } ${
-                              showFollowUp
-                                ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50')
-                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                            }`}
-                          >
-                            <MessageCircle size={14} />
-                            <span>Ask</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setShowFollowUp(!showFollowUp)}
+                          disabled={isLoading}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${
+                            showFollowUp
+                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <MessageCircle size={14} />
+                          <span>Ask</span>
+                        </button>
                         {/* Quiz */}
-                        {!isStudyGuideMode && (
+                        {(
                           <button
                             onClick={() => fetchQuiz(false)}
                             disabled={isQuizLoading || isLoading}
@@ -4012,7 +4045,7 @@ export default function App() {
                           </button>
                         )}
                         {/* Synthesis */}
-                        {synthesisSummary && !isStudyGuideMode && (
+                        {synthesisSummary && (
                           <button
                             onClick={() => setShowSynthesis(!showSynthesis)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -4105,7 +4138,7 @@ export default function App() {
                 )}
 
                 {/* Follow-up Section - positioned near top for easy access */}
-              {!isStudyGuideMode && showFollowUp && (
+              {showFollowUp && (
                 <div ref={followUpContainerRef} className={`rounded-xl p-4 border mx-4 mt-3 ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
                   {/* Header with minimize and history buttons */}
                   <div className="flex items-center justify-between mb-3">
@@ -4703,6 +4736,7 @@ export default function App() {
                       onClose={() => setIsStudyGuideMode(false)}
                       cachedOutline={studyGuideCache}
                       onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
+                      renderAttentiveText={renderAttentiveText}
                     />
                   </div>
                 )}
@@ -4800,6 +4834,9 @@ export default function App() {
           setIsSynthesisColorMode={setIsSynthesisColorMode}
           onClose={() => setShowSynthesis(false)}
           onStartDrag={startDrag}
+          onTouchStart={handleSynthTouchStart}
+          onTouchMove={handleSynthTouchMove}
+          onTouchEnd={handleSynthTouchEnd}
           renderAttentiveText={renderAttentiveText}
         />
       )}
