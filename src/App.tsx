@@ -1203,6 +1203,8 @@ export default function App() {
               // Merge core + enrichment and re-load to populate secondary views
               const merged = { ...coreResult, ...enrichment };
               loadContent(merged, confirmedTopic);
+              // Update history with full data (core + enrichment)
+              saveToHistory(merged, confirmedTopic, analogyDomain);
 
               // Now fire semantic color map with the full concept map available
               setSemanticColorMap(null);
@@ -1309,6 +1311,8 @@ export default function App() {
             if (enrichment) {
               const merged = { ...coreResult, ...enrichment };
               loadContent(merged, lastSubmittedTopic);
+              // Update history with full data (core + enrichment)
+              saveToHistory(merged, lastSubmittedTopic, analogyDomain);
 
               setSemanticColorMap(null);
               const cMap = findContext(enrichment, ["concept_map", "conceptMap"]);
