@@ -336,6 +336,7 @@ export default function App() {
   const [synthesisSummary, setSynthesisSummary] = useState("");
   const [synthesisDeep, setSynthesisDeep] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
+  const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defDomainIntuition, setDefDomainIntuition] = useState<string | null>(null);
@@ -1194,11 +1195,13 @@ export default function App() {
 
         // Phase 2: Background enrichment — concept map, synthesis, context, etc.
         // Does NOT count against free tier daily limit
+        setIsEnrichmentLoading(true);
         generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
           technical_explanation: techText || '',
           analogy_explanation: analText || ''
         })
           .then(enrichment => {
+            setIsEnrichmentLoading(false);
             if (enrichment) {
               // Merge core + enrichment and re-load to populate secondary views
               const merged = { ...coreResult, ...enrichment };
@@ -1217,6 +1220,7 @@ export default function App() {
             }
           })
           .catch(err => {
+            setIsEnrichmentLoading(false);
             // Silent: core content already displayed, enrichment is optional
             console.warn('[fetchAnalogy] Enrichment failed (core content still visible):', err);
             // Still fire semantic color map without concept map
@@ -1303,11 +1307,13 @@ export default function App() {
         const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
 
         // Phase 2: Background enrichment
+        setIsEnrichmentLoading(true);
         generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
           technical_explanation: techText || '',
           analogy_explanation: analText || ''
         })
           .then(enrichment => {
+            setIsEnrichmentLoading(false);
             if (enrichment) {
               const merged = { ...coreResult, ...enrichment };
               loadContent(merged, lastSubmittedTopic);
@@ -1324,6 +1330,7 @@ export default function App() {
             }
           })
           .catch(err => {
+            setIsEnrichmentLoading(false);
             console.warn('[handleComplexityChange] Enrichment failed:', err);
             if (techText || analText) {
               setSemanticColorMap(null);
@@ -2552,6 +2559,7 @@ export default function App() {
     setSynthesisSummary("");
     setSynthesisDeep("");
     setSynthesisCitation("");
+    setIsEnrichmentLoading(false);
 
     // UI State
     setIsLoading(false);
@@ -3845,18 +3853,21 @@ export default function App() {
                               <span className="hidden sm:inline">Quiz</span>
                             </button>
                           )}
-                          {/* Synthesis */}
-                          {synthesisSummary && (
+                          {/* Synthesis — always visible once content loads; shows spinner while enrichment pending */}
+                          {hasStarted && segments.length > 0 && (
                             <button
-                              onClick={() => setShowSynthesis(!showSynthesis)}
+                              onClick={() => synthesisSummary ? setShowSynthesis(!showSynthesis) : null}
+                              disabled={!synthesisSummary && !isEnrichmentLoading}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                showSynthesis
-                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                                !synthesisSummary
+                                  ? (isDarkMode ? 'bg-neutral-700/50 text-neutral-500' : 'bg-neutral-100 text-neutral-400')
+                                  : showSynthesis
+                                    ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                                    : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                               }`}
-                              title="View Synthesis Summary"
+                              title={synthesisSummary ? "View Synthesis Summary" : isEnrichmentLoading ? "Synthesis loading..." : "Synthesis unavailable"}
                             >
-                              <BrainCircuit size={14} />
+                              {isEnrichmentLoading && !synthesisSummary ? <Loader2 className="animate-spin" size={14} /> : <BrainCircuit size={14} />}
                               <span className="hidden sm:inline">Synthesis</span>
                             </button>
                           )}
@@ -4099,17 +4110,20 @@ export default function App() {
                             <span>Quiz</span>
                           </button>
                         )}
-                        {/* Synthesis */}
-                        {synthesisSummary && (
+                        {/* Synthesis — always visible once content loads */}
+                        {hasStarted && segments.length > 0 && (
                           <button
-                            onClick={() => setShowSynthesis(!showSynthesis)}
+                            onClick={() => synthesisSummary ? setShowSynthesis(!showSynthesis) : null}
+                            disabled={!synthesisSummary && !isEnrichmentLoading}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                              showSynthesis
-                                ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
-                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              !synthesisSummary
+                                ? (isDarkMode ? 'bg-neutral-700/50 text-neutral-500' : 'bg-neutral-100 text-neutral-400')
+                                : showSynthesis
+                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
                             }`}
                           >
-                            <BrainCircuit size={14} />
+                            {isEnrichmentLoading && !synthesisSummary ? <Loader2 className="animate-spin" size={14} /> : <BrainCircuit size={14} />}
                             <span>Synthesis</span>
                           </button>
                         )}
@@ -4875,7 +4889,7 @@ export default function App() {
       )}
 
       {/* Synthesis Modal */}
-      {showSynthesis && (synthesisOneLiner || synthesisSummary) && (
+      {showSynthesis && (synthesisOneLiner || synthesisSummary || isEnrichmentLoading) && (
         <SynthesisModal
           synthesisOneLiner={synthesisOneLiner}
           synthesisSummary={synthesisSummary}
