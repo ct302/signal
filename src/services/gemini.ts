@@ -266,6 +266,7 @@ interface ApiCallOptions {
   webSearch?: boolean; // Enable OpenRouter web search plugin
   searchPrompt?: string; // Custom prompt for how to integrate web search results
   maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
+  isEnrichment?: boolean; // Enrichment calls don't count against free tier daily limit
 }
 
 // Build request body based on provider
@@ -353,6 +354,10 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
 
   const url = buildApiUrl(config);
   const headers = buildHeaders(config);
+  // Enrichment calls send a header so the proxy skips usage counting
+  if (options.isEnrichment && shouldUseProxy()) {
+    headers['X-Signal-Enrichment'] = 'true';
+  }
   const body = buildRequestBody(prompt, config, options);
 
   try {
@@ -812,21 +817,10 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
-TOPIC SCOPING - CRITICAL INSTRUCTION:
-When the topic is a BROAD FIELD (like "calculus", "physics", "linear algebra", "machine learning", "chemistry"):
-- Provide an OVERVIEW of the entire topic - what it IS as a field, its main branches, and its core purpose
-- Do NOT arbitrarily pick one subtopic (like only covering "differentiation" when asked about "calculus")
-- The header should reflect the ACTUAL topic requested ("Calculus" not "Differentiation")
-- Cover the topic at the level of specificity the user requested
-
-When the topic is SPECIFIC (like "derivatives", "Taylor series", "gradient descent"):
-- Dive deep into that specific topic as requested
-
-Examples:
-- Topic "calculus" → Overview of calculus as a field (limits, derivatives, integrals, their relationship)
-- Topic "differentiation" → Deep dive on differentiation specifically
-- Topic "neural networks" → Overview of neural network architectures and principles
-- Topic "backpropagation" → Deep dive on backpropagation specifically
+TOPIC SCOPING:
+- BROAD topics (e.g. "calculus"): Provide an OVERVIEW of the entire field, its branches, and core purpose. Do NOT pick one subtopic arbitrarily.
+- SPECIFIC topics (e.g. "derivatives"): Dive deep into that specific topic.
+- The header must reflect the ACTUAL topic requested.
 
 ${complexityInstructions}
 
@@ -928,172 +922,37 @@ REQUIRED JSON STRUCTURE (strict compliance):
 }
 
 ${domain ? `SYMBOL_GUIDE DOMAIN_ANALOGY RULES:
-- Map each symbol to a specific ${domain} concept — visceral, gut-level, zero jargon
-- One sentence max per symbol
-- Every analogy must be specific to what the symbol DOES in this context
-- Must feel like an "aha" moment connecting the abstract to lived ${domain} experience
-- CRITICAL: Every symbol MUST reference a DIFFERENT moment/character/element from ${domain} — NEVER reuse the same analogy
-- If the domain is a specific episode, season, or event, reference specific scenes, characters, or plot points unique to it
-- NO generic filler like "like a scheduling principle" — each analogy must be so specific it could ONLY apply to ${domain}
-` : ''}${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
-ALLOWED LaTeX (use these ONLY):
-- Variables and subscripts: $x$, $T_{ij}$, $v^k$
-- Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$
-- Simple fractions: $\\\\frac{a}{b}$
-- Sums/integrals: $\\\\sum_{i}$, $\\\\int$
-- Simple operators: $\\\\times$, $\\\\cdot$, $\\\\rightarrow$, $=$
-- Superscripts/subscripts: $x^2$, $a_n$
+- Map each symbol to a SPECIFIC ${domain} moment/character — visceral, one sentence, zero jargon
+- Each symbol MUST reference a DIFFERENT ${domain} element — never reuse the same analogy
+- Must be so specific it could ONLY apply to ${domain} (no generic filler)
+` : ''}${topicIsSTEM ? `LaTeX RULES (technical_explanation only):
+ALLOWED: $x$, $T_{ij}$, $\\\\frac{a}{b}$, $\\\\sum_{i}$, $\\\\int$, $\\\\alpha$, $\\\\nabla$, $x^2$ — simple inline math only.
+FORBIDDEN: \\\\array, \\\\matrix, \\\\begin/\\\\end environments, LaTeX commands as English words (write "in" not \\\\in, "to" not \\\\to), \\n or \\\\\\\\ for line breaks, raw Unicode math symbols (∈, ∑, →).
+Keep LaTeX simple — when in doubt, use plain English.` : `NON-STEM TOPIC: Use ONLY plain English — NO LaTeX ($...$), NO Greek letters, NO math symbols (∈, →, ∑), NO subscripts/superscripts. Write as for a general audience magazine.`}
 
-FORBIDDEN (DO NOT USE - THESE BREAK RENDERING):
-- \\\\array, \\\\matrix, \\\\begin, \\\\end (environments don't work inline)
-- \\\\tilde, \\\\hat, \\\\bar as standalone words
-- Complex nested environments
-- Any LaTeX command used as an English word
-- NEVER use \\\\in to mean "in" (write the word "in")
-- NEVER use \\\\to to mean "to" (write the word "to")
-- NEVER use \\\\square to mean "square" (write the word "square")
-- NEVER use \\n or \\\\n for line breaks (use normal paragraph spacing)
-- NEVER use \\\\\\\\ for line breaks (this renders as backslashes)
-- NEVER output Unicode math symbols directly (∈, □, ∑, →, etc.) — use either LaTeX inside $...$ or plain English
+ZERO JARGON IN ANALOGY (HARD RULE):
+All analogy_explanation and "analogy" segment fields must use ONLY ${shortDomain} vocabulary — write as a ${shortDomain} journalist who has never studied math.
+- ZERO technical terms (no tensor, vector, function, variable, derivative, integral, equation, parameter, etc.)
+- ZERO symbols (no →, ∈, ∑, ∫, $...$, Greek letters, subscripts, LaTeX — only standard English characters)
+- Technical concepts are conveyed IMPLICITLY through the story structure, never explicitly
+- Test: if a character is not a letter, digit, or basic punctuation (.,;:!?'"-), rewrite the sentence
 
-EXAMPLES:
-- WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"
-- WRONG: "apply the \\\\tilde transformation"
-- WRONG: "x is \\\\in the set" (use "x is in the set")
-- RIGHT: "A tensor is an array of numbers"
-- RIGHT: "the transformation $\\\\tilde{T}_{ij}$" (command inside $ delimiters)
-- RIGHT: "the metric tensor $g_{\\\\mu\\\\nu}$"
-
-Keep LaTeX simple. When in doubt, use plain English.` : `CRITICAL - NO MATHEMATICAL SYMBOLS (This is NOT a STEM topic):
-Since "${topic}" is not a mathematical/scientific topic, use ONLY plain English:
-- NO LaTeX: No $...$ blocks, no \\\\frac, \\\\sum, \\\\int, etc.
-- NO Greek letters: No α, β, γ, δ, Σ, etc.
-- NO set notation: No ∈, ∪, ∩, ⊂, etc. (write "in", "and", "or" instead)
-- NO arrows: No →, ←, ⟶ (write "to", "from", "leads to" instead)
-- NO subscripts/superscripts: No x₁, x², etc.
-
-EXAMPLES FOR NON-STEM TOPICS:
-- WRONG: "The note ∈ the chord" → RIGHT: "The note in the chord"
-- WRONG: "Voice leading → resolution" → RIGHT: "Voice leading leads to resolution"
-- WRONG: "The ∑ of intervals" → RIGHT: "The sum of intervals"
-
-Write as if for a general audience magazine - clear, readable English only.`}
-
-ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
-The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
-- NO parenthetical technical terms like "(covariant)" or "(tensor)"
-- NO technical vocabulary whatsoever - not even simple terms like "function" or "variable"
-- ONLY ${shortDomain} vocabulary that a ${shortDomain} enthusiast would use
-- Write as if you're a ${shortDomain} journalist writing about ${shortDomain} - you wouldn't mention math!
-- The technical concepts should be IMPLICIT through the story structure, not EXPLICIT through terminology
-
-FORBIDDEN WORDS IN ANALOGY (never use these - use ${shortDomain} equivalents only):
-tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
-covariant, contravariant, derivative, integral, function, variable, equation,
-component, index, rank, metric, manifold, space, field, operator, mapping,
-linear, nonlinear, invariant, gradient, divergence, curl, differential,
-parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
-limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
-sum, summation, product, series, sequence, convergence, divergence
-
-FORBIDDEN SYMBOLS IN ANALOGY - THIS IS A HARD REQUIREMENT:
-⚠️ ZERO SYMBOLS ALLOWED - The analogy MUST be plain English text only:
-- NO arrows of any kind: → ← ↔ ⟶ ⇒ ⇔ (write "to", "from", "leads to" instead)
-- NO mathematical operators: ∑ ∫ ∂ ∇ × ÷ ± ∞ ≈ ≠ ≤ ≥ (write words instead)
-- NO set notation: ∈ ∉ ⊂ ⊃ ∪ ∩ (write "in", "contains", "and" instead)
-- NO LaTeX or math notation: $...$ blocks, \\frac, \\sum, \\int, etc.
-- NO subscripts/superscripts: x₁, x², aₙ, etc.
-- NO Greek letters: α, β, γ, δ, Δ, θ, π, σ, Σ
-- NO special Unicode math characters whatsoever
-
-The analogy text must look like it came from a ${shortDomain} magazine or newspaper article.
-If a ${shortDomain} journalist wouldn't write it, don't include it.
-
-EXAMPLE OF WHAT NOT TO DO:
-❌ "The quarterback's throw → the receiver" (has arrow symbol)
-❌ "Each play ∈ the drive" (has set notation)
-❌ "The ∑ of all yards" (has summation symbol)
-
-CORRECT APPROACH:
-✅ "The quarterback's throw reached the receiver"
-✅ "Each play within the drive"
-✅ "The total of all yards"
-
-If you catch yourself writing ANY symbol in the analogy, STOP and rewrite using ONLY plain English words.
-
-STRUCTURAL ENFORCEMENT FOR ANALOGY TEXT:
-Before finalizing each analogy field, mentally scan it character by character:
-- If ANY character is not a standard English letter, number, punctuation mark (.,;:!?'"-), or whitespace, REWRITE the sentence
-- The analogy text must pass this test: could a sports journalist who has NEVER studied math have written this?
-- Specifically: the characters ∇ ∮ ∬ ∫ ∂ ∈ ∑ → ← ↔ should NEVER appear in ANY analogy field
-- Specifically: backslash (\\) should NEVER appear in ANY analogy field — it indicates LaTeX leaked in
-- If you find yourself writing a formula or equation, STOP and describe the CONCEPT using only ${shortDomain} language
-
-CRITICAL: STORY vs TERMINOLOGY SOUP
-
-You MUST write a NARRATIVE STORY with characters, setting, conflict, and resolution.
-You must NOT write "terminology soup" - generic vocabulary definitions strung together.
-
-❌ BAD EXAMPLE (terminology soup - NO STORY, just vocabulary):
-"A [${shortDomain} term] is a collection of [${shortDomain} term] that [generic action]. The [${shortDomain} term] shows how many [${shortDomain} term] are needed for each [${shortDomain} term]. Each [${shortDomain} term] is defined by the [${shortDomain} term]."
-
-This pattern is BAD because:
-- No specific people, names, dates, or events - just generic vocabulary
-- Reads like a dictionary/glossary, not a story
-- No narrative arc (beginning, middle, end)
-- No characters the reader can follow
-- Sentences are definitions, not plot points
-
-✅ GOOD STORY STRUCTURE (what you MUST do):
-"On [SPECIFIC DATE], [REAL PERSON by name] faced [SPECIFIC SITUATION]. As [EVENT UNFOLDED], [PERSON] noticed [OBSERVATION]. [ACTION TAKEN]. [REACTION/CONSEQUENCE]. This [OUTCOME] became [SIGNIFICANCE]."
-
-This pattern is GOOD because:
-- Opens with specific date/time anchoring the story
-- Names a real person the reader can look up
-- Describes a specific situation with stakes
-- Has cause and effect (action → reaction)
-- Ends with resolution or significance
-- Reads like a documentary or journalism piece
-
-FOR ${shortDomain} SPECIFICALLY:
-Think of a FAMOUS moment, person, or event from ${shortDomain} history. Build your story around that real moment. The reader should be able to verify the facts you mention.
-
-NARRATIVE STORYTELLING REQUIREMENT:
-The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
-
-CRITICAL - NAMED INDIVIDUALS REQUIRED:
-- You MUST name specific PEOPLE (with full names), not just organizations/teams/groups
-- ❌ WRONG: "The Raiders' offense shifted formation" (no individual named)
-- ✅ RIGHT: "Rich Gannon dropped back, scanning the field as Jerry Rice cut across the middle"
-- ❌ WRONG: "The chef prepared the dish" (generic role, no name)
-- ✅ RIGHT: "Julia Child lifted the copper pan, letting the butter foam and sizzle"
-- The story must feature at least 2-3 NAMED INDIVIDUALS that ${shortDomain} enthusiasts would recognize
-
-SPECIFIC DETAILS REQUIRED:
-- PICK A SPECIFIC MOMENT: Choose ONE memorable event, performance, or turning point from ${shortDomain}
-- Use REAL names: actual people WITH THEIR NAMES (not just roles like "the quarterback" or "the chef")
-- Use REAL events: actual moments that happened and can be verified
-- Use REAL details: specific dates, scores, statistics, or measurable facts
-- ALWAYS use numeric digits for dates, years, scores, and statistics: "February 2, 2002" NOT "February two thousand two", "21-17" NOT "twenty-one to seventeen"
-- NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
-- Tell a STORY that happens to teach the concept through its structure
-- The story needs a NARRATIVE ARC: setup, development, climax/resolution
+NARRATIVE STORYTELLING (NOT TERMINOLOGY SOUP):
+The analogy_explanation must be a REAL ${shortDomain} STORY — like a documentary, not a glossary:
+- Pick ONE famous ${shortDomain} moment/event and build the story around it
+- Name 2-3 REAL PEOPLE with FULL NAMES (not just roles like "the quarterback")
+- Include REAL dates, scores, statistics (use digits: "February 2, 2002", "21-17")
+- Structure: setup → development → climax/resolution (narrative arc)
+- ❌ BAD: "The team's offense shifted formation" (generic, no names, no story)
+- ✅ GOOD: "On [DATE], [FULL NAME] faced [SITUATION]... [ACTION]... [OUTCOME]"
+- The ${shortDomain} fan reading this should recognize the story and be able to verify the facts
 
 CONCEPT_MAP RULES:
-The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
-IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive coverage (Mastery Mode requires 10).
-- tech_term: appears in technical_explanation
-- analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
-- six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
-  - "tensor components" → "Numbers describing multi-directional physical quantities"
-  - "covariant derivative" → "Rate of change respecting curved space"
-  - "eigenvalue" → "Scaling factor for special direction vectors"
-- narrative_mapping: A 2-3 sentence VIVID MINI-STORY showing HOW these concepts connect through a SPECIFIC ${shortDomain} scenario. NOT generic templates - use real ${shortDomain} vocabulary, names, situations. The reader should think "Oh, THAT'S what it means!" Examples:
-  - Bad: "defensive assignments is like tensor components because they both track multiple things"
-  - Good: "When Monte Kiffin designed the Tampa 2, each defender's gap responsibility was a component in his defensive tensor—change one assignment, and the entire coverage matrix shifts."
-- causal_explanation: First-principles reasoning for WHY this analogy works at a deep structural level. Not just "they're similar" but the underlying mechanics that make them genuinely isomorphic. What shared patterns, constraints, or dynamics do both concepts obey? Examples:
-  - Bad: "Both involve tracking multiple things"
-  - Good: "Both systems must satisfy a conservation constraint - in tensors, component transformations preserve magnitude; in zone defense, assignment shifts must preserve total coverage. The math of 'nothing leaks through' is identical."
+Provide AT LEAST 10 concept mappings (Mastery Mode requires 10).
+- tech_term: from technical_explanation; analogy_term: from analogy_explanation (${shortDomain} vocabulary, NOT technical)
+- six_word_definition: EXACTLY 6 words defining the tech_term in plain English (domain-agnostic, what it IS)
+- narrative_mapping: 2-3 sentence vivid mini-story connecting these concepts through a SPECIFIC ${shortDomain} scenario with real names/situations
+- causal_explanation: First-principles WHY this analogy works structurally — shared mechanics/patterns, not just surface similarity
 
 CONDENSED VIEW RULES:
 The "condensed" object provides a stripped-down, first-principles view of the concept:
@@ -1106,48 +965,16 @@ The "condensed" object provides a stripped-down, first-principles view of the co
   - If you removed any bullet, understanding would be incomplete
   - Order them from most fundamental to most nuanced
 
-ATTENTION_MAP RULES (CRITICAL FOR VISUAL HIGHLIGHTING):
-The attention_map provides word-level importance weights for the attention-based highlighting system.
-This simulates transformer attention - showing which words carry semantic weight vs. which are just connectors.
-
-WEIGHT GUIDELINES:
-- 1.0: Core concept terms, key technical vocabulary, central ideas (e.g., "derivative", "quarterback", "algorithm")
-- 0.8-0.9: Important supporting terms, action verbs central to meaning (e.g., "calculates", "intercepted", "transforms")
-- 0.6-0.7: Descriptive words that add meaning (e.g., "instantaneous", "crucial", "complex")
-- 0.4-0.5: Common verbs and adjectives (e.g., "shows", "different", "important")
-- 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
-- 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
-
-MULTI-WORD ENTITY RULE (CRITICAL):
-Keep multi-word entities as SINGLE entries - they are ONE semantic unit:
-- Full names: "Tom Brady" (not separate "Tom" and "Brady")
-- Compound terms: "running back", "offensive line", "gradient descent"
-- Technical phrases: "covariant derivative", "Taylor series", "neural network"
-- Place names: "Gillette Stadium", "New England"
-- Team names: "New England Patriots" or just "Patriots"
-Examples:
-  {"word": "Tom Brady", "weight": 0.9}
-  {"word": "gradient descent", "weight": 1.0}
-  {"word": "Super Bowl", "weight": 0.85}
-
-REQUIREMENTS:
-- Include EVERY content word from both explanations (not just key terms)
-- For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
-- For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
-- Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
-- Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
-- Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
+ATTENTION_MAP RULES:
+Weights: 1.0=core concepts, 0.8-0.9=important terms, 0.6-0.7=descriptive, 0.4-0.5=common words, 0.1-0.3=function words/connectors.
+- Keep multi-word entities as ONE entry: "Tom Brady" not "Tom","Brady"; "gradient descent" not separate words
+- Cover ALL content words (nouns, verbs, adjectives) from BOTH explanations — 50-100+ per explanation
+- Skip only articles, prepositions, conjunctions
 
 SYMBOL_GUIDE RULES:
-The symbol_guide provides CONTEXT-AWARE explanations for mathematical symbols used in technical_explanation.
-- Include ALL symbols, variables, and mathematical notation used (Greek letters, operators, single-letter variables)
-- Names must be CONTEXT-SPECIFIC to THIS topic: if 'A' represents a coordinate ring in algebraic geometry, name it "Coordinate Ring", NOT "Matrix A"
-- If 'λ' represents eigenvalues, name it "Eigenvalue", not just "Lambda"
-- Order by importance/first appearance in the explanation
-- The "simple" field should be genuinely helpful for beginners - use analogies or plain English
-- Only include symbols that ACTUALLY APPEAR in your technical_explanation
-- The "formula" field should show the ACTUAL LaTeX expression from your technical_explanation where this symbol appears in a compound expression (fractions, sums, integrals, etc.). Only include it when the symbol appears in a compound expression — omit for standalone symbols
-- For non-STEM topics with no mathematical symbols, return an empty array: "symbol_guide": []
+- Include ALL symbols from technical_explanation; names must be CONTEXT-SPECIFIC (e.g. if 'A' is a coordinate ring, name it "Coordinate Ring")
+- "formula" field: only for symbols in compound expressions (fractions, sums, integrals) — omit for standalone symbols
+- For non-STEM topics: return empty array "symbol_guide": []
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
@@ -1186,6 +1013,184 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
     jsonMode: true,
     webSearch: needsWebSearch,
     searchPrompt: searchPromptText
+  });
+  return safeJsonParse(text);
+};
+
+/**
+ * CORE: Generate the essential content users see immediately.
+ * Returns: technical_explanation, analogy_explanation, segments, attention_map
+ * Designed to be fast (~5-10s with paid model) — core fields only, trimmed prompt.
+ */
+export const generateAnalogyCore = async (
+  topic: string,
+  domain: string,
+  complexity: number = 50,
+  cachedDomainEnrichment?: CachedDomainEnrichment
+) => {
+  const shortDomain = getShortDomain(domain);
+  const complexityInstructions = getComplexityPrompt(complexity, shortDomain);
+  const topicIsSTEM = isSTEMTopic(topic);
+
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const webSearchContext = domainGranularity.isGranular
+    ? `CRITICAL - WEB SEARCH REQUIRED: Search for "${domain}" to get real facts (dates, names, scores). Use ONLY search results — do NOT fabricate details.\n\n---\n\n`
+    : '';
+
+  const latexInstruction = (topicIsSTEM && complexity !== 5)
+    ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters, NO LaTeX.';
+
+  const corePrompt = `${webSearchContext}Create a learning module for "${topic}" using "${shortDomain}" as an analogical lens.
+
+TOPIC SCOPING:
+- BROAD topics (e.g. "calculus"): Provide an OVERVIEW of the entire field.
+- SPECIFIC topics (e.g. "derivatives"): Dive deep into that specific topic.
+
+${complexityInstructions}
+
+REQUIRED JSON STRUCTURE:
+{
+  "technical_explanation": "${complexity === 5
+    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows. Compare everything to toys, snacks, playgrounds. Make it FUN. Do NOT use \\n or \\\\ for line breaks.`
+    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - definition with key equation, (2) HOW - core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler. Do NOT use \\n or \\\\ for line breaks.`}",
+  "analogy_explanation": "${complexity === 5
+    ? `A fun, SHORT story from ${shortDomain} that a kid would love (1-2 paragraphs, 100-150 words MAX). Simple words only. ZERO technical terms.`
+    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms — write ONLY in ${shortDomain} vocabulary. The reader should feel like reading a ${shortDomain} documentary. (3-4 paragraphs, 250+ words)`}",
+  "segments": [
+    {
+      "tech": "${complexity === 5 ? 'Simple sentence using kid-friendly words' : 'A single concept from the technical explanation'}",
+      "analogy": "${complexity === 5 ? `Matching ${shortDomain} story moment — simple words` : `Corresponding ${shortDomain} narrative moment - PURE ${shortDomain} vocabulary, NO technical terms`}",
+      "narrative": "Brief story element (1-2 sentences) with real ${shortDomain} references",
+      "intuitions": [
+        "First one-liner (under 12 words): '[Tech concept] is like [${shortDomain} analogy]'",
+        "Second one-liner - different angle",
+        "Third one-liner - the 'aha' moment"
+      ]
+    }
+  ],
+  "attention_map": {
+    "tech": [ {"word": "significant word or multi-word phrase", "weight": 0.0-1.0} ],
+    "analogy": [ {"word": "significant word or multi-word phrase", "weight": 0.0-1.0} ]
+  }
+}
+
+${topicIsSTEM ? `LaTeX RULES: ALLOWED: $x$, $T_{ij}$, $\\\\frac{a}{b}$, $\\\\sum_{i}$, $\\\\int$, $\\\\alpha$, $\\\\nabla$, $x^2$ — simple inline math only.
+FORBIDDEN: \\\\array, \\\\matrix, \\\\begin/\\\\end environments, LaTeX commands as English words, \\n or \\\\\\\\ for line breaks, raw Unicode symbols.` : `NON-STEM: Use ONLY plain English — NO LaTeX, NO Greek letters, NO math symbols.`}
+
+ZERO JARGON IN ANALOGY: All analogy fields must use ONLY ${shortDomain} vocabulary — zero technical terms, zero symbols. Write as a ${shortDomain} journalist.
+
+NARRATIVE STORYTELLING: The analogy must be a REAL ${shortDomain} STORY with 2-3 NAMED people (full names), real dates/scores, and a narrative arc (setup → climax → resolution).
+
+ATTENTION MAP: Weights 1.0=core concepts, 0.8-0.9=important, 0.6-0.7=descriptive, 0.1-0.3=connectors. Keep multi-word entities as ONE entry ("Tom Brady" not "Tom","Brady"). Cover ALL content words from BOTH explanations (50-100+ each).
+
+RULES:
+1. Segments MUST cover ALL content from both explanations
+2. LaTeX escaping: use \\\\ not \\ for backslashes
+3. Return ONLY valid JSON, no markdown code blocks`;
+
+  const searchPromptText = domainGranularity.isGranular
+    ? `Use ONLY facts from search results about "${domain}". Extract exact dates, names, scores, key moments.`
+    : `Use search results to ground the ${shortDomain} story in REAL history with real names and events.`;
+
+  const text = await callApi(corePrompt, {
+    jsonMode: true,
+    webSearch: needsWebSearch,
+    searchPrompt: searchPromptText
+  });
+  return safeJsonParse(text);
+};
+
+/**
+ * ENRICHMENT: Generate metadata for secondary views (concept map, synthesis, context, etc.).
+ * Takes the core explanations as context so generated terms match the actual content.
+ * Fires in the background after core content is displayed. Does NOT count against free tier.
+ */
+export const generateAnalogyEnrichment = async (
+  topic: string,
+  domain: string,
+  complexity: number = 50,
+  coreResult: { technical_explanation: string; analogy_explanation: string }
+) => {
+  const shortDomain = getShortDomain(domain);
+  const topicIsSTEM = isSTEMTopic(topic);
+
+  const enrichmentPrompt = `Given the following learning content about "${topic}" using "${shortDomain}" as an analogical lens, generate enrichment metadata. All terms in concept_map MUST reference actual words from the provided explanations.
+
+TECHNICAL EXPLANATION:
+${coreResult.technical_explanation}
+
+ANALOGY EXPLANATION:
+${coreResult.analogy_explanation}
+
+Generate ONLY this JSON:
+{
+  "concept_map": [
+    {
+      "id": 0,
+      "tech_term": "technical term from the explanation above",
+      "analogy_term": "${shortDomain}-native equivalent from the analogy above",
+      "six_word_definition": "EXACTLY six words defining the tech_term in plain English",
+      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through ${shortDomain}",
+      "causal_explanation": "WHY this mapping works structurally — shared mechanics/patterns",
+      "why_it_matters": {
+        "connection": "WHY these concepts structurally connect",
+        "importance": "WHY understanding this link unlocks deeper understanding",
+        "critical": "WHY the system would fail without this concept"
+      }
+    }
+  ],
+  "importance_map": [ {"term": "key term", "importance": 0.0-1.0} ],
+  "context": {
+    "header": "Topic header",
+    "emoji": "🎯",
+    "why": "2-3 sentences on WHY ${topic} matters, using ${domain || 'everyday life'} vocabulary",
+    "real_world": "2-3 sentences with a vivid scenario showing ${topic} in action",
+    "narrative": "Punchy one-liner mapping ${topic} to ${domain || 'real life'}"
+  },
+  "synthesis": {
+    "one_liner": "ONE punchy sentence bridging ${topic} and ${domain || 'real life'}",
+    "core": "2-3 sentences showing HOW ${topic} connects to ${domain || 'real life'}",
+    "deep": "3-4 sentences on WHY this mapping works at a structural level",
+    "citation": "A memorable quote or principle"
+  },
+  "condensed": {
+    "what": "One sentence: WHAT this concept is",
+    "why": "One sentence: WHY this matters",
+    "bullets": ["5 irreducibly simple truths about ${topic}"],
+    "mnemonic": {
+      "phrase": "Catchy phrase where each word starts with first letter of each bullet",
+      "breakdown": ["E = Word → Concept from bullet"]
+    }
+  },
+  "symbol_guide": [${topicIsSTEM ? `
+    {
+      "symbol": "symbol as written",
+      "name": "Context-specific name for THIS topic",
+      "meaning": "What it represents in this context",
+      "simple": "Plain English explanation",
+      "formula": "$LaTeX compound expression$ (only for symbols in fractions/sums/integrals)"${domain ? `,
+      "domain_analogy": "One sentence mapping this symbol to ${domain}"` : ''}
+    }` : ''}
+  ]
+}
+
+CONCEPT_MAP RULES:
+- Provide AT LEAST 10 concept mappings. tech_term and analogy_term must be DIFFERENT words.
+- six_word_definition: EXACTLY 6 words, domain-agnostic, what the concept IS
+- narrative_mapping: Use SPECIFIC ${shortDomain} scenarios with real names
+
+CONTEXT must be specifically about "${topic}". Generate ORIGINAL content.
+${topicIsSTEM ? '' : `For non-STEM topics: symbol_guide should be an empty array [].`}
+${domain ? `SYMBOL domain_analogy: Map each symbol to a SPECIFIC ${domain} moment — visceral, unique, never reuse.` : ''}
+importance_map: 15-25 significant terms with weights 0.0-1.0.
+Return ONLY valid JSON.`;
+
+  const text = await callApi(enrichmentPrompt, {
+    jsonMode: true,
+    isEnrichment: true // Don't count against free tier daily limit
   });
   return safeJsonParse(text);
 };

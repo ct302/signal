@@ -1,15 +1,14 @@
 // Free tier configuration
 const FREE_TIER_DAILY_LIMIT = 25;
 
-// Primary model: free, capable model — saves OpenRouter credits
-// Arcee Trinity Large: free on OpenRouter, strong general-purpose model
-const FREE_TIER_DEFAULT_MODEL = 'arcee-ai/trinity-large-preview:free';
+// Primary model: fast paid model — ~$0.001/call, 5-15s response vs 60-180s on free tier
+const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.0-flash-lite-001';
 
-// Fallback chain: free model first, then cheap paid models as backup
+// Fallback chain: fast paid models first, free models as last resort
 const FREE_TIER_MODELS = [
-  'arcee-ai/trinity-large-preview:free', // Primary: free + capable
-  'google/gemini-2.5-flash-lite',        // Fallback 1: cheap paid
-  'google/gemini-2.0-flash-lite-001',    // Fallback 2: even cheaper
+  'google/gemini-2.0-flash-lite-001',    // Primary: fast + cheap (~$0.001/call)
+  'google/gemini-2.5-flash-lite',        // Fallback 1: latest flash lite
+  'arcee-ai/trinity-large-preview:free', // Fallback 2: free but slow
   'meta-llama/llama-4-scout:free',       // Fallback 3: free Llama
   'openrouter/free'                       // Last resort: auto-router
 ];
@@ -177,7 +176,7 @@ module.exports = async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Signal-Enrichment');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -251,8 +250,10 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // Always count successful API calls — no client-controlled bypass
-          var newUsage = await incrementDailyUsage(clientIP);
+          // Enrichment calls (background metadata) don't count against daily limit
+          // Burst limiter still applies to prevent abuse
+          var isEnrichment = req.headers['x-signal-enrichment'] === 'true';
+          var newUsage = isEnrichment ? currentUsage : await incrementDailyUsage(clientIP);
           var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
           res.setHeader('X-Free-Remaining', String(remaining));
           res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
