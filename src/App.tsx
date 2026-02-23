@@ -816,15 +816,19 @@ export default function App() {
     return result;
   };
 
-  // Detect consecutive capitalized words (proper nouns) and group them with shared entityIds
+  // All proper nouns (names, places, titles) share a single color instead of each getting a unique one
+  // 9998 % 12 = 2 → maps to a consistent palette slot across all proper noun phrases
+  const PROPER_NOUN_ENTITY_ID = 9998;
+
+  // Detect consecutive capitalized words (proper nouns) and group them with a shared entityId
   // Catches player names ("Tom Brady"), team names ("New England Patriots"), etc. not in concept_map
-  // Each proper noun phrase gets a unique sequential entityId so words from same name share a color
+  // All proper noun phrases share PROPER_NOUN_ENTITY_ID so they all get the same color
   const detectProperNounPhrases = (text: string, existingLookup: EntityWordLookup, startEntityId: number): {
     lookup: EntityWordLookup;
     nextEntityId: number;
   } => {
     const lookup: EntityWordLookup = {};
-    let nextId = startEntityId;
+    const nextId = startEntityId;
 
     const regex = /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)\b/g;
     let match;
@@ -836,11 +840,10 @@ export default function App() {
       // Skip if all words already covered by concept-map lookup
       if (words.every(w => existingLookup[w.toLowerCase()])) continue;
 
-      const phraseEntityId = nextId++;
       words.forEach(word => {
         const low = word.toLowerCase();
         if (low.length > 2 && !existingLookup[low] && !lookup[low]) {
-          lookup[low] = { weight: 0.85, entityId: phraseEntityId, fullEntity: phraseLower };
+          lookup[low] = { weight: 0.85, entityId: PROPER_NOUN_ENTITY_ID, fullEntity: phraseLower };
         }
       });
     }
@@ -1195,55 +1198,44 @@ export default function App() {
     setCondensedData(null);
 
     try {
-      // Phase 1: Fast core content — user sees explanations in ~5-10s
+      // Phase 1: Core content
       const coreResult = await generateAnalogyCore(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
       if (coreResult) {
-        loadContent(coreResult, confirmedTopic);
-        saveToHistory(coreResult, confirmedTopic, analogyDomain);
-        setApiError(null);
-        setIsLoading(false); // User sees core content immediately
-
         const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
 
-        // Phase 2: Background enrichment — concept map, synthesis, context, etc.
-        // Does NOT count against free tier daily limit
-        setIsEnrichmentLoading(true);
-        generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
-          technical_explanation: techText || '',
-          analogy_explanation: analText || ''
-        })
-          .then(enrichment => {
-            setIsEnrichmentLoading(false);
-            if (enrichment) {
-              // Merge core + enrichment and re-load to populate secondary views
-              const merged = { ...coreResult, ...enrichment };
-              loadContent(merged, confirmedTopic);
-              // Update history with full data (core + enrichment)
-              saveToHistory(merged, confirmedTopic, analogyDomain);
-
-              // Now fire semantic color map with the full concept map available
-              setSemanticColorMap(null);
-              const cMap = findContext(enrichment, ["concept_map", "conceptMap"]);
-              if (techText || analText) {
-                generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
-                  .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-                  .catch(() => {});
-              }
-            }
-          })
-          .catch(err => {
-            setIsEnrichmentLoading(false);
-            // Silent: core content already displayed, enrichment is optional
-            console.warn('[fetchAnalogy] Enrichment failed (core content still visible):', err);
-            // Still fire semantic color map without concept map
-            if (techText || analText) {
-              setSemanticColorMap(null);
-              generateSemanticColorMap(techText || '', analText || '', [])
-                .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-                .catch(() => {});
-            }
+        // Phase 2: Enrichment — await before showing anything to user
+        // Ensures synthesis, concept map, graph/dual data, and colors are all ready on first render
+        let merged = coreResult;
+        try {
+          setIsEnrichmentLoading(true);
+          const enrichment = await generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
+            technical_explanation: techText || '',
+            analogy_explanation: analText || ''
           });
+          setIsEnrichmentLoading(false);
+          if (enrichment) {
+            merged = { ...coreResult, ...enrichment };
+          }
+        } catch (enrichErr) {
+          setIsEnrichmentLoading(false);
+          console.warn('[fetchAnalogy] Enrichment failed, showing core only:', enrichErr);
+        }
+
+        // Load ALL content at once (core + enrichment merged)
+        loadContent(merged, confirmedTopic);
+        saveToHistory(merged, confirmedTopic, analogyDomain);
+        setApiError(null);
+
+        // Semantic color map — also await before revealing content
+        const cMap = findContext(merged, ["concept_map", "conceptMap"]);
+        if (techText || analText) {
+          try {
+            setSemanticColorMap(null);
+            const colorMap = await generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
+            if (colorMap) setSemanticColorMap(colorMap);
+          } catch { /* non-fatal */ }
+        }
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -1310,48 +1302,42 @@ export default function App() {
     setIsRegenerating(true);
 
     try {
-      // Phase 1: Fast core content
+      // Phase 1: Core content
       const coreResult = await generateAnalogyCore(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (coreResult) {
-        loadContent(coreResult, lastSubmittedTopic);
-        setIsRegenerating(false); // User sees core content immediately
-
         const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
 
-        // Phase 2: Background enrichment
-        setIsEnrichmentLoading(true);
-        generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
-          technical_explanation: techText || '',
-          analogy_explanation: analText || ''
-        })
-          .then(enrichment => {
-            setIsEnrichmentLoading(false);
-            if (enrichment) {
-              const merged = { ...coreResult, ...enrichment };
-              loadContent(merged, lastSubmittedTopic);
-              // Update history with full data (core + enrichment)
-              saveToHistory(merged, lastSubmittedTopic, analogyDomain);
-
-              setSemanticColorMap(null);
-              const cMap = findContext(enrichment, ["concept_map", "conceptMap"]);
-              if (techText || analText) {
-                generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
-                  .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-                  .catch(() => {});
-              }
-            }
-          })
-          .catch(err => {
-            setIsEnrichmentLoading(false);
-            console.warn('[handleComplexityChange] Enrichment failed:', err);
-            if (techText || analText) {
-              setSemanticColorMap(null);
-              generateSemanticColorMap(techText || '', analText || '', [])
-                .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-                .catch(() => {});
-            }
+        // Phase 2: Enrichment — await before showing anything
+        let merged = coreResult;
+        try {
+          setIsEnrichmentLoading(true);
+          const enrichment = await generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
+            technical_explanation: techText || '',
+            analogy_explanation: analText || ''
           });
+          setIsEnrichmentLoading(false);
+          if (enrichment) {
+            merged = { ...coreResult, ...enrichment };
+          }
+        } catch (enrichErr) {
+          setIsEnrichmentLoading(false);
+          console.warn('[handleComplexityChange] Enrichment failed:', enrichErr);
+        }
+
+        // Load all at once (core + enrichment merged)
+        loadContent(merged, lastSubmittedTopic);
+        saveToHistory(merged, lastSubmittedTopic, analogyDomain);
+
+        // Await semantic color map
+        const cMap = findContext(merged, ["concept_map", "conceptMap"]);
+        if (techText || analText) {
+          try {
+            setSemanticColorMap(null);
+            const colorMap = await generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
+            if (colorMap) setSemanticColorMap(colorMap);
+          } catch { /* non-fatal */ }
+        }
       } else {
         // Parsing failed (safeJsonParse returned null) — show error and revert complexity
         const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
