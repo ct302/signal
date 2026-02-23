@@ -477,20 +477,25 @@ export const cleanText = (text: string | null | undefined): string => {
  * non-semantic characters that leak through from LaTeX conversion or model quirks.
  * Apply AFTER cleanText/fixUnicode/stripMathSymbols for final prose polish.
  */
+// All Unicode slash/solidus variants that LLMs may output
+const SLASH_CHARS = '/\\\\∕⁄⧸／';
+const SLASH_CLASS = `[${SLASH_CHARS}]`;
+const SLASH_RE_NEGATION = new RegExp(`${SLASH_CLASS}not\\b`, 'gi');
+const SLASH_RE_COMMON_WORDS = new RegExp(`(?<=\\s|^)${SLASH_CLASS}(?=(?:the|a|an|in|or|and|is|it|its|be|to|of|for|on|at|by|as|but|if|no|so|up|do|my|we|he|us|just|not|all|can|had|her|was|one|our|out|has|his|how|its|may|new|now|old|see|way|who|did|get|let|say|she|too|use)\\b)`, 'gi');
+const SLASH_RE_ISOLATED = new RegExp(`(?<=\\s)${SLASH_CLASS}(?=\\s)`, 'g');
+const SLASH_RE_BEFORE_WORD = new RegExp(`(?<=\\s|^)${SLASH_CLASS}(?=[a-z]{2,})`, 'gi');
+
 export const cleanProseArtifacts = (text: string): string => {
   if (!text) return "";
   return text
-    // Fix LaTeX negation artifacts: "\not" or "/not" → "not"
-    .replace(/[/\\]not\b/gi, 'not')
-    // Fix common slash-prefixed words from LaTeX: /the, /a, /an, /in, /or, /just, /is, /it, etc.
-    .replace(/(?<=\s|^)[/\\](?=(?:the|a|an|in|or|and|is|it|its|be|to|of|for|on|at|by|as|but|if|no|so|up|do|my|we|he|us|just|not|all|can|had|her|was|one|our|out|has|his|how|its|may|new|now|old|see|way|who|did|get|let|say|she|too|use)\b)/gi, '')
-    // Remove any remaining stray slashes sitting alone between words (not part of URLs or fractions)
-    .replace(/(?<=\s)[/\\](?=\s)/g, '')
-    // Remove stray isolated slashes before words (catches anything the above missed)
-    // eslint-disable-next-line no-useless-escape
-    .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, '')
-    // Clean up stray backslashes before common words
-    .replace(/(?<=\s|^)\\(?=[a-z]{2,})/gi, '')
+    // Fix LaTeX negation artifacts: "\not" or "/not" or "∕not" → "not"
+    .replace(SLASH_RE_NEGATION, 'not')
+    // Fix common slash-prefixed words from LaTeX: /the, /a, /an, ∕the, etc.
+    .replace(SLASH_RE_COMMON_WORDS, '')
+    // Remove any remaining stray slashes sitting alone between words
+    .replace(SLASH_RE_ISOLATED, '')
+    // Remove stray isolated slashes/solidus before ANY word (catches anything the above missed)
+    .replace(SLASH_RE_BEFORE_WORD, '')
     // Remove stray pipe characters | that aren't part of tables or code
     .replace(/(?<=\s)\|(?=\s)/g, '')
     // Remove stray caret ^ not in math context
@@ -853,12 +858,14 @@ export const sanitizeLatex = (text: string): string => {
   // Also catch \lnot used outside of proper math context (renders as / or ¬)
   result = result.replace(/\\lnot\s*/g, 'not ');
 
-  // Catch any stray "/" surrounded by spaces (artifact from malformed \not rendering)
+  // Catch any stray slash surrounded by spaces (artifact from malformed \not rendering)
   // Normal prose rarely has " / " - this is almost always a KaTeX artifact
-  // Also catch Unicode division slash (∕ U+2215)
-  result = result.replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ');
+  // Also catch Unicode variants: ∕ (U+2215), ⁄ (U+2044), ⧸ (U+29F8), ／ (U+FF0F)
+  result = result.replace(/\s+[/∕⁄⧸／]\s+(?=[a-z])/gi, ' not ');
+  // Also catch slash DIRECTLY touching the next word (no space after slash): "but /the" → "but not the"
+  result = result.replace(/\s+[/∕⁄⧸／](?=[a-z])/gi, ' not ');
   // Also catch "/" followed by specific words that suggest negation
-  result = result.replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not ');
+  result = result.replace(/\s+[/∕⁄⧸／]\s*(?=just|only|merely|simply)\b/gi, ' not ');
 
   // Fix triangle symbols appearing as raw Unicode in prose context
   // Convert to word "triangle" when followed by spaces (not in math expressions)

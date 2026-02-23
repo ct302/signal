@@ -621,6 +621,7 @@ export default function App() {
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const attentionMeterRef = useRef<HTMLDivElement>(null);
   const controlsPanelRef = useRef<HTMLDivElement>(null);
   const controlsButtonRef = useRef<HTMLButtonElement>(null);
   const historyPanelRef = useRef<HTMLDivElement>(null);
@@ -1977,6 +1978,21 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showHistory, setShowHistory]);
+
+  // Collapse attention meter when clicking outside it
+  useEffect(() => {
+    if (isAttentionMeterCollapsed) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't collapse if clicking inside the meter itself (slider, percentage, etc.)
+      if (attentionMeterRef.current?.contains(target)) return;
+      setIsAttentionMeterCollapsed(true);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAttentionMeterCollapsed]);
 
   // Load mastery history from localStorage
   useEffect(() => {
@@ -4411,6 +4427,7 @@ export default function App() {
                   {/* Morph-safe: hovering the meter cancels/pauses the morph timer so users can adjust attention without triggering morph */}
                   {!(showCondensedView && isFirstPrinciplesMode) && (
                     <div
+                      ref={attentionMeterRef}
                       className={`sticky top-0 z-20 ${isAttentionMeterCollapsed ? 'mb-2' : 'pb-3 mb-4 border-b'} ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}
                       onMouseEnter={() => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); if (viewMode === 'morph') setIsHovering(false); }}
                     >
