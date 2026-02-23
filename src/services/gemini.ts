@@ -1332,7 +1332,22 @@ export const checkAmbiguity = async (text: string, contextType: string): Promise
   const prompt = `You are a search intent classifier for an analogy-based learning app. A user typed: "${text}"
 Context: This is a ${contextType} (either a topic they want to LEARN about, or an expert domain they already know).
 
-TASK: Determine if this input needs clarification before we can generate a good analogy. Check ALL of the following:
+TASK: Determine if this input needs clarification before we can generate a good analogy. Check ALL of the following IN ORDER:
+
+**CHECK THIS FIRST — GRANULAR/SPECIFIC INPUTS:**
+If the user provides a highly specific, granular input that includes qualifiers like season numbers, episode numbers, chapter numbers, version numbers, specific dates, specific people + context, or other precision markers — the user clearly knows EXACTLY what they want. Do NOT genericize or broaden their intent.
+Examples of SPECIFIC inputs that should be ACCEPTED as-is (isAmbiguous: false):
+   - "Saved by the Bell, Season 4, Episode 5" → ACCEPT (user wants that specific episode as their lens)
+   - "Breaking Bad S2E10" → ACCEPT (specific episode)
+   - "Harry Potter Chapter 12" → ACCEPT (specific chapter)
+   - "React v18.2" → ACCEPT (specific version)
+   - "Super Bowl XLII" → ACCEPT (specific game)
+   - "Naruto Shippuden Episode 133" → ACCEPT (specific episode)
+   - "The Office Season 3" → ACCEPT (specific season)
+   - "World War 2, Battle of Midway" → ACCEPT (specific event)
+For these, set isAmbiguous: false, set "corrected" to a cleaned-up version of their input, and move on.
+
+Only if the input is NOT granular/specific, check the following:
 
 1. TYPOS & CASING: Fix misspellings and wrong capitalization of known terms.
    - "SVd" → "SVD (Singular Value Decomposition)" (wrong case)
@@ -1353,16 +1368,19 @@ TASK: Determine if this input needs clarification before we can generate a good 
    - "NBA 2024" → ["2023-24 NBA Season", "NBA 2K24 (video game)", "2024 NBA Draft"]
    - "World Cup 2022" → ["2022 FIFA World Cup (tournament in Qatar)", "FIFA World Cup 2022 (video game)"]
    - "Zelda 2023" → ["Tears of the Kingdom (2023 Zelda game)", "The Legend of Zelda (franchise overview)"]
+   BUT: "NFL 2002 Season" → ACCEPT (the word "Season" makes it specific enough)
+   BUT: "NBA 2K24" → ACCEPT (clearly a video game, not ambiguous)
 
 4. BROAD TOPICS: If the input is very broad, offer focused sub-areas.
    - "Calculus" → ["Differential Calculus (derivatives, rates of change)", "Integral Calculus (areas, accumulation)", "Multivariable Calculus (3D, partial derivatives)"]
    - "Chemistry" → ["Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry", "Biochemistry"]
 
 RULES:
-- Set isAmbiguous: true if ANY of the above apply (typo, ambiguity, compound term, or broad topic)
+- MOST IMPORTANT: If the user was specific and granular, RESPECT their specificity — set isAmbiguous: false
+- Set isAmbiguous: true ONLY if the input is genuinely vague, ambiguous, misspelled, or too broad
 - Format each option as "[Specific Name] (brief clarifying description)"
 - Max 4 options, ordered by most likely interpretation first
-- "corrected" should be your best single guess if forced to pick one
+- "corrected" should be your best single guess if forced to pick one (for specific inputs, just clean up the formatting)
 - For typos with only one obvious correction, still set isAmbiguous: true so user confirms
 
 Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4), "corrected": string (best guess), "emoji": string (a SINGLE emoji that BEST represents this specific topic/domain - e.g., 🏈 for NFL, 🧬 for genetics, 🎸 for guitar, 🍳 for cooking, 🎮 for gaming, 💻 for programming, ⚽ for soccer, 🎬 for movies, 📐 for geometry. MUST be specific and relevant to the topic, NEVER use generic emojis like ⚡ or 🎯) }

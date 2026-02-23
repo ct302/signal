@@ -473,6 +473,36 @@ export const cleanText = (text: string | null | undefined): string => {
 };
 
 /**
+ * Clean stray LLM prose artifacts — slashes, backslashes, control chars, and other
+ * non-semantic characters that leak through from LaTeX conversion or model quirks.
+ * Apply AFTER cleanText/fixUnicode/stripMathSymbols for final prose polish.
+ */
+export const cleanProseArtifacts = (text: string): string => {
+  if (!text) return "";
+  return text
+    // Fix LaTeX negation artifacts: "\not" or "/not" → "not"
+    .replace(/[/\\]not\b/gi, 'not')
+    // Fix common slash-prefixed words from LaTeX: /the, /a, /an, /in, /or, /just, /is, /it, etc.
+    .replace(/(?<=\s|^)[/\\](?=(?:the|a|an|in|or|and|is|it|its|be|to|of|for|on|at|by|as|but|if|no|so|up|do|my|we|he|us|just|not|all|can|had|her|was|one|our|out|has|his|how|its|may|new|now|old|see|way|who|did|get|let|say|she|too|use)\b)/gi, '')
+    // Remove any remaining stray slashes sitting alone between words (not part of URLs or fractions)
+    .replace(/(?<=\s)[/\\](?=\s)/g, '')
+    // Remove stray isolated slashes before words (catches anything the above missed)
+    // eslint-disable-next-line no-useless-escape
+    .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, '')
+    // Clean up stray backslashes before common words
+    .replace(/(?<=\s|^)\\(?=[a-z]{2,})/gi, '')
+    // Remove stray pipe characters | that aren't part of tables or code
+    .replace(/(?<=\s)\|(?=\s)/g, '')
+    // Remove stray caret ^ not in math context
+    .replace(/(?<=\s)\^(?=\s)/g, '')
+    // Remove stray tilde ~ not in math/URL context
+    .replace(/(?<=\s)~(?=\s)/g, ' ')
+    // Collapse multiple spaces into single space
+    .replace(/  +/g, ' ')
+    .trim();
+};
+
+/**
  * Irregular plural forms common in math/science/technical vocabulary.
  * Maps plural → singular base form so both sides resolve to the same key.
  */

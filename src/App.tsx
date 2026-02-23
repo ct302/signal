@@ -86,7 +86,7 @@ import {
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters, fuzzyScore } from './utils';
+import { cleanText, cleanProseArtifacts, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters, fuzzyScore } from './utils';
 
 // Hooks
 import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition, useBottomSheetDrag } from './hooks';
@@ -892,24 +892,23 @@ export default function App() {
     if (technicalExplanation) {
       const cleaned = cleanText(fixUnicode(technicalExplanation));
       setTechnicalExplanation(
-        unescapeControlSequences(
-          mainComplexity === 5
-            ? stripMathSymbols(cleaned)
-            : cleaned
-                .replace(/\s*∈\s*/g, ' in ')
-                .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
-                // Fix slash artifacts from LaTeX conversion (e.g., "/obvious" → "obvious")
-                .replace(/(?<=\s|^)\/ust\b/gi, 'just')
-                .replace(/(?<=\s|^)\/ot\b/gi, 'not')
-                .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
-                .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, '')
+        cleanProseArtifacts(
+          unescapeControlSequences(
+            mainComplexity === 5
+              ? stripMathSymbols(cleaned)
+              : cleaned
+                  .replace(/\s*∈\s*/g, ' in ')
+                  .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          )
         )
       );
     }
     if (analogyExplanation) {
       setAnalogyExplanation(
-        unescapeControlSequences(
-          stripMathSymbols(cleanText(fixUnicode(analogyExplanation)))
+        cleanProseArtifacts(
+          unescapeControlSequences(
+            stripMathSymbols(cleanText(fixUnicode(analogyExplanation)))
+          )
         )
       );
     }
