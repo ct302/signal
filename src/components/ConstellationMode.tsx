@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, Loader2 } from 'lucide-react';
 import { useMobile } from '../hooks/useMobile';
 
 interface ConceptMapItem {
@@ -29,6 +29,7 @@ interface ConstellationModeProps {
   onClose: () => void;
   domainName?: string;
   topicName?: string;
+  isEnrichmentLoading?: boolean;
   renderRichText?: (text: string, colorClass?: string) => React.ReactNode;
   onFetchFoundationalMapping?: (
     techTerm: string,
@@ -190,6 +191,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   onClose,
   domainName = 'Your Expertise',
   topicName = 'New Topic',
+  isEnrichmentLoading = false,
   renderRichText,
   onFetchFoundationalMapping
 }) => {
@@ -394,6 +396,22 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           </div>
 
           {/* Concept Bridges */}
+          {conceptMap.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 md:py-24">
+              {isEnrichmentLoading ? (
+                <>
+                  <Loader2 className={`animate-spin mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-500'}`} size={32} />
+                  <p className={`text-sm font-medium ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>Loading concept bridges...</p>
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Mapping connections between domains</p>
+                </>
+              ) : (
+                <>
+                  <Layers className={`mb-4 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`} size={32} />
+                  <p className={`text-sm ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>No concept data available</p>
+                </>
+              )}
+            </div>
+          ) : (
           <div className="space-y-3 md:space-y-4">
             {conceptData.map((data) => {
               const isSelected = selectedConcept === data.concept.id;
@@ -488,6 +506,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               );
             })}
           </div>
+          )}
         </div>
         )}
 

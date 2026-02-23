@@ -1198,44 +1198,53 @@ export default function App() {
     setCondensedData(null);
 
     try {
-      // Phase 1: Core content
+      // Phase 1: Core content — user sees explanations immediately
       const coreResult = await generateAnalogyCore(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
       if (coreResult) {
+        loadContent(coreResult, confirmedTopic);
+        saveToHistory(coreResult, confirmedTopic, analogyDomain);
+        setApiError(null);
+        setIsLoading(false); // User sees core content NOW
+
         const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
 
-        // Phase 2: Enrichment — await before showing anything to user
-        // Ensures synthesis, concept map, graph/dual data, and colors are all ready on first render
-        let merged = coreResult;
-        try {
-          setIsEnrichmentLoading(true);
-          const enrichment = await generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
-            technical_explanation: techText || '',
-            analogy_explanation: analText || ''
+        // Phase 2: Background enrichment — concept map, synthesis, context, etc.
+        // Runs in background so user isn't blocked. Graph/Dual/Synthesis show loading skeletons until ready.
+        setIsEnrichmentLoading(true);
+        generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
+          technical_explanation: techText || '',
+          analogy_explanation: analText || ''
+        })
+          .then(enrichment => {
+            setIsEnrichmentLoading(false);
+            if (enrichment) {
+              // Merge core + enrichment and re-load to populate secondary views
+              const merged = { ...coreResult, ...enrichment };
+              loadContent(merged, confirmedTopic);
+              saveToHistory(merged, confirmedTopic, analogyDomain);
+
+              // Fire semantic color map with the full concept map available
+              setSemanticColorMap(null);
+              const cMap = findContext(enrichment, ["concept_map", "conceptMap"]);
+              if (techText || analText) {
+                generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
+                  .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+                  .catch(() => {});
+              }
+            }
+          })
+          .catch(err => {
+            setIsEnrichmentLoading(false);
+            console.warn('[fetchAnalogy] Enrichment failed (core content still visible):', err);
+            // Still fire semantic color map without concept map
+            if (techText || analText) {
+              setSemanticColorMap(null);
+              generateSemanticColorMap(techText || '', analText || '', [])
+                .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+                .catch(() => {});
+            }
           });
-          setIsEnrichmentLoading(false);
-          if (enrichment) {
-            merged = { ...coreResult, ...enrichment };
-          }
-        } catch (enrichErr) {
-          setIsEnrichmentLoading(false);
-          console.warn('[fetchAnalogy] Enrichment failed, showing core only:', enrichErr);
-        }
-
-        // Load ALL content at once (core + enrichment merged)
-        loadContent(merged, confirmedTopic);
-        saveToHistory(merged, confirmedTopic, analogyDomain);
-        setApiError(null);
-
-        // Semantic color map — also await before revealing content
-        const cMap = findContext(merged, ["concept_map", "conceptMap"]);
-        if (techText || analText) {
-          try {
-            setSemanticColorMap(null);
-            const colorMap = await generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
-            if (colorMap) setSemanticColorMap(colorMap);
-          } catch { /* non-fatal */ }
-        }
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -1302,42 +1311,47 @@ export default function App() {
     setIsRegenerating(true);
 
     try {
-      // Phase 1: Core content
+      // Phase 1: Core content — user sees immediately
       const coreResult = await generateAnalogyCore(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
       if (coreResult) {
+        loadContent(coreResult, lastSubmittedTopic);
+        setIsRegenerating(false); // User sees core content NOW
+
         const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
         const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
 
-        // Phase 2: Enrichment — await before showing anything
-        let merged = coreResult;
-        try {
-          setIsEnrichmentLoading(true);
-          const enrichment = await generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
-            technical_explanation: techText || '',
-            analogy_explanation: analText || ''
+        // Phase 2: Background enrichment
+        setIsEnrichmentLoading(true);
+        generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
+          technical_explanation: techText || '',
+          analogy_explanation: analText || ''
+        })
+          .then(enrichment => {
+            setIsEnrichmentLoading(false);
+            if (enrichment) {
+              const merged = { ...coreResult, ...enrichment };
+              loadContent(merged, lastSubmittedTopic);
+              saveToHistory(merged, lastSubmittedTopic, analogyDomain);
+
+              setSemanticColorMap(null);
+              const cMap = findContext(enrichment, ["concept_map", "conceptMap"]);
+              if (techText || analText) {
+                generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
+                  .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+                  .catch(() => {});
+              }
+            }
+          })
+          .catch(err => {
+            setIsEnrichmentLoading(false);
+            console.warn('[handleComplexityChange] Enrichment failed:', err);
+            if (techText || analText) {
+              setSemanticColorMap(null);
+              generateSemanticColorMap(techText || '', analText || '', [])
+                .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+                .catch(() => {});
+            }
           });
-          setIsEnrichmentLoading(false);
-          if (enrichment) {
-            merged = { ...coreResult, ...enrichment };
-          }
-        } catch (enrichErr) {
-          setIsEnrichmentLoading(false);
-          console.warn('[handleComplexityChange] Enrichment failed:', enrichErr);
-        }
-
-        // Load all at once (core + enrichment merged)
-        loadContent(merged, lastSubmittedTopic);
-        saveToHistory(merged, lastSubmittedTopic, analogyDomain);
-
-        // Await semantic color map
-        const cMap = findContext(merged, ["concept_map", "conceptMap"]);
-        if (techText || analText) {
-          try {
-            setSemanticColorMap(null);
-            const colorMap = await generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
-            if (colorMap) setSemanticColorMap(colorMap);
-          } catch { /* non-fatal */ }
-        }
       } else {
         // Parsing failed (safeJsonParse returned null) — show error and revert complexity
         const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
@@ -5881,6 +5895,7 @@ export default function App() {
           onClose={() => setIsConstellationMode(false)}
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
+          isEnrichmentLoading={isEnrichmentLoading}
           renderRichText={renderRichText}
           onFetchFoundationalMapping={generateFoundationalMapping}
         />
@@ -5894,6 +5909,7 @@ export default function App() {
           isDarkMode={isDarkMode}
           analogyDomain={analogyDomain}
           domainEmoji={domainEmoji}
+          isEnrichmentLoading={isEnrichmentLoading}
           onClose={() => setIsDualPaneMode(false)}
         />
       )}

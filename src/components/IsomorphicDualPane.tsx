@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
+import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles, Loader2 } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
 import { useMobile } from '../hooks/useMobile';
 
@@ -155,6 +155,7 @@ interface IsomorphicDualPaneProps {
   isDarkMode: boolean;
   analogyDomain: string;
   domainEmoji?: string;
+  isEnrichmentLoading?: boolean;
   onClose: () => void;
 }
 
@@ -199,6 +200,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   isDarkMode,
   analogyDomain,
   domainEmoji = '',
+  isEnrichmentLoading = false,
   onClose
 }) => {
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
@@ -329,7 +331,22 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       {/* Main Content */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        {/* Desktop: Three Column Layout | Mobile: Single Pane */}
+        {conceptMap.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center">
+            {isEnrichmentLoading ? (
+              <>
+                <Loader2 className="animate-spin mb-4 text-blue-400" size={32} />
+                <p className="text-sm font-medium text-neutral-300">Loading concept mappings...</p>
+                <p className="text-xs mt-1 text-neutral-500">Building isomorphic connections</p>
+              </>
+            ) : (
+              <>
+                <Columns className="mb-4 text-neutral-600" size={32} />
+                <p className="text-sm text-neutral-500">No concept data available</p>
+              </>
+            )}
+          </div>
+        ) : (
         <div className="h-full flex">
           {/* Left Column - Technical Terms */}
           <div className={`
@@ -642,6 +659,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Footer */}
