@@ -1505,19 +1505,29 @@ DOMAIN_INTUITION RULES (top-level field):
 Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    let response = await callApi(promptText, {});
+    const response = await callApi(promptText, {});
 
-    // Strip markdown code blocks if the API wrapped the response
-    response = response.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-
-    // Try to parse as JSON
-    try {
-      const parsed = JSON.parse(response);
+    // Use safeJsonParse — handles markdown code blocks, LaTeX backslashes,
+    // control characters, and truncated JSON (same as every other API function)
+    const parsed = safeJsonParse(response);
+    if (parsed && typeof parsed === 'object' && parsed.definition) {
       return parsed;
-    } catch {
-      // If parsing fails, return the raw text as definition (backwards compatibility)
-      return { definition: response, symbol_guide: [] };
     }
+
+    // safeJsonParse returned null or missing definition — treat response as plain text
+    // Strip any markdown wrapping for clean fallback
+    const clean = response.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+
+    // Last resort: try to extract definition field from raw JSON text via regex
+    const defMatch = clean.match(/"definition"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (defMatch) {
+      return {
+        definition: defMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+        symbol_guide: [],
+      };
+    }
+
+    return { definition: clean, symbol_guide: [] };
   } catch {
     return { definition: "Could not load definition.", symbol_guide: [] };
   }
