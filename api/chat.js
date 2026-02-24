@@ -176,7 +176,7 @@ module.exports = async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Signal-Enrichment');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -250,10 +250,8 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // Enrichment calls (background metadata) don't count against daily limit
-          // Burst limiter still applies to prevent abuse
-          var isEnrichment = req.headers['x-signal-enrichment'] === 'true';
-          var newUsage = isEnrichment ? currentUsage : await incrementDailyUsage(clientIP);
+          // Count ALL successful calls against daily limit (no client-side bypass)
+          var newUsage = await incrementDailyUsage(clientIP);
           var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
           res.setHeader('X-Free-Remaining', String(remaining));
           res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
