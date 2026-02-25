@@ -24,7 +24,7 @@ interface SynthesisModalProps {
   ) => React.ReactNode;
 }
 
-export const SynthesisModal: React.FC<SynthesisModalProps> = ({
+export const SynthesisModal: React.FC<SynthesisModalProps> = React.memo(({
   synthesisSummary,
   synthesisCitation,
   synthPos,
@@ -93,4 +93,4 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
       </div>
     </div>
   );
-};
+});

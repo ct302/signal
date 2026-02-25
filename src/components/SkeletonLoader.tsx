@@ -24,7 +24,7 @@ const DOMAIN_MESSAGES: Record<string, string[]> = {
   'Music': ["Composing the melody...", "Finding the right key...", "Harmonizing concepts..."],
 };
 
-export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ isDarkMode, domain }) => {
+export const SkeletonLoader: React.FC<SkeletonLoaderProps> = React.memo(({ isDarkMode, domain }) => {
   const [messageIndex, setMessageIndex] = useState(0);
   const [showDomainMessage, setShowDomainMessage] = useState(false);
 
@@ -116,6 +116,6 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ isDarkMode, doma
       </div>
     </div>
   );
-};
+});
 
 export default SkeletonLoader;

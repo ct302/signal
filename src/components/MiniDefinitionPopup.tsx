@@ -33,7 +33,7 @@ interface MiniDefinitionPopupProps {
   renderRichText: (text: string, colorClass?: string) => React.ReactNode;
 }
 
-export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
+export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.memo(({
   miniSelectedTerm,
   miniDefText,
   isLoadingMiniDef,
@@ -208,4 +208,4 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
       )}
     </div>
   );
-};
+});

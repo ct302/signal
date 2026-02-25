@@ -37,7 +37,7 @@ interface DefinitionPopupProps {
   renderRichText: (text: string, colorClass?: string) => React.ReactNode;
 }
 
-export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
+export const DefinitionPopup: React.FC<DefinitionPopupProps> = React.memo(({
   selectedTerm,
   defText,
   isLoadingDef,
@@ -247,4 +247,4 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
       </div>
     </div>
   );
-};
+});

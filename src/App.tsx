@@ -464,6 +464,7 @@ export default function App() {
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const definitionCacheRef = useRef<Map<string, { definition: string; symbol_guide: any[] }>>(new Map());
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -732,22 +733,30 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const result = await checkAmbiguity(topic, 'topic');
-      if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-        setDisambiguation({ type: 'topic', options: result.options || [], original: topic });
+      // Run ambiguity and proximity checks in parallel for speed
+      // Proximity uses the raw topic optimistically; if ambiguity corrects it, we re-check only when needed
+      const [ambiguityResult, optimisticProximity] = await Promise.all([
+        checkAmbiguity(topic, 'topic'),
+        checkDomainProximity(topic, analogyDomain)
+      ]);
+
+      if (ambiguityResult.isAmbiguous || (ambiguityResult.options && ambiguityResult.options.length > 0)) {
+        setDisambiguation({ type: 'topic', options: ambiguityResult.options || [], original: topic });
         setIsLoading(false); // Stop loading on disambiguation
         return;
       }
-      if (!result.isValid) {
+      if (!ambiguityResult.isValid) {
         setDomainError("Invalid topic or typo.");
         setIsLoading(false); // Stop loading on error
         return;
       }
 
-      const confirmedTopic = result.corrected || topic;
+      const confirmedTopic = ambiguityResult.corrected || topic;
 
-      // Check if topic is too close to the domain
-      const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
+      // Use optimistic proximity result if topic wasn't corrected, otherwise re-check
+      const proximityResult = confirmedTopic === topic
+        ? optimisticProximity
+        : await checkDomainProximity(confirmedTopic, analogyDomain);
       if (proximityResult.isTooClose) {
         setProximityWarning({ topic: confirmedTopic, result: proximityResult });
         setIsLoading(false); // Stop loading on proximity warning
@@ -1084,6 +1093,21 @@ export default function App() {
   };
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
+    const cacheKey = `${term.toLowerCase()}::${level}`;
+    const cached = definitionCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      if (isMini) {
+        setMiniDefText(cached.definition);
+        setMiniDefComplexity(level);
+      } else {
+        setDefText(cached.definition);
+        setDefSymbolGuide(cached.symbol_guide);
+        setDefComplexity(level);
+      }
+      return;
+    }
+
     if (isMini) {
       setIsLoadingMiniDef(true);
       setMiniDefText("");
@@ -1100,6 +1124,14 @@ export default function App() {
       // Result is now { definition: string, symbol_guide: SymbolGuideEntry[] }
       const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
       const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
+
+      // Cache the result
+      definitionCacheRef.current.set(cacheKey, { definition, symbol_guide: symbolGuideData });
+      // Cap cache size to prevent unbounded growth
+      if (definitionCacheRef.current.size > 100) {
+        const firstKey = definitionCacheRef.current.keys().next().value;
+        if (firstKey) definitionCacheRef.current.delete(firstKey);
+      }
 
       if (isMini) {
         setMiniDefText(definition);
@@ -2004,7 +2036,7 @@ export default function App() {
     });
   };
 
-  const renderAttentiveText = (
+  const renderAttentiveText = useCallback((
     text: string,
     currentThreshold: number,
     setThresholdState: React.Dispatch<React.SetStateAction<number>> | null,
@@ -2139,7 +2171,7 @@ export default function App() {
         )}
       </div>
     );
-  };
+  }, [conceptMap, importanceMap, entityLookup, attentionMap]);
 
   // Group processedWords into sentences for bullet mode
   const groupWordsIntoSentences = (words: ProcessedWord[]): ProcessedWord[][] => {

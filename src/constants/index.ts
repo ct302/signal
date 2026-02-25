@@ -20,9 +20,9 @@ export const OPENROUTER_FALLBACK_MODELS = [
 
 // Rate limit configuration
 export const RATE_LIMIT_CONFIG = {
-  maxRetries: 5,
-  initialBackoffMs: 1000,
-  maxBackoffMs: 32000,
+  maxRetries: 2,
+  initialBackoffMs: 500,
+  maxBackoffMs: 4000,
   jitterFactor: 0.25, // ±25% jitter
   circuitBreakerThreshold: 3, // consecutive failures before trying fallback
   circuitBreakerCooldownMs: 60000, // 60s cooldown for failed model

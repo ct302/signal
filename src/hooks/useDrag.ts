@@ -21,6 +21,12 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(0);
 
+  // Track current values in refs so the useEffect doesn't need to re-run on every change
+  const defSizeRef = useRef(defSize);
+  const miniDefSizeRef = useRef(miniDefSize);
+  defSizeRef.current = defSize;
+  miniDefSizeRef.current = miniDefSize;
+
   const startDrag = useCallback((e: React.MouseEvent, target: string) => {
     if (isMobile) return;
     e.preventDefault();
@@ -42,11 +48,11 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     resizeTargetRef.current = target;
     resizeStartXRef.current = e.clientX;
     if (target.startsWith('def')) {
-      resizeStartWidthRef.current = defSize.width;
+      resizeStartWidthRef.current = defSizeRef.current.width;
     } else if (target.startsWith('mini')) {
-      resizeStartWidthRef.current = miniDefSize.width;
+      resizeStartWidthRef.current = miniDefSizeRef.current.width;
     }
-  }, [isMobile, defSize.width, miniDefSize.width]);
+  }, [isMobile]);
 
   const handleMiniHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile || !(e.target as HTMLElement).closest('.header-drag-area')) return;
@@ -90,16 +96,16 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
 
         if (resizeTargetRef.current.startsWith('def')) {
           setDefSize({ width: clampedWidth });
-          if (isLeft && defPos) {
-            const widthDelta = defSize.width - clampedWidth;
+          if (isLeft) {
+            const widthDelta = defSizeRef.current.width - clampedWidth;
             setDefPos(prev =>
               prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
             );
           }
         } else if (resizeTargetRef.current.startsWith('mini')) {
           setMiniDefSize({ width: clampedWidth });
-          if (isLeft && miniDefPosition) {
-            const widthDelta = miniDefSize.width - clampedWidth;
+          if (isLeft) {
+            const widthDelta = miniDefSizeRef.current.width - clampedWidth;
             setMiniDefPosition(prev =>
               prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
             );
@@ -121,7 +127,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [defSize.width, miniDefSize.width, defPos, miniDefPosition]);
+  }, []); // Empty deps - listeners registered once, use refs for current values
 
   return {
     defPos,
