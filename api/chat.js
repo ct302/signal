@@ -10,7 +10,6 @@ const FREE_TIER_MODELS = [
   'google/gemini-2.5-flash-lite',        // Fallback 1: latest flash lite
   'arcee-ai/trinity-large-preview:free', // Fallback 2: free but slow
   'meta-llama/llama-4-scout:free',       // Fallback 3: free Llama
-  'openrouter/free'                       // Last resort: auto-router
 ];
 
 // Statuses that should trigger trying the next model instead of returning error
@@ -137,7 +136,6 @@ function checkBurstLimit(ip) {
 // Models known to NOT support response_format: { type: "json_object" }
 const NO_JSON_MODE_MODELS = new Set([
   'arcee-ai/trinity-large-preview:free',
-  'openrouter/free'
 ]);
 
 async function tryOpenRouterRequest(model, messages, response_format, plugins, apiKey, skipJsonMode) {
@@ -148,16 +146,26 @@ async function tryOpenRouterRequest(model, messages, response_format, plugins, a
   }
   if (plugins) body.plugins = plugins;
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-      'HTTP-Referer': 'https://signal-app.com',
-      'X-Title': 'Signal Analogy Engine'
-    },
-    body: JSON.stringify(body)
-  });
+  // 45s timeout — caps worst-case wait for slow fallback models
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+
+  let response;
+  try {
+    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'HTTP-Referer': 'https://signal-app.com',
+        'X-Title': 'Signal Analogy Engine'
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   let data = {};
   try {

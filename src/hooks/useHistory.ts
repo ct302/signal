@@ -27,8 +27,14 @@ export const useHistory = () => {
       timestamp: new Date().toISOString()
     };
     const updated = [newEntry, ...history].slice(0, MAX_HISTORY_ITEMS);
-    setHistory(updated);
-    localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(updated));
+    setHistory(updated); // React state update (instant)
+    // Defer expensive localStorage write to avoid blocking the main thread
+    const persist = () => localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(updated));
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(persist, { timeout: 3000 });
+    } else {
+      setTimeout(persist, 0);
+    }
   }, [history]);
 
   const deleteHistoryItem = useCallback((e: React.MouseEvent, id: number) => {

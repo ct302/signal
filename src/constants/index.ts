@@ -12,7 +12,6 @@ export const OPENROUTER_MODELS = [
   'google/gemini-2.5-flash-lite',
   'arcee-ai/trinity-large-preview:free',
   'meta-llama/llama-4-scout:free',
-  'openrouter/free'
 ];
 
 // Fallback model chain for circuit breaker pattern
@@ -22,7 +21,6 @@ export const OPENROUTER_FALLBACK_MODELS = [
   'google/gemini-2.5-flash-lite',
   'arcee-ai/trinity-large-preview:free',
   'meta-llama/llama-4-scout:free',
-  'openrouter/free'
 ];
 
 // Rate limit configuration
@@ -32,7 +30,7 @@ export const RATE_LIMIT_CONFIG = {
   maxBackoffMs: 32000,
   jitterFactor: 0.25, // ±25% jitter
   circuitBreakerThreshold: 3, // consecutive failures before trying fallback
-  circuitBreakerCooldownMs: 60000, // 60s cooldown for failed model
+  circuitBreakerCooldownMs: 15000, // 15s cooldown — Gemini rate limits reset in ~10-15s
 };
 
 // KaTeX CDN

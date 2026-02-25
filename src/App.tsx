@@ -604,6 +604,8 @@ export default function App() {
   const [isDisambiguating, setIsDisambiguating] = useState(false);
   // Cache last disambiguation result so cancel + re-search shows it again (LLM is non-deterministic)
   const disambiguationCacheRef = useRef<{ topic: string; data: DisambiguationData } | null>(null);
+  // Cache topics confirmed as unambiguous — skip the API call on repeat searches
+  const confirmedTopicCacheRef = useRef<Map<string, string>>(new Map());
 
   // Proximity Warning State
   const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
@@ -850,18 +852,12 @@ export default function App() {
     return { lookup, nextEntityId: nextId };
   };
 
-  // Load content from API response
-  const loadContent = (data: any, topicName: string) => {
+  // Load CORE content from API response (fast path — segments, explanations, attention)
+  // This displays immediately so the user sees content in 2-5 seconds
+  const loadCoreContent = (data: any, topicName: string) => {
     const technicalExplanation = findContext(data, ["technical_explanation", "technicalExplanation", "original", "technical"]);
     const analogyExplanation = findContext(data, ["analogy_explanation", "analogyExplanation", "analogy"]);
     const segmentsArray = findContext(data, ["segments"]);
-    const conceptMapArray = findContext(data, ["concept_map", "conceptMap"]);
-    const importanceMapArray = findContext(data, ["importance_map", "importanceMap"]);
-    const context = findContext(data, ["context"]);
-    const synthesis = findContext(data, ["synthesis"]);
-
-    // Will be populated from concept_map multi-word terms, used by entity lookup merge below
-    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup; multiWordPhrases: { tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } } | null = null;
 
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
@@ -917,50 +913,6 @@ export default function App() {
       );
     }
 
-    if (conceptMapArray && Array.isArray(conceptMapArray)) {
-      // Filter out invalid mappings where tech_term equals analogy_term (not a true isomorphism)
-      const validMappings = conceptMapArray
-        .map((c: any, i: number) => ({
-          id: c.id ?? i,
-          tech_term: cleanText(c.tech_term || c.techTerm || ""),
-          analogy_term: cleanText(c.analogy_term || c.analogyTerm || ""),
-          // Load the new fields for rich concept isomorphism display
-          six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
-          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
-          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || ""),
-          ...(c.why_it_matters || c.whyItMatters ? {
-            why_it_matters: {
-              connection: cleanText((c.why_it_matters || c.whyItMatters)?.connection || ""),
-              importance: cleanText((c.why_it_matters || c.whyItMatters)?.importance || ""),
-              critical: cleanText((c.why_it_matters || c.whyItMatters)?.critical || "")
-            }
-          } : {})
-        }))
-        .filter((c: { tech_term: string; analogy_term: string }) => {
-          const techLower = c.tech_term.toLowerCase().trim();
-          const analogyLower = c.analogy_term.toLowerCase().trim();
-          // Reject if terms are identical or one contains the other entirely
-          if (techLower === analogyLower) return false;
-          if (techLower.length > 3 && analogyLower.includes(techLower)) return false;
-          if (analogyLower.length > 3 && techLower.includes(analogyLower)) return false;
-          return true;
-        });
-      setConceptMap(validMappings);
-
-      // Build entity lookup from concept_map multi-word terms
-      // This ensures "vector" + "calculus" → same entityId, "Tom" + "Brady" → same entityId
-      conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
-      setConceptLookup({ tech: conceptEntityLookupRef.tech, analogy: conceptEntityLookupRef.analogy });
-      setMultiWordPhraseLookup(conceptEntityLookupRef.multiWordPhrases);
-    }
-
-    if (importanceMapArray && Array.isArray(importanceMapArray)) {
-      setImportanceMap(importanceMapArray.map((m: any) => ({
-        term: cleanText(m.term || ""),
-        importance: m.importance ?? 0.5
-      })));
-    }
-
     // Extract attention_map for word-level importance weights
     // Also create entity lookup for multi-word entity handling
     const attentionMapData = findContext(data, ["attention_map", "attentionMap"]);
@@ -996,9 +948,7 @@ export default function App() {
         return { processed, weightLookup, nextEntityId: nextId };
       };
 
-      // Sequential entityIds: concept_map uses 0..N-1, attention phrases continue from N
-      const maxConceptId = conceptMapArray ? conceptMapArray.length : 0;
-      const techResult = processAttentionItems(techAttention, maxConceptId);
+      const techResult = processAttentionItems(techAttention, 0);
       const analogyResult = processAttentionItems(analogyAttention, techResult.nextEntityId);
 
       setAttentionMap({
@@ -1007,51 +957,115 @@ export default function App() {
       });
 
       // Detect proper noun phrases in BOTH tech and analogy text
-      // Continue entityId sequence after attention phrases
       const techText = technicalExplanation || '';
       const analogyText = analogyExplanation || '';
       const { lookup: techProperNounLookup, nextEntityId: afterTechProperNouns } = detectProperNounPhrases(
-        techText, conceptEntityLookupRef?.tech || {}, analogyResult.nextEntityId
+        techText, {}, analogyResult.nextEntityId
       );
       const { lookup: analogyProperNounLookup } = detectProperNounPhrases(
-        analogyText, conceptEntityLookupRef?.analogy || {}, afterTechProperNouns
+        analogyText, {}, afterTechProperNouns
       );
 
-      // Merge lookups preserving concept_map entityIds — attention/proper noun weights
-      // won't overwrite concept entityIds, ensuring concept terms keep their color
+      // Merge attention + proper noun lookups (no concept map yet — it arrives with enrichment)
       setEntityLookup({
-        tech: mergePreservingConceptIds(conceptEntityLookupRef?.tech || {}, techProperNounLookup, techResult.weightLookup),
-        analogy: mergePreservingConceptIds(conceptEntityLookupRef?.analogy || {}, analogyProperNounLookup, analogyResult.weightLookup)
-      });
-    } else if (conceptEntityLookupRef) {
-      // No attention map from LLM, but we still have concept-map-based lookup
-      const techText = technicalExplanation || '';
-      const analogyText = analogyExplanation || '';
-      const maxConceptId = conceptMapArray ? conceptMapArray.length : 0;
-      const { lookup: techProperNounLookup, nextEntityId: afterTechProperNouns } = detectProperNounPhrases(
-        techText, conceptEntityLookupRef.tech, maxConceptId
-      );
-      const { lookup: analogyProperNounLookup } = detectProperNounPhrases(
-        analogyText, conceptEntityLookupRef.analogy, afterTechProperNouns
-      );
-
-      setAttentionMap(null);
-      setEntityLookup({
-        tech: mergePreservingConceptIds(conceptEntityLookupRef.tech, techProperNounLookup),
-        analogy: mergePreservingConceptIds(conceptEntityLookupRef.analogy, analogyProperNounLookup)
+        tech: { ...techProperNounLookup, ...techResult.weightLookup },
+        analogy: { ...analogyProperNounLookup, ...analogyResult.weightLookup }
       });
     } else {
       setAttentionMap(null);
       setEntityLookup(null);
-      setConceptLookup(null);
-      setMultiWordPhraseLookup(null);
+    }
+
+    // Clear enrichment-dependent state (will be populated when enrichment arrives)
+    setConceptMap([]);
+    setConceptLookup(null);
+    setMultiWordPhraseLookup(null);
+    setImportanceMap([]);
+    setContextData(null);
+    setSynthesisOneLiner('');
+    setSynthesisSummary('');
+    setSynthesisDeep('');
+    setSynthesisCitation('');
+    setCondensedData(null);
+    setSymbolGuide([]);
+
+    setLastSubmittedTopic(topicName);
+    setHasStarted(true);
+
+    // Reset quiz state for new topic
+    setQuizQuestionNumber(1);
+    setQuizRetryCount(0);
+    setQuizCurrentConcept('');
+    setQuizCurrentCorrectAnswer('');
+    setQuizFeedback(null);
+    setShowQuizModal(false);
+  };
+
+  // Load ENRICHMENT content (background — concept_map, synthesis, context, etc.)
+  // This merges into existing state after core content is already visible
+  const loadEnrichmentContent = (data: any, topicName: string) => {
+    const conceptMapArray = findContext(data, ["concept_map", "conceptMap"]);
+    const importanceMapArray = findContext(data, ["importance_map", "importanceMap"]);
+    const context = findContext(data, ["context"]);
+    const synthesis = findContext(data, ["synthesis"]);
+
+    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup; multiWordPhrases: { tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } } | null = null;
+
+    if (conceptMapArray && Array.isArray(conceptMapArray)) {
+      // Filter out invalid mappings where tech_term equals analogy_term (not a true isomorphism)
+      const validMappings = conceptMapArray
+        .map((c: any, i: number) => ({
+          id: c.id ?? i,
+          tech_term: cleanText(c.tech_term || c.techTerm || ""),
+          analogy_term: cleanText(c.analogy_term || c.analogyTerm || ""),
+          six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
+          narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
+          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || ""),
+          ...(c.why_it_matters || c.whyItMatters ? {
+            why_it_matters: {
+              connection: cleanText((c.why_it_matters || c.whyItMatters)?.connection || ""),
+              importance: cleanText((c.why_it_matters || c.whyItMatters)?.importance || ""),
+              critical: cleanText((c.why_it_matters || c.whyItMatters)?.critical || "")
+            }
+          } : {})
+        }))
+        .filter((c: { tech_term: string; analogy_term: string }) => {
+          const techLower = c.tech_term.toLowerCase().trim();
+          const analogyLower = c.analogy_term.toLowerCase().trim();
+          if (techLower === analogyLower) return false;
+          if (techLower.length > 3 && analogyLower.includes(techLower)) return false;
+          if (analogyLower.length > 3 && techLower.includes(analogyLower)) return false;
+          return true;
+        });
+      setConceptMap(validMappings);
+
+      // Build entity lookup from concept_map and rebuild merged lookups
+      conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
+      setConceptLookup({ tech: conceptEntityLookupRef.tech, analogy: conceptEntityLookupRef.analogy });
+      setMultiWordPhraseLookup(conceptEntityLookupRef.multiWordPhrases);
+
+      // Re-merge entity lookups with concept map data now available
+      // Rebuild proper noun + attention lookups and merge with concept IDs
+      setEntityLookup(prev => {
+        if (!prev) return { tech: conceptEntityLookupRef!.tech, analogy: conceptEntityLookupRef!.analogy };
+        return {
+          tech: mergePreservingConceptIds(conceptEntityLookupRef!.tech, prev.tech),
+          analogy: mergePreservingConceptIds(conceptEntityLookupRef!.analogy, prev.analogy)
+        };
+      });
+    }
+
+    if (importanceMapArray && Array.isArray(importanceMapArray)) {
+      setImportanceMap(importanceMapArray.map((m: any) => ({
+        term: cleanText(m.term || ""),
+        importance: m.importance ?? 0.5
+      })));
     }
 
     if (context) {
       setContextData({
         header: cleanText(fixUnicode(context.header || topicName)),
         emoji: fixUnicode(context.emoji || "💡"),
-        // Strip math symbols from context fields - they should be pure prose
         why: stripMathSymbols(cleanText(fixUnicode(context.why || ""))),
         real_world: stripMathSymbols(cleanText(fixUnicode(context.real_world || context.realWorld || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(context.narrative || "")))
@@ -1068,7 +1082,6 @@ export default function App() {
     // Parse condensed view data (WHAT/WHY + bullet points + mnemonic)
     const condensed = findContext(data, ["condensed"]);
     if (condensed) {
-      // Parse mnemonic object (phrase + breakdown array)
       let mnemonicData = undefined;
       if (condensed.mnemonic && typeof condensed.mnemonic === 'object') {
         mnemonicData = {
@@ -1078,7 +1091,6 @@ export default function App() {
             : []
         };
       }
-
       setCondensedData({
         what: stripMathSymbols(cleanText(fixUnicode(condensed.what || ""))),
         why: stripMathSymbols(cleanText(fixUnicode(condensed.why || ""))),
@@ -1089,21 +1101,17 @@ export default function App() {
       });
     } else {
       // Fallback: Generate basic condensed data from context if available
-      // This ensures Essence mode is still accessible even if API doesn't return condensed
       if (context) {
         const fallbackWhat = context.header
           ? `${context.header} - a concept worth understanding deeply.`
           : `${topicName} explained through analogy.`;
         const fallbackWhy = context.why || context.real_world || context.realWorld || 'Understanding this concept opens doors to deeper learning.';
-
         setCondensedData({
           what: stripMathSymbols(cleanText(fixUnicode(fallbackWhat))),
           why: stripMathSymbols(cleanText(fixUnicode(fallbackWhy))),
-          bullets: [], // No bullets in fallback
+          bullets: [],
           mnemonic: undefined
         });
-      } else {
-        setCondensedData(null);
       }
     }
 
@@ -1118,20 +1126,14 @@ export default function App() {
         ...(entry.formula ? { formula: entry.formula } : {}),
         ...(entry.domain_analogy ? { domain_analogy: entry.domain_analogy } : {})
       })));
-    } else {
-      setSymbolGuide([]);
     }
+  };
 
-    setLastSubmittedTopic(topicName);
-    setHasStarted(true);
-
-    // Reset quiz state for new topic
-    setQuizQuestionNumber(1);
-    setQuizRetryCount(0);
-    setQuizCurrentConcept('');
-    setQuizCurrentCorrectAnswer('');
-    setQuizFeedback(null);
-    setShowQuizModal(false);
+  // Load ALL content at once (used for history replay and complexity changes)
+  // Combines core + enrichment in a single pass for backward compatibility
+  const loadContent = (data: any, topicName: string) => {
+    loadCoreContent(data, topicName);
+    loadEnrichmentContent(data, topicName);
   };
 
   // Handlers
@@ -1154,23 +1156,32 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const result = await checkAmbiguity(topic, 'topic');
-      if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-        const disambigData: DisambiguationData = { type: 'topic', options: result.options || [], original: topic };
-        disambiguationCacheRef.current = { topic: trimmedTopic, data: disambigData };
-        setDisambiguation(disambigData);
-        setIsLoading(false); // Stop loading on disambiguation
-        return;
-      }
-      if (!result.isValid) {
-        setDomainError("Invalid topic or typo.");
-        setIsLoading(false); // Stop loading on error
-        return;
-      }
+      // Check if this topic was already confirmed unambiguous — skip the API call entirely
+      const cachedConfirmed = confirmedTopicCacheRef.current.get(trimmedTopic);
+      let confirmedTopic: string;
 
-      const confirmedTopic = result.corrected || topic;
-      // Topic passed ambiguity check — clear any stale disambiguation cache
-      disambiguationCacheRef.current = null;
+      if (cachedConfirmed) {
+        confirmedTopic = cachedConfirmed;
+      } else {
+        const result = await checkAmbiguity(topic, 'topic');
+        if (result.isAmbiguous || (result.options && result.options.length > 0)) {
+          const disambigData: DisambiguationData = { type: 'topic', options: result.options || [], original: topic };
+          disambiguationCacheRef.current = { topic: trimmedTopic, data: disambigData };
+          setDisambiguation(disambigData);
+          setIsLoading(false); // Stop loading on disambiguation
+          return;
+        }
+        if (!result.isValid) {
+          setDomainError("Invalid topic or typo.");
+          setIsLoading(false); // Stop loading on error
+          return;
+        }
+        confirmedTopic = result.corrected || topic;
+        // Cache this as confirmed unambiguous for future searches
+        confirmedTopicCacheRef.current.set(trimmedTopic, confirmedTopic);
+        // Clear any stale disambiguation cache
+        disambiguationCacheRef.current = null;
+      }
 
       // Check if topic is too close to the domain
       const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
@@ -1198,27 +1209,53 @@ export default function App() {
     setCondensedData(null);
 
     try {
-      // Single API call — returns ALL fields (technical, analogy, segments, concept_map,
-      // importance_map, attention_map, context, synthesis, condensed, symbol_guide)
-      const result = await generateAnalogy(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
-      if (result) {
-        loadContent(result, confirmedTopic);
-        saveToHistory(result, confirmedTopic, analogyDomain);
+      // PHASE 1: Fast core call — returns only what user needs to see immediately
+      // (technical_explanation, analogy_explanation, segments, attention_map)
+      const coreResult = await generateAnalogyCore(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
+      if (coreResult) {
+        // Display core content IMMEDIATELY — user sees content in 2-5 seconds
+        loadCoreContent(coreResult, confirmedTopic);
         setApiError(null);
-        setIsEnrichmentLoading(false); // Everything arrived together
+        setIsLoading(false); // Content is visible now
+        setIsEnrichmentLoading(true); // Signal that enrichment is loading in background
 
-        // Fire semantic color map in background (non-blocking)
-        const techText = findContext(result, ["technical_explanation", "technicalExplanation", "original", "technical"]);
-        const analText = findContext(result, ["analogy_explanation", "analogyExplanation", "analogy"]);
-        const cMap = findContext(result, ["concept_map", "conceptMap"]);
-        if (techText || analText) {
-          setSemanticColorMap(null);
-          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
-            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-            .catch(() => {});
-        }
+        // Extract texts for enrichment + colormap
+        const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
+
+        // PHASE 2: Background enrichment — fire-and-forget, merges into state when ready
+        // (concept_map, importance_map, context, synthesis, condensed, symbol_guide)
+        generateAnalogyEnrichment(confirmedTopic, analogyDomain, complexity, {
+          technical_explanation: techText || '',
+          analogy_explanation: analText || ''
+        })
+          .then(enrichmentResult => {
+            if (enrichmentResult) {
+              loadEnrichmentContent(enrichmentResult, confirmedTopic);
+              // Save full combined data to history (core + enrichment merged)
+              saveToHistory({ ...coreResult, ...enrichmentResult }, confirmedTopic, analogyDomain);
+              // Chain semantic color map after enrichment (needs concept_map)
+              const cMap = findContext(enrichmentResult, ["concept_map", "conceptMap"]);
+              if (techText || analText) {
+                setSemanticColorMap(null);
+                return generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
+              }
+            } else {
+              // Enrichment returned null — save core-only to history
+              saveToHistory(coreResult, confirmedTopic, analogyDomain);
+            }
+            return null;
+          })
+          .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+          .catch(err => {
+            console.warn('Enrichment failed (core content still visible):', err);
+            // Save core-only data to history on enrichment failure
+            saveToHistory(coreResult, confirmedTopic, analogyDomain);
+          })
+          .finally(() => { setIsEnrichmentLoading(false); });
       } else {
         setApiError("No response received. Please check your model settings and try again.");
+        setIsLoading(false);
       }
     } catch (e: unknown) {
       console.error("API call failed", e);
@@ -1227,6 +1264,7 @@ export default function App() {
       if (e instanceof FreeTierExhaustedError) {
         setShowFreeTierModal(true);
         setApiError(null); // Don't show error, modal handles it
+        setIsLoading(false);
         return;
       }
 
@@ -1268,7 +1306,6 @@ export default function App() {
           setApiError(`Request failed: ${errorMessage.slice(0, 100)}` + freeTierNote);
         }
       }
-    } finally {
       setIsLoading(false);
     }
   };
@@ -1283,23 +1320,38 @@ export default function App() {
     setIsRegenerating(true);
 
     try {
-      // Single API call — returns all fields at once
-      const result = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
-      if (result) {
-        loadContent(result, lastSubmittedTopic);
-        saveToHistory(result, lastSubmittedTopic, analogyDomain);
-        setIsEnrichmentLoading(false); // Everything arrived together
+      // Fast core call — show content immediately, then enrich in background
+      const coreResult = await generateAnalogyCore(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
+      if (coreResult) {
+        loadCoreContent(coreResult, lastSubmittedTopic);
+        setIsRegenerating(false); // Content visible now
+        setIsEnrichmentLoading(true);
 
-        // Background semantic color map
-        const techText = findContext(result, ["technical_explanation", "technicalExplanation", "original", "technical"]);
-        const analText = findContext(result, ["analogy_explanation", "analogyExplanation", "analogy"]);
-        const cMap = findContext(result, ["concept_map", "conceptMap"]);
-        if (techText || analText) {
-          setSemanticColorMap(null);
-          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
-            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
-            .catch(() => {});
-        }
+        const techText = findContext(coreResult, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(coreResult, ["analogy_explanation", "analogyExplanation", "analogy"]);
+
+        // Background enrichment
+        generateAnalogyEnrichment(lastSubmittedTopic, analogyDomain, level, {
+          technical_explanation: techText || '',
+          analogy_explanation: analText || ''
+        })
+          .then(enrichmentResult => {
+            if (enrichmentResult) {
+              loadEnrichmentContent(enrichmentResult, lastSubmittedTopic);
+              saveToHistory({ ...coreResult, ...enrichmentResult }, lastSubmittedTopic, analogyDomain);
+              const cMap = findContext(enrichmentResult, ["concept_map", "conceptMap"]);
+              if (techText || analText) {
+                setSemanticColorMap(null);
+                return generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : []);
+              }
+            } else {
+              saveToHistory(coreResult, lastSubmittedTopic, analogyDomain);
+            }
+            return null;
+          })
+          .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+          .catch(() => { saveToHistory(coreResult, lastSubmittedTopic, analogyDomain); })
+          .finally(() => { setIsEnrichmentLoading(false); });
       } else {
         // Parsing failed (safeJsonParse returned null) — show error and revert complexity
         const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";

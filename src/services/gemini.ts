@@ -1036,7 +1036,7 @@ export const generateAnalogyCore = async (
   const needsWebSearch = domainGranularity.isGranular;
 
   const webSearchContext = domainGranularity.isGranular
-    ? `CRITICAL - WEB SEARCH REQUIRED: Search for "${domain}" to get real facts (dates, names, scores). Use ONLY search results — do NOT fabricate details.\n\n---\n\n`
+    ? `WEB SEARCH REQUIRED: Use ONLY real facts from search results about "${domain}" (dates, names, scores). Do NOT fabricate.\n\n`
     : '';
 
   const latexInstruction = (topicIsSTEM && complexity !== 5)
@@ -1045,30 +1045,24 @@ export const generateAnalogyCore = async (
 
   const corePrompt = `${webSearchContext}Create a learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
-TOPIC SCOPING:
-- BROAD topics (e.g. "calculus"): Provide an OVERVIEW of the entire field.
-- SPECIFIC topics (e.g. "derivatives"): Dive deep into that specific topic.
+For broad topics, provide a field overview; for specific topics, dive deep.
 
 ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE:
 {
   "technical_explanation": "${complexity === 5
-    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows. Compare everything to toys, snacks, playgrounds. Make it FUN. Do NOT use \\n or \\\\ for line breaks.`
-    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - definition with key equation, (2) HOW - core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler. Do NOT use \\n or \\\\ for line breaks.`}",
+    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows. Compare everything to toys, snacks, playgrounds. Make it FUN.`
+    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - definition with key equation, (2) HOW - core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler.`}",
   "analogy_explanation": "${complexity === 5
     ? `A fun, SHORT story from ${shortDomain} that a kid would love (1-2 paragraphs, 100-150 words MAX). Simple words only. ZERO technical terms.`
-    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms — write ONLY in ${shortDomain} vocabulary. The reader should feel like reading a ${shortDomain} documentary. (3-4 paragraphs, 250+ words)`}",
+    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history with 2-3 NAMED people (full names), real dates/scores, narrative arc (setup→climax→resolution). ONLY ${shortDomain} vocabulary — ZERO technical terms. (3-4 paragraphs, 250+ words)`}",
   "segments": [
     {
       "tech": "${complexity === 5 ? 'Simple sentence using kid-friendly words' : 'A single concept from the technical explanation'}",
       "analogy": "${complexity === 5 ? `Matching ${shortDomain} story moment — simple words` : `Corresponding ${shortDomain} narrative moment - PURE ${shortDomain} vocabulary, NO technical terms`}",
       "narrative": "Brief story element (1-2 sentences) with real ${shortDomain} references",
-      "intuitions": [
-        "First one-liner (under 12 words): '[Tech concept] is like [${shortDomain} analogy]'",
-        "Second one-liner - different angle",
-        "Third one-liner - the 'aha' moment"
-      ]
+      "intuitions": ["[Tech] is like [${shortDomain}] (under 12 words)", "Different angle", "Aha insight"]
     }
   ],
   "attention_map": {
@@ -1080,16 +1074,13 @@ REQUIRED JSON STRUCTURE:
 ${topicIsSTEM ? `LaTeX RULES: ALLOWED: $x$, $T_{ij}$, $\\\\frac{a}{b}$, $\\\\sum_{i}$, $\\\\int$, $\\\\alpha$, $\\\\nabla$, $x^2$ — simple inline math only.
 FORBIDDEN: \\\\array, \\\\matrix, \\\\begin/\\\\end environments, LaTeX commands as English words, \\n or \\\\\\\\ for line breaks, raw Unicode symbols.` : `NON-STEM: Use ONLY plain English — NO LaTeX, NO Greek letters, NO math symbols.`}
 
-ZERO JARGON IN ANALOGY: All analogy fields must use ONLY ${shortDomain} vocabulary — zero technical terms, zero symbols. Write as a ${shortDomain} journalist.
-
-NARRATIVE STORYTELLING: The analogy must be a REAL ${shortDomain} STORY with 2-3 NAMED people (full names), real dates/scores, and a narrative arc (setup → climax → resolution).
-
-ATTENTION MAP: Weights 1.0=core concepts, 0.8-0.9=important, 0.6-0.7=descriptive, 0.1-0.3=connectors. Keep multi-word entities as ONE entry ("Tom Brady" not "Tom","Brady"). Cover ALL content words from BOTH explanations (50-100+ each).
+ATTENTION MAP: 1.0=core, 0.8-0.9=important, 0.6-0.7=detail, 0.1-0.3=connector. Multi-word as ONE entry ("Tom Brady" not "Tom","Brady"). 50-100+ words from EACH explanation.
 
 RULES:
 1. Segments MUST cover ALL content from both explanations
-2. LaTeX escaping: use \\\\ not \\ for backslashes
-3. Return ONLY valid JSON, no markdown code blocks`;
+2. Do NOT use \\n or \\\\\\\\ for line breaks in any field
+3. LaTeX escaping: use \\\\ not \\ for backslashes
+4. Return ONLY valid JSON, no markdown code blocks`;
 
   const searchPromptText = domainGranularity.isGranular
     ? `Use ONLY facts from search results about "${domain}". Extract exact dates, names, scores, key moments.`
@@ -1178,7 +1169,7 @@ Generate ONLY this JSON:
 }
 
 CONCEPT_MAP RULES:
-- Provide AT LEAST 10 concept mappings. tech_term and analogy_term must be DIFFERENT words.
+- Provide AT LEAST 7 concept mappings. tech_term and analogy_term must be DIFFERENT words.
 - six_word_definition: EXACTLY 6 words, domain-agnostic, what the concept IS
 - narrative_mapping: Use SPECIFIC ${shortDomain} scenarios with real names
 
@@ -1736,7 +1727,13 @@ export const checkDomainProximity = async (topic: string, domain: string): Promi
     }
   }
 
-  // For edge cases, use LLM to check semantic similarity
+  // For free-tier users, skip the LLM check entirely — client-side heuristics are good enough
+  // This saves 2-5 seconds on the critical path before the main API call starts
+  if (isOnFreeTier()) {
+    return { isTooClose: false };
+  }
+
+  // For users with their own API key, use LLM to check semantic similarity for edge cases
   const prompt = `You are checking if a learning topic is too close to an analogy domain for an educational app.
 
 The app explains unfamiliar topics using familiar domains as analogies. If the topic IS the domain, there's no learning bridge to build.

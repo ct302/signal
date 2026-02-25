@@ -219,232 +219,59 @@ export const stripMathSymbols = (text: string): string => {
 
   let result = text;
 
-  // ============================================================
-  // ARROWS - All variants (COMPREHENSIVE)
-  // ============================================================
-  result = result.replace(/\s*→\s*/g, ' to ');
-  result = result.replace(/\s*←\s*/g, ' from ');
-  result = result.replace(/\s*↔\s*/g, ' and ');
-  result = result.replace(/\s*⟶\s*/g, ' to ');
-  result = result.replace(/\s*⟵\s*/g, ' from ');
-  result = result.replace(/\s*⇒\s*/g, ' leads to ');
-  result = result.replace(/\s*⇔\s*/g, ' equals ');
-  result = result.replace(/\s*⇐\s*/g, ' from ');
-  result = result.replace(/\s*➔\s*/g, ' to ');
-  result = result.replace(/\s*➜\s*/g, ' to ');
-  result = result.replace(/\s*➝\s*/g, ' to ');
-  result = result.replace(/\s*➞\s*/g, ' to ');
-  result = result.replace(/\s*⟹\s*/g, ' leads to ');
-  result = result.replace(/\s*⟸\s*/g, ' from ');
-  result = result.replace(/\s*↦\s*/g, ' maps to ');
-  result = result.replace(/\s*⇀\s*/g, ' to ');
-  result = result.replace(/\s*↪\s*/g, ' into ');
+  // --- Whitespace-aware replacements (arrows, sets, comparisons) ---
+  const wsMap = new Map<string, string>([
+    ['→', ' to '], ['⟶', ' to '], ['➔', ' to '], ['➜', ' to '], ['➝', ' to '],
+    ['➞', ' to '], ['⇀', ' to '], ['←', ' from '], ['⟵', ' from '], ['⇐', ' from '],
+    ['⟸', ' from '], ['↔', ' and '], ['⇔', ' equals '], ['⇒', ' leads to '],
+    ['⟹', ' leads to '], ['↦', ' maps to '], ['↪', ' into '],
+    ['∈', ' in '], ['∉', ' not in '], ['∋', ' contains '], ['⊂', ' within '],
+    ['⊃', ' contains '], ['⊆', ' within '], ['⊇', ' contains '],
+    ['∪', ' and '], ['∩', ' and '],
+    ['≈', ' approximately '], ['≃', ' approximately '], ['≠', ' differs from '],
+    ['≤', ' at most '], ['≥', ' at least '], ['≪', ' much less than '],
+    ['≫', ' much greater than '], ['<', ' less than '], ['>', ' more than '],
+    ['≡', ' identical to '], ['≢', ' not identical to '], ['≄', ' not approximately '],
+  ]);
+  const wsChars = Array.from(wsMap.keys()).join('|');
+  result = result.replace(new RegExp(`\\s*(?:${wsChars})\\s*`, 'g'), m => wsMap.get(m.trim()) || ' ');
 
-  // ============================================================
-  // GEOMETRY SYMBOLS (CRITICAL - These were missing!)
-  // ============================================================
-  result = result.replace(/∠/g, 'angle');
-  result = result.replace(/∡/g, 'angle');
-  result = result.replace(/∢/g, 'angle');
-  result = result.replace(/△/g, 'triangle');
-  result = result.replace(/▲/g, 'triangle');
-  result = result.replace(/▵/g, 'triangle');
-  result = result.replace(/◯/g, 'circle');
-  result = result.replace(/○/g, 'circle');
-  result = result.replace(/⊥/g, 'perpendicular to');
-  result = result.replace(/∥/g, 'parallel to');
-  result = result.replace(/≅/g, 'congruent to');
-  result = result.replace(/∼/g, 'similar to');
-  result = result.replace(/⊿/g, 'right triangle');
+  // --- Direct symbol-to-word replacements ---
+  const symMap = new Map<string, string>([
+    ['∠', 'angle'], ['∡', 'angle'], ['∢', 'angle'],
+    ['△', 'triangle'], ['▲', 'triangle'], ['▵', 'triangle'],
+    ['◯', 'circle'], ['○', 'circle'], ['⊥', 'perpendicular to'],
+    ['∥', 'parallel to'], ['≅', 'congruent to'], ['∼', 'similar to'], ['⊿', 'right triangle'],
+    ['∧', ' and '], ['∨', ' or '], ['¬', 'not '], ['⊻', ' exclusive or '],
+    ['⊼', ' nand '], ['⊽', ' nor '], ['⇏', ' does not imply '],
+    ['∀', 'for all '], ['∃', 'there exists '], ['∄', 'there does not exist '],
+    ['∑', 'the total of'], ['∫', 'the accumulation of'],
+    ['∬', 'the double accumulation of'], ['∭', 'the triple accumulation of'],
+    ['∮', 'the loop accumulation of'], ['∆', 'change in '], ['Δ', 'change in '],
+    ['∏', 'the product of'],
+    ['×', ' times '], ['÷', ' divided by '], ['±', ' plus or minus '],
+    ['∓', ' minus or plus '], ['∞', 'endlessly'], ['√', 'square root of '],
+    ['□', 'square '], ['∝', ' proportional to '], ['⊗', ' combined with '],
+    ['⊕', ' combined with '], ['⊖', ' without '], ['⊘', ' divided by '],
+    ['⊙', ' with '], ['·', ' times '], ['•', ' times '], ['∘', ' composed with '],
+    ['∅', 'nothing'], ['⌀', 'nothing'],
+    ['ℕ', 'natural numbers'], ['ℤ', 'integers'], ['ℚ', 'rational numbers'],
+    ['ℝ', 'real numbers'], ['ℂ', 'complex numbers'], ['°', ' degrees'],
+    ['Π', 'product of '], ['Σ', 'total of '],
+  ]);
+  const symChars = Array.from(symMap.keys()).map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  result = result.replace(new RegExp(symChars, 'g'), m => symMap.get(m) || '');
 
-  // ============================================================
-  // LOGICAL OPERATORS (CRITICAL - ∧ was missing!)
-  // ============================================================
-  result = result.replace(/∧/g, ' and ');
-  result = result.replace(/∨/g, ' or ');
-  result = result.replace(/¬/g, 'not ');
-  result = result.replace(/⊻/g, ' exclusive or ');
-  result = result.replace(/⊼/g, ' nand ');
-  result = result.replace(/⊽/g, ' nor ');
-  result = result.replace(/⇏/g, ' does not imply ');
-  result = result.replace(/∀/g, 'for all ');
-  result = result.replace(/∃/g, 'there exists ');
-  result = result.replace(/∄/g, 'there does not exist ');
+  // --- Strip to empty (Greek letters, misc symbols, sub/superscripts) ---
+  result = result.replace(/[αβγδεζηθικλμνξοπρσςτυφχψωΑΒΓΕΖΗΘΙΚΛΜΝΞΟΡΤΥΦΧΨΩ∂∇ℵ℘ℏℓ′″‴]/g, '');
+  result = result.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]/g, '');
 
-  // ============================================================
-  // SET THEORY
-  // ============================================================
-  result = result.replace(/\s*∈\s*/g, ' in ');
-  result = result.replace(/\s*∉\s*/g, ' not in ');
-  result = result.replace(/\s*∋\s*/g, ' contains ');
-  result = result.replace(/\s*⊂\s*/g, ' within ');
-  result = result.replace(/\s*⊃\s*/g, ' contains ');
-  result = result.replace(/\s*⊆\s*/g, ' within ');
-  result = result.replace(/\s*⊇\s*/g, ' contains ');
-  result = result.replace(/\s*∪\s*/g, ' and ');
-  result = result.replace(/\s*∩\s*/g, ' and ');
-  result = result.replace(/∅/g, 'nothing');
-  result = result.replace(/⌀/g, 'nothing');
-
-  // ============================================================
-  // CALCULUS & ANALYSIS SYMBOLS
-  // ============================================================
-  result = result.replace(/∑/g, 'the total of');
-  result = result.replace(/∫/g, 'the accumulation of');
-  result = result.replace(/∬/g, 'the double accumulation of');
-  result = result.replace(/∭/g, 'the triple accumulation of');
-  result = result.replace(/∮/g, 'the loop accumulation of');
-  result = result.replace(/∂/g, '');
-  result = result.replace(/∇/g, '');
-  result = result.replace(/∆/g, 'change in ');
-  result = result.replace(/Δ/g, 'change in ');
-  result = result.replace(/∏/g, 'the product of');
-
-  // ============================================================
-  // COMPARISON & EQUALITY
-  // ============================================================
-  result = result.replace(/\s*≈\s*/g, ' approximately ');
-  result = result.replace(/\s*≠\s*/g, ' differs from ');
-  result = result.replace(/\s*≤\s*/g, ' at most ');
-  result = result.replace(/\s*≥\s*/g, ' at least ');
-  result = result.replace(/\s*≪\s*/g, ' much less than ');
-  result = result.replace(/\s*≫\s*/g, ' much greater than ');
-  result = result.replace(/\s*<\s*/g, ' less than ');
-  result = result.replace(/\s*>\s*/g, ' more than ');
-  result = result.replace(/≡/g, ' identical to ');
-  result = result.replace(/≢/g, ' not identical to ');
-  result = result.replace(/≃/g, ' approximately ');
-  result = result.replace(/≄/g, ' not approximately ');
-
-  // ============================================================
-  // ARITHMETIC OPERATORS
-  // ============================================================
-  result = result.replace(/×/g, ' times ');
-  result = result.replace(/÷/g, ' divided by ');
-  result = result.replace(/±/g, ' plus or minus ');
-  result = result.replace(/∓/g, ' minus or plus ');
-  result = result.replace(/∞/g, 'endlessly');
-  result = result.replace(/√/g, 'square root of ');
-  result = result.replace(/□/g, 'square ');
-  result = result.replace(/∝/g, ' proportional to ');
-  result = result.replace(/⊗/g, ' combined with ');
-  result = result.replace(/⊕/g, ' combined with ');
-  result = result.replace(/⊖/g, ' without ');
-  result = result.replace(/⊘/g, ' divided by ');
-  result = result.replace(/⊙/g, ' with ');
-  result = result.replace(/·/g, ' times ');
-  result = result.replace(/•/g, ' times ');
-  result = result.replace(/∘/g, ' composed with ');
-
-  // ============================================================
-  // GREEK LETTERS (remove entirely - they're math notation)
-  // ============================================================
-  // Lowercase Greek
-  result = result.replace(/α/g, '');
-  result = result.replace(/β/g, '');
-  result = result.replace(/γ/g, '');
-  result = result.replace(/δ/g, '');
-  result = result.replace(/ε/g, '');
-  result = result.replace(/ζ/g, '');
-  result = result.replace(/η/g, '');
-  result = result.replace(/θ/g, '');
-  result = result.replace(/ι/g, '');
-  result = result.replace(/κ/g, '');
-  result = result.replace(/λ/g, '');
-  result = result.replace(/μ/g, '');
-  result = result.replace(/ν/g, '');
-  result = result.replace(/ξ/g, '');
-  result = result.replace(/ο/g, '');
-  result = result.replace(/π/g, '');
-  result = result.replace(/ρ/g, '');
-  result = result.replace(/σ/g, '');
-  result = result.replace(/ς/g, '');
-  result = result.replace(/τ/g, '');
-  result = result.replace(/υ/g, '');
-  result = result.replace(/φ/g, '');
-  result = result.replace(/χ/g, '');
-  result = result.replace(/ψ/g, '');
-  result = result.replace(/ω/g, '');
-  // Uppercase Greek
-  result = result.replace(/Α/g, '');
-  result = result.replace(/Β/g, '');
-  result = result.replace(/Γ/g, '');
-  result = result.replace(/Δ/g, 'change in '); // Keep semantic meaning
-  result = result.replace(/Ε/g, '');
-  result = result.replace(/Ζ/g, '');
-  result = result.replace(/Η/g, '');
-  result = result.replace(/Θ/g, '');
-  result = result.replace(/Ι/g, '');
-  result = result.replace(/Κ/g, '');
-  result = result.replace(/Λ/g, '');
-  result = result.replace(/Μ/g, '');
-  result = result.replace(/Ν/g, '');
-  result = result.replace(/Ξ/g, '');
-  result = result.replace(/Ο/g, '');
-  result = result.replace(/Π/g, 'product of ');
-  result = result.replace(/Ρ/g, '');
-  result = result.replace(/Σ/g, 'total of ');
-  result = result.replace(/Τ/g, '');
-  result = result.replace(/Υ/g, '');
-  result = result.replace(/Φ/g, '');
-  result = result.replace(/Χ/g, '');
-  result = result.replace(/Ψ/g, '');
-  result = result.replace(/Ω/g, '');
-
-  // ============================================================
-  // SUBSCRIPT/SUPERSCRIPT NUMBERS
-  // ============================================================
-  result = result.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]/g, '');
-  result = result.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]/g, '');
-
-  // ============================================================
-  // MISCELLANEOUS MATH SYMBOLS
-  // ============================================================
-  result = result.replace(/ℕ/g, 'natural numbers');
-  result = result.replace(/ℤ/g, 'integers');
-  result = result.replace(/ℚ/g, 'rational numbers');
-  result = result.replace(/ℝ/g, 'real numbers');
-  result = result.replace(/ℂ/g, 'complex numbers');
-  result = result.replace(/ℵ/g, '');
-  result = result.replace(/℘/g, '');
-  result = result.replace(/ℏ/g, '');
-  result = result.replace(/ℓ/g, '');
-  result = result.replace(/′/g, '');  // Prime
-  result = result.replace(/″/g, '');  // Double prime
-  result = result.replace(/‴/g, '');  // Triple prime
-  result = result.replace(/°/g, ' degrees');
-
-  // ============================================================
-  // LATEX CLEANUP
-  // ============================================================
-  // Remove inline LaTeX blocks ($...$) entirely from analogy
+  // --- LaTeX and remaining math cleanup ---
   result = result.replace(/\$[^$]+\$/g, '');
-
-  // Remove any remaining LaTeX commands that slipped through
   result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
-
-  // ============================================================
-  // NUCLEAR FALLBACK - Catch ANY remaining math-like patterns
-  // These handle malformed/hybrid patterns the individual rules miss
-  // ============================================================
-
-  // Remove any remaining Unicode math operator blocks (U+2200-U+22FF, U+27C0-U+27EF, U+2980-U+29FF)
   result = result.replace(/[\u2200-\u22FF\u27C0-\u27EF\u2980-\u29FF]/g, ' ');
-
-  // Remove any remaining combining diacritical marks used in math (U+0300-U+036F)
   result = result.replace(/[\u0300-\u036F]/g, '');
-
-  // Remove stray backslash-word patterns that survived (e.g., \cdot, \mathbf, \frac)
-  result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
-
-  // Remove stray curly braces left after LaTeX removal
-  result = result.replace(/[{}]/g, '');
-
-  // Remove orphaned dollar signs
-  result = result.replace(/\$/g, '');
-
-  // Remove stray backslashes
-  result = result.replace(/\\/g, '');
+  result = result.replace(/[{}$\\]/g, '');
 
   // ============================================================
   // FINAL CLEANUP
