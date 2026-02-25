@@ -1,6 +1,22 @@
 import { LATEX_CMD_REGEX } from '../constants';
 
 /**
+ * Ensure a formula string has $...$ delimiters.
+ * API-returned formulas are always math content but often lack delimiters.
+ * Without delimiters, wrapBareLatex fragments compound expressions into broken pieces.
+ */
+export const ensureFormulaDelimiters = (formula: string): string => {
+  if (!formula || !formula.trim()) return formula;
+  const trimmed = formula.trim();
+  // Already has delimiters — pass through
+  if (trimmed.startsWith('$') || trimmed.startsWith('\\(') || trimmed.startsWith('\\[')) return formula;
+  // Contains backslash commands (LaTeX content) — wrap entire expression
+  if (trimmed.includes('\\')) return `$${trimmed}$`;
+  // No LaTeX detected — return as-is
+  return formula;
+};
+
+/**
  * NUCLEAR SANITIZATION - Applied to raw API response BEFORE JSON parsing
  * This catches ALL math symbols at the source, preventing any from reaching the UI
  */
@@ -98,7 +114,13 @@ export const sanitizeRawApiResponse = (rawText: string): string => {
     cleaned = cleaned.replace(/\\not\s*/g, 'not ');
 
     // Remove orphaned LaTeX commands (backslash followed by letters)
-    cleaned = cleaned.replace(/\\[a-zA-Z]+/g, '');
+    // Handle both single and double-escaped forms (\\cdot and \cdot)
+    cleaned = cleaned.replace(/\\{1,2}[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+    // Nuclear: remove any Unicode math symbols that individual rules missed
+    cleaned = cleaned.replace(/[\u2200-\u22FF\u27C0-\u27EF\u2980-\u29FF]/g, ' ');
+    // Remove stray curly braces and dollar signs
+    cleaned = cleaned.replace(/[{}$]/g, '');
 
     // Clean up multiple spaces
     cleaned = cleaned.replace(/\s{2,}/g, ' ');
@@ -136,6 +158,14 @@ export const sanitizeRawApiResponse = (rawText: string): string => {
     const cleanedValue = stripSymbolsFromValue(value);
     return `"narrative": "${cleanedValue}"`;
   });
+
+  // ============================================================
+  // PART 1.5: Universal symbol cleanup across ALL fields
+  // These symbols should never appear as raw Unicode in ANY JSON field
+  // ============================================================
+  result = result.replace(/□/g, 'square');
+  result = result.replace(/∈/g, ' in ');
+  result = result.replace(/∃/g, ' there exists ');
 
   // ============================================================
   // PART 2: Fix malformed LaTeX in TECHNICAL fields
@@ -394,6 +424,29 @@ export const stripMathSymbols = (text: string): string => {
   result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
 
   // ============================================================
+  // NUCLEAR FALLBACK - Catch ANY remaining math-like patterns
+  // These handle malformed/hybrid patterns the individual rules miss
+  // ============================================================
+
+  // Remove any remaining Unicode math operator blocks (U+2200-U+22FF, U+27C0-U+27EF, U+2980-U+29FF)
+  result = result.replace(/[\u2200-\u22FF\u27C0-\u27EF\u2980-\u29FF]/g, ' ');
+
+  // Remove any remaining combining diacritical marks used in math (U+0300-U+036F)
+  result = result.replace(/[\u0300-\u036F]/g, '');
+
+  // Remove stray backslash-word patterns that survived (e.g., \cdot, \mathbf, \frac)
+  result = result.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '');
+
+  // Remove stray curly braces left after LaTeX removal
+  result = result.replace(/[{}]/g, '');
+
+  // Remove orphaned dollar signs
+  result = result.replace(/\$/g, '');
+
+  // Remove stray backslashes
+  result = result.replace(/\\/g, '');
+
+  // ============================================================
   // FINAL CLEANUP
   // ============================================================
   // Clean up multiple spaces
@@ -420,6 +473,127 @@ export const cleanText = (text: string | null | undefined): string => {
 };
 
 /**
+ * Clean stray LLM prose artifacts — slashes, backslashes, control chars, and other
+ * non-semantic characters that leak through from LaTeX conversion or model quirks.
+ * Apply AFTER cleanText/fixUnicode/stripMathSymbols for final prose polish.
+ */
+// All Unicode slash/solidus variants that LLMs may output
+const SLASH_CHARS = '/\\\\∕⁄⧸／';
+const SLASH_CLASS = `[${SLASH_CHARS}]`;
+const SLASH_RE_NEGATION = new RegExp(`${SLASH_CLASS}not\\b`, 'gi');
+const SLASH_RE_COMMON_WORDS = new RegExp(`(?<=\\s|^)${SLASH_CLASS}(?=(?:the|a|an|in|or|and|is|it|its|be|to|of|for|on|at|by|as|but|if|no|so|up|do|my|we|he|us|just|not|all|can|had|her|was|one|our|out|has|his|how|its|may|new|now|old|see|way|who|did|get|let|say|she|too|use)\\b)`, 'gi');
+const SLASH_RE_ISOLATED = new RegExp(`(?<=\\s)${SLASH_CLASS}(?=\\s)`, 'g');
+const SLASH_RE_BEFORE_WORD = new RegExp(`(?<=\\s|^)${SLASH_CLASS}(?=[a-z]{2,})`, 'gi');
+
+export const cleanProseArtifacts = (text: string): string => {
+  if (!text) return "";
+  return text
+    // Fix LaTeX negation artifacts: "\not" or "/not" or "∕not" → "not"
+    .replace(SLASH_RE_NEGATION, 'not')
+    // Fix common slash-prefixed words from LaTeX: /the, /a, /an, ∕the, etc.
+    .replace(SLASH_RE_COMMON_WORDS, '')
+    // Remove any remaining stray slashes sitting alone between words
+    .replace(SLASH_RE_ISOLATED, '')
+    // Remove stray isolated slashes/solidus before ANY word (catches anything the above missed)
+    .replace(SLASH_RE_BEFORE_WORD, '')
+    // Remove stray pipe characters | that aren't part of tables or code
+    .replace(/(?<=\s)\|(?=\s)/g, '')
+    // Remove stray caret ^ not in math context
+    .replace(/(?<=\s)\^(?=\s)/g, '')
+    // Remove stray tilde ~ not in math/URL context
+    .replace(/(?<=\s)~(?=\s)/g, ' ')
+    // Collapse multiple spaces into single space
+    .replace(/  +/g, ' ')
+    .trim();
+};
+
+/**
+ * Irregular plural forms common in math/science/technical vocabulary.
+ * Maps plural → singular base form so both sides resolve to the same key.
+ */
+const IRREGULAR_STEMS: ReadonlyMap<string, string> = new Map([
+  // Latin -ix/-ices
+  ['matrices', 'matrix'], ['vertices', 'vertex'], ['indices', 'index'],
+  ['appendices', 'appendix'],
+  // Latin -is/-es
+  ['axes', 'axis'], ['bases', 'basis'], ['analyses', 'analysis'],
+  ['hypotheses', 'hypothesis'], ['theses', 'thesis'], ['syntheses', 'synthesis'],
+  ['parentheses', 'parenthesis'], ['ellipses', 'ellipsis'], ['crises', 'crisis'],
+  // Latin -us/-i
+  ['radii', 'radius'], ['nuclei', 'nucleus'], ['foci', 'focus'],
+  ['loci', 'locus'], ['stimuli', 'stimulus'], ['fungi', 'fungus'],
+  // Latin -um/-a
+  ['data', 'datum'], ['spectra', 'spectrum'], ['strata', 'stratum'],
+  ['media', 'medium'], ['criteria', 'criterion'], ['phenomena', 'phenomenon'],
+  // Greek -on/-a
+  ['automata', 'automaton'],
+  // -f/-ves
+  ['halves', 'half'], ['leaves', 'leaf'], ['selves', 'self'],
+  ['wolves', 'wolf'], ['knives', 'knife'], ['lives', 'life'],
+  // Other
+  ['formulae', 'formula'], ['larvae', 'larva'],
+  ['children', 'child'], ['mice', 'mouse'], ['dice', 'die'],
+]);
+
+/**
+ * Lightweight morphological stemmer for concept color matching.
+ * Reduces English words to a canonical stem so morphological variants
+ * (matrix/matrices, vector/vectors, value/values) map to the same concept color.
+ *
+ * NOT a general-purpose stemmer — optimized for technical/scientific vocabulary.
+ * Both storage and query sides must use this function for consistent matching.
+ */
+export const stemWord = (word: string): string => {
+  if (!word || word.length < 3) return word;
+
+  const lower = word.toLowerCase();
+
+  // Layer 1: Irregular forms lookup
+  const irregular = IRREGULAR_STEMS.get(lower);
+  if (irregular) return irregular;
+
+  // Layer 2: Suffix stripping (first match wins, most specific first)
+  let stem = lower;
+
+  if (stem.length > 4 && stem.endsWith('ies')) {
+    stem = stem.slice(0, -3) + 'y';                         // boundaries → boundary
+  } else if (stem.length > 5 && stem.endsWith('sses')) {
+    stem = stem.slice(0, -2);                                // masses → mass
+  } else if (stem.length > 4 && stem.endsWith('xes')) {
+    stem = stem.slice(0, -2);                                // indexes → index
+  } else if (stem.length > 5 && stem.endsWith('ches')) {
+    stem = stem.slice(0, -2);                                // batches → batch
+  } else if (stem.length > 5 && stem.endsWith('shes')) {
+    stem = stem.slice(0, -2);                                // meshes → mesh
+  } else if (stem.length > 5 && stem.endsWith('ing')) {
+    const base = stem.slice(0, -3);
+    // Doubled final consonant: mapping → mapp → map
+    stem = (base.length > 2 && base[base.length - 1] === base[base.length - 2])
+      ? base.slice(0, -1)
+      : base;
+  } else if (stem.length > 4 && stem.endsWith('ed') && !stem.endsWith('eed')) {
+    const base = stem.slice(0, -2);
+    // Doubled final consonant: mapped → mapp → map
+    stem = (base.length > 2 && base[base.length - 1] === base[base.length - 2])
+      ? base.slice(0, -1)
+      : base;
+  } else if (stem.length > 4 && stem.endsWith('ly')) {
+    stem = stem.slice(0, -2);                                // linearly → linear
+  } else if (stem.length > 3 && stem.endsWith('s')
+             && !stem.endsWith('ss') && !stem.endsWith('us') && !stem.endsWith('is')) {
+    stem = stem.slice(0, -1);                                // vectors → vector
+  }
+
+  // Layer 3: Final -e normalization
+  // Ensures "compute" and "computing" both → "comput"
+  if (stem.length > 3 && stem.endsWith('e')) {
+    stem = stem.slice(0, -1);
+  }
+
+  return stem;
+};
+
+/**
  * Fix unicode escape sequences in text
  */
 export const fixUnicode = (text: string | null | undefined): string => {
@@ -439,11 +613,14 @@ export const fixUnicode = (text: string | null | undefined): string => {
 export const unescapeControlSequences = (text: string | null | undefined): string => {
   if (!text || typeof text !== 'string') return "";
   return text
-    .replace(/\\n/g, ' ')      // Convert \n to space (prose display, not code)
-    .replace(/\\r/g, ' ')      // Convert \r to space
-    .replace(/\\t/g, ' ')      // Convert \t to space
-    .replace(/\s{2,}/g, ' ')   // Collapse multiple spaces to single
-    .replace(/\\\\/g, '\\');   // Handle escaped backslashes
+    // CRITICAL: Only protect \n, \r, \t when followed by a LOWERCASE letter
+    // LaTeX commands are always lowercase: \nabla, \neq, \times, \theta, \rho, etc.
+    // But \nThe, \nA, \rX etc. are actual control sequences + uppercase word start
+    .replace(/\\n(?![a-z])/g, ' ')   // \n→space UNLESS followed by lowercase (preserves \nabla, \neq, \nu, etc.)
+    .replace(/\\r(?![a-z])/g, ' ')   // \r→space UNLESS followed by lowercase (preserves \rho, \rangle, etc.)
+    .replace(/\\t(?![a-z])/g, ' ')   // \t→space UNLESS followed by lowercase (preserves \times, \theta, etc.)
+    .replace(/\s{2,}/g, ' ')         // Collapse multiple spaces to single
+    .replace(/\\\\/g, '\\');         // Handle escaped backslashes
 };
 
 /**
@@ -499,7 +676,8 @@ const fixMissingBackslashes = (text: string): string => {
     // Relations
     'approx', 'neq', 'leq', 'geq', 'll', 'gg', 'prec', 'succ',
     'preceq', 'succeq', 'sim', 'simeq', 'cong', 'equiv', 'propto',
-    'subset', 'supset', 'subseteq', 'supseteq', 'in', 'notin', 'ni',
+    // NOTE: Removed 'in' - too common as English word "in", causes prose "in" → \in → ∈ symbol
+    'subset', 'supset', 'subseteq', 'supseteq', 'notin', 'ni',
     'parallel', 'perp', 'mid', 'nmid',
 
     // Arrows
@@ -519,12 +697,14 @@ const fixMissingBackslashes = (text: string): string => {
     'quad', 'qquad', 'hspace', 'vspace', 'hfill', 'vfill',
 
     // Special symbols
-    'infty', 'partial', 'nabla', 'prime', 'backprime',
-    'forall', 'exists', 'nexists', 'emptyset', 'varnothing',
+    'infty', 'partial', 'nabla', 'top', 'bot', 'dagger', 'prime', 'backprime',
+    // NOTE: Removed 'exists' - too common as English word, causes prose "exists" → \exists → ∃ symbol
+    'forall', 'nexists', 'emptyset', 'varnothing',
     'neg', 'lnot', 'land', 'lor', 'implies', 'iff',
     'aleph', 'beth', 'hbar', 'ell', 'wp', 'Re', 'Im',
     'angle', 'measuredangle', 'sphericalangle',
-    'triangle', 'square', 'diamond', 'Box', 'Diamond',
+    // NOTE: Removed 'square' - too common as English word "square roots", causes "square" → \square → □
+    'triangle', 'diamond', 'Box', 'Diamond',
     'clubsuit', 'diamondsuit', 'heartsuit', 'spadesuit',
 
     // Functions
@@ -639,7 +819,26 @@ export const sanitizeLatex = (text: string): string => {
 
   let result = text;
 
-  // 0. Fix \not patterns BEFORE any other processing
+  // 0a. Remove LaTeX line breaks (\\ or \\ with spaces) outside of math mode
+  // LLMs often generate "\\" as paragraph/line breaks in prose - these render as "\ \"
+  // Must be done BEFORE other processing to avoid partial matches
+  // Only remove \\ that are NOT inside $ delimiters (math mode)
+  const mathRegions: Array<{start: number; end: number}> = [];
+  let mathMatch: RegExpExecArray | null;
+  const mathFinder = /\$\$[\s\S]*?\$\$|\$[^$]*\$/g;
+  while ((mathMatch = mathFinder.exec(result)) !== null) {
+    mathRegions.push({ start: mathMatch.index, end: mathMatch.index + mathMatch[0].length });
+  }
+  // Replace \\ outside math mode with a space (they're just line breaks)
+  result = result.replace(/\\\\\s*/g, (match, offset) => {
+    // Check if this offset is inside any math region
+    for (const region of mathRegions) {
+      if (offset >= region.start && offset < region.end) return match; // Keep it
+    }
+    return ' '; // Replace with space
+  });
+
+  // 0b. Fix \not patterns BEFORE any other processing
   // \not renders as "/" in KaTeX when malformed, convert to proper form
   // Handle both inside and outside math mode
 
@@ -659,12 +858,14 @@ export const sanitizeLatex = (text: string): string => {
   // Also catch \lnot used outside of proper math context (renders as / or ¬)
   result = result.replace(/\\lnot\s*/g, 'not ');
 
-  // Catch any stray "/" surrounded by spaces (artifact from malformed \not rendering)
+  // Catch any stray slash surrounded by spaces (artifact from malformed \not rendering)
   // Normal prose rarely has " / " - this is almost always a KaTeX artifact
-  // Also catch Unicode division slash (∕ U+2215)
-  result = result.replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ');
+  // Also catch Unicode variants: ∕ (U+2215), ⁄ (U+2044), ⧸ (U+29F8), ／ (U+FF0F)
+  result = result.replace(/\s+[/∕⁄⧸／]\s+(?=[a-z])/gi, ' not ');
+  // Also catch slash DIRECTLY touching the next word (no space after slash): "but /the" → "but not the"
+  result = result.replace(/\s+[/∕⁄⧸／](?=[a-z])/gi, ' not ');
   // Also catch "/" followed by specific words that suggest negation
-  result = result.replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not ');
+  result = result.replace(/\s+[/∕⁄⧸／]\s*(?=just|only|merely|simply)\b/gi, ' not ');
 
   // Fix triangle symbols appearing as raw Unicode in prose context
   // Convert to word "triangle" when followed by spaces (not in math expressions)
@@ -672,23 +873,34 @@ export const sanitizeLatex = (text: string): string => {
 
   // Fix \square used as the word "square" (common LLM mistake)
   // \square renders as □ (geometric square symbol) but LLM often means "square" as in "square roots"
-  // Pattern: "\square roots" or "□ roots" should be "square roots"
-  result = result.replace(/\\square\s+(?=roots?|root\b)/gi, 'square ');
-  result = result.replace(/□\s+(?=roots?|root\b)/gi, 'square ');
-  // Also handle standalone □ followed by common words (indicating prose context)
-  result = result.replace(/□\s+(?=of|the|a|an|is|are|in|to|for|and|or)\b/gi, 'square ');
-  // Handle \square not followed by math-related content - convert to word "square"
-  result = result.replace(/\\square(?=\s+[a-z])/gi, 'square');
+  // In technical explanations outside of $...$ math mode, □ and \square should become "square"
+  // Handle ALL occurrences of □ outside math mode - replace with word "square"
+  result = result.replace(/□/g, 'square');
+  // Handle \square outside math mode - convert to word "square"
+  // (Inside math mode it's fine as-is since KaTeX renders it properly)
+  result = result.replace(/\\square(?![{])/g, 'square');
 
   // Fix \in used as the word "in" outside of math context
   // \in renders as ∈ (element of) symbol, but in prose should be the word "in"
   // Only convert when followed by a space and lowercase word (not valid math like \int)
   result = result.replace(/\\in(?=\s+[a-z])/gi, 'in');
 
-  // Also fix already-rendered ∈ symbol when misused as prose "in" (followed by articles)
-  // This catches cases where LLM outputs ∈ directly instead of \in
-  // Pattern: "∈ the", "∈ a", "∈ an", "∈ this", etc. → "in the", etc.
-  result = result.replace(/∈\s+(the|a|an|this|that|its|their|our|my|your|some|any|each|every)\b/gi, 'in $1');
+  // Fix ∈ (element-of symbol) misused as the word "in" in prose
+  // LLMs sometimes output ∈ when they mean "in" — e.g., "technique ∈ linear algebra"
+  // Unconditional: bare ∈ should never appear in prose text outside $...$ math blocks
+  result = result.replace(/\s*∈\s*/g, ' in ');
+
+  // Fix ∃ (there-exists symbol) misused in prose — e.g., "it always ∃ because"
+  // Same pattern as ∈: bare ∃ outside $...$ math blocks is always an AI mistake
+  result = result.replace(/\s*∃\s*/g, ' there exists ');
+
+  // Catch-all: remove backslash before 5+ letter English words outside math mode
+  // Real LaTeX commands (alpha, frac, sqrt, quad) are ≤5 chars; words like
+  // \obvious, \important, \significant, \because are AI artifacts
+  result = result.replace(/\\([a-z]{5,})\b/gi, '$1');
+
+  // Remove leading slash from /word artifacts (KaTeX renders unknown \word as /word)
+  result = result.replace(/(?<=\s|^)\/([a-z]{3,})\b/gi, '$1');
 
   // 1. Remove environment commands that appear as standalone text (not proper LaTeX)
   // These are LaTeX environments that can't be rendered inline and shouldn't appear as \command
@@ -697,9 +909,19 @@ export const sanitizeLatex = (text: string): string => {
   // Split by $ to process non-math regions only
   const parts = result.split(/(\$[^$]*\$)/g);
   result = parts.map((part, index) => {
-    // Odd indices are inside $ delimiters (math mode) - leave them alone
+    // Inside $ delimiters (math mode) — fix concatenated commands then pass through
     if (part.startsWith('$') && part.endsWith('$')) {
-      return part;
+      // Split concatenated LaTeX commands inside math blocks
+      // e.g., \topdelta → \top \delta, \botgamma → \bot \gamma
+      // KaTeX can't parse unknown commands like \topdelta — they must be separated
+      let mathContent = part;
+      const shortCmds = ['top', 'bot', 'mid', 'mod', 'det', 'dim', 'gcd', 'inf', 'sup', 'max', 'min', 'log', 'exp', 'sin', 'cos', 'tan', 'dag'];
+      const greekAndCommon = 'alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|frac|sqrt|partial|nabla|cdot|times|left|right|vec|hat|bar|text|mathrm|mathbf';
+      for (const cmd of shortCmds) {
+        const regex = new RegExp(`\\\\${cmd}(${greekAndCommon})`, 'g');
+        mathContent = mathContent.replace(regex, `\\${cmd} \\$1`);
+      }
+      return mathContent;
     }
 
     // Even indices are outside $ delimiters - clean up orphaned LaTeX commands
@@ -730,4 +952,104 @@ export const sanitizeLatex = (text: string): string => {
   }
 
   return result;
+};
+
+/**
+ * Convert raw Unicode math symbols to $\command$ form for KaTeX rendering.
+ * Only used in technical mode — analogy mode uses stripMathSymbols() instead.
+ * Skips content already inside $...$ or $$...$$ delimiters.
+ */
+export const convertUnicodeToLatex = (text: string): string => {
+  if (!text) return "";
+
+  // Split on existing math regions — don't touch content already in math mode
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[^$]+\$)/g);
+
+  return parts.map(part => {
+    if (part.startsWith('$') && part.endsWith('$')) return part;
+
+    let result = part;
+
+    // Calculus operators
+    result = result.replace(/∇/g, '$\\nabla$');
+    result = result.replace(/∑/g, '$\\sum$');
+    result = result.replace(/∂/g, '$\\partial$');
+    result = result.replace(/∫/g, '$\\int$');
+    result = result.replace(/∬/g, '$\\iint$');
+    result = result.replace(/∮/g, '$\\oint$');
+    result = result.replace(/∏/g, '$\\prod$');
+
+    // Comparison / arithmetic
+    result = result.replace(/×/g, '$\\times$');
+    result = result.replace(/÷/g, '$\\div$');
+    result = result.replace(/±/g, '$\\pm$');
+    result = result.replace(/∞/g, '$\\infty$');
+    result = result.replace(/≈/g, '$\\approx$');
+    result = result.replace(/≠/g, '$\\neq$');
+    result = result.replace(/≤/g, '$\\leq$');
+    result = result.replace(/≥/g, '$\\geq$');
+    result = result.replace(/≡/g, '$\\equiv$');
+    result = result.replace(/∝/g, '$\\propto$');
+
+    // Set theory — ∈ outside math delimiters is almost always prose "in" (AI mistake)
+    // Real math ∈ should be inside $...$ blocks which are preserved above (line 884)
+    result = result.replace(/∈/g, ' in ');
+    result = result.replace(/∅/g, '$\\emptyset$');
+    result = result.replace(/⊂/g, '$\\subset$');
+    result = result.replace(/⊆/g, '$\\subseteq$');
+    result = result.replace(/∪/g, '$\\cup$');
+    result = result.replace(/∩/g, '$\\cap$');
+
+    // Logic
+    result = result.replace(/∀/g, '$\\forall$');
+    // ∃ outside math delimiters is almost always prose "there exists" (AI mistake)
+    // Real math ∃ should be inside $...$ blocks which are preserved above (line 884)
+    result = result.replace(/∃/g, 'there exists ');
+
+    // Arrows
+    result = result.replace(/⇒/g, '$\\Rightarrow$');
+    result = result.replace(/⇔/g, '$\\Leftrightarrow$');
+    result = result.replace(/→/g, '$\\to$');
+    result = result.replace(/←/g, '$\\leftarrow$');
+
+    // Miscellaneous
+    result = result.replace(/⊕/g, '$\\oplus$');
+    result = result.replace(/⊗/g, '$\\otimes$');
+
+    return result;
+  }).join('');
+};
+
+/**
+ * Lightweight fuzzy scorer for word search (no external deps).
+ * Returns 0-1 score: prefix match = 1.0, substring = 0.8, subsequence = proportional, no match = 0.
+ */
+export const fuzzyScore = (query: string, target: string): number => {
+  const q = query.toLowerCase();
+  const t = target.toLowerCase();
+
+  // Exact prefix match is best
+  if (t.startsWith(q)) return 1.0;
+
+  // Substring match is good
+  if (t.includes(q)) return 0.8;
+
+  // Character-by-character subsequence match
+  let qi = 0;
+  let consecutive = 0;
+  let maxConsecutive = 0;
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      qi++;
+      consecutive++;
+      maxConsecutive = Math.max(maxConsecutive, consecutive);
+    } else {
+      consecutive = 0;
+    }
+  }
+
+  if (qi < q.length) return 0; // Not all query chars found
+
+  // Score based on coverage and consecutiveness
+  return 0.3 + (maxConsecutive / q.length) * 0.4 + (q.length / t.length) * 0.2;
 };

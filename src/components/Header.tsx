@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, History, Moon, Sun, Loader2, Home, Lock, Mic, MicOff } from 'lucide-react';
 import { Settings } from './Settings';
+import { useMobile } from '../hooks/useMobile';
 
 interface HeaderProps {
   analogyDomain: string;
@@ -57,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   isMicSupported = false
 }) => {
   const [isHoveringDomain, setIsHoveringDomain] = useState(false);
+  const isMobile = useMobile();
   const shortDomain = getShortDomainName(analogyDomain);
 
   // Determine if search is disabled (either loading or viewing history)
@@ -72,8 +74,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onDomainClick}
-            onMouseEnter={() => setIsHoveringDomain(true)}
-            onMouseLeave={() => setIsHoveringDomain(false)}
+            onMouseEnter={() => !isMobile && setIsHoveringDomain(true)}
+            onMouseLeave={() => !isMobile && setIsHoveringDomain(false)}
             className={`flex items-center gap-2 py-2 min-h-touch rounded-full text-sm font-medium transition-all duration-200 ${
               isHoveringDomain ? 'px-3' : 'px-2'
             } ${
@@ -109,17 +111,19 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors ${
-              isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
-            }`}
-            title="Toggle Theme"
-          >
-            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-full transition-colors ${
+                isDarkMode ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-500'
+              }`}
+              title="Toggle Theme"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          )}
 
-          <Settings isDarkMode={isDarkMode} />
+          {!isMobile && <Settings isDarkMode={isDarkMode} />}
         </div>
 
         <div className="flex-1 relative">

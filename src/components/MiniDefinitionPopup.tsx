@@ -3,6 +3,7 @@ import { CornerDownRight, X, Copy, Check, ZoomIn, ZoomOut, GripHorizontal } from
 import { Position, Size, ConceptMapItem } from '../types';
 
 interface MiniDefinitionPopupProps {
+  miniDefTitle?: string | null;
   miniSelectedTerm: string;
   miniDefText: string;
   isLoadingMiniDef: boolean;
@@ -20,6 +21,7 @@ interface MiniDefinitionPopupProps {
   onStartResize: (e: React.MouseEvent, target: string) => void;
   onEliClick: (level: number) => void;
   onCopy: (text: string, id: string) => void;
+  onWordClick?: (word: string, rect: DOMRect) => void;
   renderAttentiveText: (
     text: string,
     threshold: number,
@@ -28,12 +30,14 @@ interface MiniDefinitionPopupProps {
     setColorMode: React.Dispatch<React.SetStateAction<boolean>> | null,
     customMap: ConceptMapItem[] | null,
     textColor: string,
-    textScale?: number
+    textScale?: number,
+    onWordClick?: (word: string, rect: DOMRect) => void
   ) => React.ReactNode;
   renderRichText: (text: string, colorClass?: string) => React.ReactNode;
 }
 
-export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.memo(({
+export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
+  miniDefTitle,
   miniSelectedTerm,
   miniDefText,
   isLoadingMiniDef,
@@ -51,6 +55,7 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.mem
   onStartResize,
   onEliClick,
   onCopy,
+  onWordClick,
   renderAttentiveText,
   renderRichText
 }) => {
@@ -63,7 +68,8 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.mem
         right: 0,
         width: '100%',
         height: '50vh',
-        transform: 'none'
+        transform: 'none',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
       }
     : {
         top: miniDefPosition.top,
@@ -79,7 +85,7 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.mem
 
   return (
     <div
-      className={`mini-def-window absolute z-[210] bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl shadow-2xl transition-all duration-300 animate-in fade-in zoom-in flex flex-col ${
+      className={`mini-def-window absolute z-[210] bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl shadow-2xl transition-all duration-300 animate-in fade-in zoom-in flex flex-col signal-font ${
         isMobile ? 'rounded-t-2xl' : 'md:rounded-xl'
       }`}
       style={style}
@@ -92,7 +98,10 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.mem
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <CornerDownRight size={14} className="text-blue-400 flex-shrink-0" />
           <span className="font-bold text-sm text-blue-200 truncate">
-            {renderRichText(miniSelectedTerm, "text-blue-200")}
+            {miniDefTitle
+              ? renderRichText(miniDefTitle, "text-blue-200")
+              : renderRichText(miniSelectedTerm, "text-blue-200")
+            }
           </span>
         </div>
         <div className="flex gap-1 text-neutral-400 items-center flex-shrink-0 ml-2">
@@ -134,8 +143,14 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = React.mem
             setIsMiniDefColorMode,
             null,
             "text-neutral-300",
-            textScale
+            textScale,
+            onWordClick
           )
+        )}
+        {onWordClick && !isLoadingMiniDef && (
+          <div className="text-xs text-neutral-600 mt-1 text-center">
+            {isMobile ? 'Tap' : 'Click'} any word to redefine
+          </div>
         )}
       </div>
 

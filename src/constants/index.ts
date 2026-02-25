@@ -1,28 +1,35 @@
+import type { FontPreset } from '../types';
+
 // API Configuration - Now dynamic via ProviderConfig
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 
 // No default API keys - users must provide their own for security
 
-// OpenRouter models - hardcoded selection
+// OpenRouter models for demo/free tier (server-side proxy handles model selection)
+// These must match the whitelist in api/chat.js
 export const OPENROUTER_MODELS = [
-  'xiaomi/mimo-v2-flash:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'google/gemini-2.0-flash-lite-001',
+  'google/gemini-2.5-flash-lite',
+  'arcee-ai/trinity-large-preview:free',
+  'meta-llama/llama-4-scout:free',
+  'openrouter/free'
 ];
 
 // Fallback model chain for circuit breaker pattern
 // When primary model hits rate limit, try these in order
 export const OPENROUTER_FALLBACK_MODELS = [
-  'xiaomi/mimo-v2-flash:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'google/gemini-2.0-flash-lite-001',
+  'google/gemini-2.5-flash-lite',
+  'arcee-ai/trinity-large-preview:free',
+  'meta-llama/llama-4-scout:free',
+  'openrouter/free'
 ];
 
 // Rate limit configuration
 export const RATE_LIMIT_CONFIG = {
   maxRetries: 2,
-  initialBackoffMs: 500,
-  maxBackoffMs: 4000,
+  initialBackoffMs: 1000,
+  maxBackoffMs: 32000,
   jitterFactor: 0.25, // ±25% jitter
   circuitBreakerThreshold: 3, // consecutive failures before trying fallback
   circuitBreakerCooldownMs: 60000, // 60s cooldown for failed model
@@ -52,25 +59,39 @@ export const STOP_WORDS = new Set([
 export const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\[a-zA-Z]+(?:[_^]\{[^}]*\}|\{[^}]*\})*)/g;
 
 // LaTeX command regex for wrapping - comprehensive list including accents and dots
-export const LATEX_CMD_REGEX = /\\(frac|dfrac|tfrac|lim|limsup|liminf|sum|int|iint|iiint|oint|prod|sqrt|cdot|times|div|pm|mp|leq|geq|ll|gg|neq|approx|sim|simeq|cong|equiv|propto|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|Xi|Upsilon|left|right|big|Big|bigg|Bigg|text|mathrm|mathbf|mathcal|mathbb|mathit|mathsf|boldsymbol|textbf|textrm|vec|hat|widehat|bar|overline|underline|dot|ddot|dddot|tilde|widetilde|acute|grave|breve|check|ring|overbrace|underbrace|prime|backprime|circ|bullet|star|forall|exists|nexists|subset|supset|subseteq|supseteq|cup|cap|bigcup|bigcap|in|notin|ni|land|lor|neg|lnot|implies|iff|oplus|ominus|otimes|oslash|odot|dots|ldots|cdots|vdots|ddots|quad|qquad|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|exp|det|dim|gcd|ker|hom|arg|deg|max|min|sup|inf|langle|rangle|lfloor|rfloor|lceil|rceil|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|Leftrightarrow|mapsto|uparrow|downarrow|Uparrow|Downarrow|nearrow|searrow|swarrow|nwarrow|hookrightarrow|hookleftarrow|parallel|perp|mid|angle|triangle|square|diamond|emptyset|varnothing|aleph|hbar|ell|wp|Re|Im|binom|tbinom|dbinom|stackrel|overset|underset|phantom|operatorname|begin|end|matrix|pmatrix|bmatrix|vmatrix|cases|array|aligned)/;
+export const LATEX_CMD_REGEX = /\\(frac|dfrac|tfrac|lim|limsup|liminf|sum|int|iint|iiint|oint|prod|sqrt|cdot|times|div|pm|mp|leq|geq|ll|gg|neq|approx|sim|simeq|cong|equiv|propto|to|infty|partial|nabla|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Delta|Sigma|Omega|Gamma|Lambda|Pi|Theta|Phi|Psi|Xi|Upsilon|left|right|big|Big|bigg|Bigg|text|mathrm|mathbf|mathcal|mathbb|mathit|mathsf|boldsymbol|textbf|textrm|vec|hat|widehat|bar|overline|underline|dot|ddot|dddot|tilde|widetilde|acute|grave|breve|check|ring|overbrace|underbrace|prime|backprime|circ|bullet|star|forall|exists|nexists|subset|supset|subseteq|supseteq|cup|cap|bigcup|bigcap|in|notin|ni|land|lor|neg|lnot|implies|iff|oplus|ominus|otimes|oslash|odot|dots|ldots|cdots|vdots|ddots|quad|qquad|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|exp|det|dim|gcd|ker|hom|arg|deg|max|min|sup|inf|langle|rangle|lfloor|rfloor|lceil|rceil|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|Leftrightarrow|mapsto|uparrow|downarrow|Uparrow|Downarrow|nearrow|searrow|swarrow|nwarrow|hookrightarrow|hookleftarrow|parallel|perp|mid|top|bot|dag|dagger|angle|triangle|square|diamond|emptyset|varnothing|aleph|hbar|ell|wp|Re|Im|binom|tbinom|dbinom|stackrel|overset|underset|phantom|operatorname|begin|end|matrix|pmatrix|bmatrix|vmatrix|cases|array|aligned)/;
 
-// Concept colors for isomorphic mapping
+// Concept colors for isomorphic mapping — light mode
 export const CONCEPT_COLORS = [
   'text-red-600', 'text-blue-600', 'text-emerald-600', 'text-purple-600',
   'text-orange-600', 'text-cyan-600', 'text-pink-600', 'text-lime-600',
   'text-indigo-600', 'text-rose-600', 'text-teal-600', 'text-amber-600'
 ];
 
-// Background colors with opacity - works well in both light and dark modes
+// Concept colors for dark mode — fluorescent/bright variants that pop on dark backgrounds
+export const CONCEPT_COLORS_DARK = [
+  'text-red-400', 'text-blue-400', 'text-emerald-400', 'text-purple-400',
+  'text-orange-400', 'text-cyan-400', 'text-pink-400', 'text-lime-400',
+  'text-indigo-400', 'text-rose-400', 'text-teal-400', 'text-amber-400'
+];
+
+// Background colors with opacity — light mode
 export const CONCEPT_BG_COLORS = [
   'bg-red-500/20', 'bg-blue-500/20', 'bg-emerald-500/20', 'bg-purple-500/20',
   'bg-orange-500/20', 'bg-cyan-500/20', 'bg-pink-500/20', 'bg-lime-500/20',
   'bg-indigo-500/20', 'bg-rose-500/20', 'bg-teal-500/20', 'bg-amber-500/20'
 ];
 
+// Background colors for dark mode — more saturated/vivid against dark surfaces
+export const CONCEPT_BG_COLORS_DARK = [
+  'bg-red-500/30', 'bg-blue-500/30', 'bg-emerald-500/30', 'bg-purple-500/30',
+  'bg-orange-500/30', 'bg-cyan-500/30', 'bg-pink-500/30', 'bg-lime-500/30',
+  'bg-indigo-500/30', 'bg-rose-500/30', 'bg-teal-500/30', 'bg-amber-500/30'
+];
+
 // Quick start domains - full list (randomized subset shown to users)
 export const ALL_QUICK_START_DOMAINS = [
-  // Sports
+  // ── Sports (existing) ──
   { emoji: '🏈', name: 'NFL' },
   { emoji: '🏀', name: 'NBA' },
   { emoji: '⚽', name: 'Soccer' },
@@ -79,7 +100,16 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '🎾', name: 'Tennis' },
   { emoji: '🥊', name: 'Boxing' },
   { emoji: '🏎️', name: 'Formula 1' },
-  // Entertainment
+  // Sports (new)
+  { emoji: '🏓', name: 'Pickleball' },
+  { emoji: '🏃', name: 'Running' },
+  { emoji: '🛹', name: 'Skateboarding' },
+  { emoji: '⛷️', name: 'Winter Olympics' },
+  { emoji: '🏆', name: 'World Cup' },
+  { emoji: '🥋', name: 'MMA' },
+  { emoji: '⛳', name: 'Golf' },
+
+  // ── Entertainment (existing) ──
   { emoji: '🎮', name: 'Video Games' },
   { emoji: '🎬', name: 'Movies' },
   { emoji: '📺', name: 'TV Shows' },
@@ -87,24 +117,38 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '🎭', name: 'Theater' },
   { emoji: '🎨', name: 'Art' },
   { emoji: '📷', name: 'Photography' },
-  // Practical
+  // Entertainment (new)
+  { emoji: '🎤', name: 'Stand-Up Comedy' },
+  { emoji: '📻', name: 'Podcasts' },
+  { emoji: '💃', name: 'Dance' },
+
+  // ── Practical (existing) ──
   { emoji: '🍳', name: 'Cooking' },
   { emoji: '🧵', name: 'Fashion' },
   { emoji: '🏠', name: 'Home Improvement' },
   { emoji: '🌱', name: 'Gardening' },
   { emoji: '🚗', name: 'Cars' },
-  // Strategy
+  // Practical (new)
+  { emoji: '🧁', name: 'Baking & Pastry' },
+  { emoji: '💪', name: 'Fitness & Gym' },
+  { emoji: '🧘', name: 'Yoga' },
+  { emoji: '🪴', name: 'Houseplants' },
+  { emoji: '🪄', name: 'Magic & Illusions' },
+
+  // ── Strategy (existing) ──
   { emoji: '♟️', name: 'Chess' },
   { emoji: '🎲', name: 'Board Games' },
   { emoji: '🃏', name: 'Poker' },
   { emoji: '💼', name: 'Business' },
   { emoji: '💰', name: 'Investing' },
-  // Outdoors
+
+  // ── Outdoors (existing) ──
   { emoji: '⛰️', name: 'Hiking' },
   { emoji: '🎣', name: 'Fishing' },
   { emoji: '🏕️', name: 'Camping' },
   { emoji: '🏄', name: 'Surfing' },
-  // Other
+
+  // ── Other (existing) ──
   { emoji: '🎸', name: 'Guitar' },
   { emoji: '🎹', name: 'Piano' },
   { emoji: '📚', name: 'Literature' },
@@ -112,7 +156,62 @@ export const ALL_QUICK_START_DOMAINS = [
   { emoji: '☕', name: 'Coffee' },
   { emoji: '🐕', name: 'Dog Training' },
   { emoji: '✈️', name: 'Aviation' },
-  { emoji: '🚀', name: 'Space' }
+  { emoji: '🚀', name: 'Space' },
+
+  // ── Trending TV Shows ──
+  { emoji: '💎', name: 'Bridgerton' },
+  { emoji: '🕵️', name: 'The Night Agent' },
+  { emoji: '🦑', name: 'Squid Game' },
+  { emoji: '🏢', name: 'Severance' },
+  { emoji: '🐉', name: 'Game of Thrones' },
+  { emoji: '🔦', name: 'Stranger Things' },
+  { emoji: '🧪', name: 'Breaking Bad' },
+  { emoji: '🗂️', name: 'The Office' },
+
+  // ── Popular Video Games ──
+  { emoji: '🌆', name: 'GTA' },
+  { emoji: '⛏️', name: 'Minecraft' },
+  { emoji: '🔫', name: 'Fortnite' },
+  { emoji: '🧱', name: 'Roblox' },
+  { emoji: '⚔️', name: 'League of Legends' },
+  { emoji: '🗡️', name: 'Zelda' },
+  { emoji: '🍄', name: 'Mario' },
+
+  // ── Science & Academics ──
+  { emoji: '⚗️', name: 'Chemistry' },
+  { emoji: '🧬', name: 'Biology' },
+  { emoji: '📜', name: 'History' },
+  { emoji: '🤖', name: 'AI & ChatGPT' },
+  { emoji: '🔬', name: 'Science' },
+
+  // ── Anime & Manga ──
+  { emoji: '🎌', name: 'Anime' },
+  { emoji: '📖', name: 'Manga' },
+  { emoji: '🥷', name: 'Naruto' },
+  { emoji: '🏴‍☠️', name: 'One Piece' },
+  { emoji: '👊', name: 'Dragon Ball' },
+
+  // ── Additional Variety ──
+  { emoji: '🧩', name: 'Puzzles' },
+  { emoji: '🎯', name: 'Archery' },
+  { emoji: '🎪', name: 'Circus Arts' },
+  { emoji: '🧶', name: 'Knitting & Crochet' },
+  { emoji: '🎻', name: 'Orchestra' },
+  { emoji: '🏛️', name: 'Architecture' },
+  { emoji: '🗺️', name: 'Geography' },
+  { emoji: '⚖️', name: 'Law' },
+  { emoji: '🩺', name: 'Medicine' },
+  { emoji: '📐', name: 'Mathematics' },
+  { emoji: '🌌', name: 'Astronomy' },
+  { emoji: '🦁', name: 'Wildlife' },
+  { emoji: '🎰', name: 'Casino Games' },
+  { emoji: '🏰', name: 'Dungeons & Dragons' },
+  { emoji: '🧗', name: 'Rock Climbing' },
+  { emoji: '🚴', name: 'Cycling' },
+  { emoji: '🥘', name: 'World Cuisine' },
+  { emoji: '📱', name: 'Social Media' },
+  { emoji: '🎥', name: 'Filmmaking' },
+  { emoji: '🪵', name: 'Woodworking' },
 ];
 
 // Helper to get randomized subset
@@ -211,7 +310,8 @@ export const DOMAIN_CATEGORIES: Record<string, { keywords: string[]; related: Ar
 // Local storage keys
 export const STORAGE_KEYS = {
   HISTORY: 'signalHistory',
-  PROVIDER_CONFIG: 'signalProviderConfig'
+  PROVIDER_CONFIG: 'signalProviderConfig',
+  FONT_PRESET: 'signalFontPreset'
 };
 
 // Limits
@@ -225,15 +325,16 @@ export interface SymbolGlossaryEntry {
   meaning: string;
   simple: string;  // 8 words or less, beginner-friendly
   latex: string[];
+  formula?: string;  // KaTeX expression showing compound usage, e.g. "$\\frac{\\partial f}{\\partial x}$"
 }
 
 export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   // Greek letters - uppercase
-  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', simple: 'Add all the numbers together', latex: ['\\Sigma', '\\sum'] },
+  { symbol: 'Σ', name: 'Sigma', meaning: 'Summation or standard deviation', simple: 'Add all the numbers together', latex: ['\\Sigma', '\\sum'], formula: '$\\sum_{i=1}^{n} x_i$' },
   { symbol: 'Δ', name: 'Delta', meaning: 'Change in value', simple: 'The difference between two values', latex: ['\\Delta'] },
   { symbol: 'Ω', name: 'Omega', meaning: 'Worst-case complexity or ohm', simple: 'Slowest possible running time', latex: ['\\Omega'] },
   { symbol: 'Θ', name: 'Theta', meaning: 'Tight bound complexity', simple: 'Exact running time estimate', latex: ['\\Theta'] },
-  { symbol: 'Π', name: 'Pi (capital)', meaning: 'Product of sequence', simple: 'Multiply all the numbers together', latex: ['\\Pi', '\\prod'] },
+  { symbol: 'Π', name: 'Pi (capital)', meaning: 'Product of sequence', simple: 'Multiply all the numbers together', latex: ['\\Pi', '\\prod'], formula: '$\\prod_{i=1}^{n} x_i$' },
   { symbol: 'Φ', name: 'Phi (capital)', meaning: 'Golden ratio or empty set', simple: 'Special ratio found in nature', latex: ['\\Phi'] },
   { symbol: 'Ψ', name: 'Psi (capital)', meaning: 'Wave function', simple: 'Describes particle probability location', latex: ['\\Psi'] },
   { symbol: 'Γ', name: 'Gamma (capital)', meaning: 'Gamma function', simple: 'Extends factorials to all numbers', latex: ['\\Gamma'] },
@@ -275,12 +376,17 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '¬', name: 'Not', meaning: 'Logical negation', simple: 'The opposite', latex: ['\\neg', '\\lnot'] },
 
   // Calculus & analysis
-  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', simple: 'Goes on forever', latex: ['\\infty'] },
-  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', simple: 'Rate of change in one direction', latex: ['\\partial'] },
-  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', simple: 'Direction of steepest increase', latex: ['\\nabla'] },
-  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', simple: 'Find the total area', latex: ['\\int'] },
-  { symbol: '∑', name: 'Sum', meaning: 'Summation', simple: 'Add all values together', latex: ['\\sum'] },
-  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', simple: 'Multiply all values together', latex: ['\\prod'] },
+  { symbol: '∞', name: 'Infinity', meaning: 'Without bound', simple: 'Goes on forever', latex: ['\\infty'], formula: '$\\lim_{x \\to \\infty} f(x)$' },
+  { symbol: '∂', name: 'Partial', meaning: 'Partial derivative', simple: 'Rate of change in one direction', latex: ['\\partial'], formula: '$\\frac{\\partial f}{\\partial x}$' },
+  { symbol: '∇', name: 'Nabla', meaning: 'Gradient operator', simple: 'Direction of steepest increase', latex: ['\\nabla'], formula: '$\\nabla f = \\left(\\frac{\\partial f}{\\partial x}, \\frac{\\partial f}{\\partial y}\\right)$' },
+  { symbol: '∫', name: 'Integral', meaning: 'Area under curve', simple: 'Find the total area', latex: ['\\int'], formula: '$\\int_a^b f(x)\\,dx$' },
+  { symbol: '∑', name: 'Sum', meaning: 'Summation', simple: 'Add all values together', latex: ['\\sum'], formula: '$\\sum_{i=1}^{n} x_i$' },
+  { symbol: '∏', name: 'Product', meaning: 'Product of sequence', simple: 'Multiply all values together', latex: ['\\prod'], formula: '$\\prod_{i=1}^{n} x_i$' },
+  { symbol: '′', name: 'Prime', meaning: 'Derivative notation', simple: 'Rate of change of a function', latex: ["f'", "f'(x)", "g'", "y'", "'(x)"], formula: "$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h)-f(x)}{h}$" },
+  { symbol: 'lim', name: 'Limit', meaning: 'Value a function approaches', simple: 'What a function gets closer to', latex: ['\\lim', 'lim_', '\\lim_'], formula: '$\\lim_{x \\to a} f(x)$' },
+  { symbol: 'dx', name: 'Differential', meaning: 'Infinitesimal change in x', simple: 'A tiny tiny change in x', latex: ['dx', 'dy', 'dt', 'du', '\\,dx', '\\,dy'], formula: '$\\frac{dy}{dx}$' },
+  { symbol: 'dy/dx', name: 'Derivative (Leibniz)', meaning: 'Rate of change of y with respect to x', simple: 'How fast y changes as x changes', latex: ['\\frac{dy}{dx}', '\\frac{df}{dx}', '\\frac{d}{dx}'], formula: '$\\frac{dy}{dx} = \\lim_{\\Delta x \\to 0} \\frac{\\Delta y}{\\Delta x}$' },
+  { symbol: 'frac', name: 'Fraction', meaning: 'Division of two expressions', simple: 'One thing divided by another', latex: ['\\frac', 'frac{'], formula: '$\\frac{a}{b}$' },
 
   // Comparisons & relations
   { symbol: '≈', name: 'Approximately', meaning: 'Roughly equal', simple: 'Almost the same', latex: ['\\approx'] },
@@ -300,7 +406,7 @@ export const SYMBOL_GLOSSARY: SymbolGlossaryEntry[] = [
   { symbol: '⟺', name: 'Iff', meaning: 'If and only if', simple: 'True both directions', latex: ['\\iff', '\\Leftrightarrow'] },
 
   // Arithmetic & operations
-  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', simple: 'Find the root', latex: ['\\sqrt'] },
+  { symbol: '√', name: 'Square root', meaning: 'Number that squares to input', simple: 'Find the root', latex: ['\\sqrt'], formula: '$\\sqrt{x^2 + y^2}$' },
   { symbol: '×', name: 'Times', meaning: 'Multiplication', simple: 'Multiply', latex: ['\\times'] },
   { symbol: '÷', name: 'Division', meaning: 'Division', simple: 'Divide', latex: ['\\div'] },
   { symbol: '±', name: 'Plus-minus', meaning: 'Positive or negative', simple: 'Plus or minus', latex: ['\\pm'] },
@@ -333,10 +439,19 @@ export const CONCEPT_SYMBOL_HINTS: Record<string, string[]> = {
   'lambda': ['λ'],
   'vector': ['→'],
   'vectors': ['→'],
-  'derivative': ['∂'],
-  'derivatives': ['∂'],
-  'partial derivative': ['∂'],
+  'derivative': ['′', 'dy/dx', 'lim', 'dx'],
+  'derivatives': ['′', 'dy/dx', 'lim', 'dx'],
+  'partial derivative': ['∂', 'dx'],
   'partial': ['∂'],
+  'chain rule': ['dy/dx', '′'],
+  'product rule': ['dy/dx', '′'],
+  'power rule': ['dy/dx', '′'],
+  'differentiation': ['′', 'dy/dx', 'lim'],
+  'rate of change': ['′', 'dy/dx', 'Δ'],
+  'slope': ['′', 'dy/dx'],
+  'tangent': ['′', 'lim'],
+  'limit': ['lim', '∞'],
+  'limits': ['lim', '∞'],
   'integral': ['∫'],
   'integrals': ['∫'],
   'integrate': ['∫'],
@@ -347,7 +462,6 @@ export const CONCEPT_SYMBOL_HINTS: Record<string, string[]> = {
   'curl': ['∇'],
   'infinity': ['∞'],
   'infinite': ['∞'],
-  'limit': ['∞'],
   'pi': ['π'],
   'theta': ['θ'],
   'angle': ['θ'],
@@ -376,3 +490,108 @@ export const CONCEPT_SYMBOL_HINTS: Record<string, string[]> = {
   'for all': ['∀'],
   'there exists': ['∃'],
 };
+
+// Font presets for learning customization
+
+export const FONT_PRESETS: FontPreset[] = [
+  {
+    id: 'clean',
+    name: 'Clean',
+    emoji: '✨',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    fontWeight: 400,
+    letterSpacing: 'normal',
+    lineHeightMultiplier: 1.0,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+  },
+  {
+    id: 'classic',
+    name: 'Classic',
+    emoji: '📖',
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.05,
+    // System font — no CDN needed
+  },
+  {
+    id: 'textbook',
+    name: 'Textbook',
+    emoji: '🎓',
+    fontFamily: "'Merriweather', Georgia, serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.08,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&display=swap',
+  },
+  {
+    id: 'friendly',
+    name: 'Friendly',
+    emoji: '😊',
+    fontFamily: "'Nunito', 'Segoe UI', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '0.02em',
+    lineHeightMultiplier: 1.05,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap',
+  },
+  {
+    id: 'playful',
+    name: 'Playful',
+    emoji: '🎨',
+    fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive",
+    fontWeight: 400,
+    letterSpacing: '0.03em',
+    lineHeightMultiplier: 1.1,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap',
+  },
+  {
+    id: 'focus',
+    name: 'Focus',
+    emoji: '🔬',
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
+    lineHeightMultiplier: 1.1,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap',
+  },
+  {
+    id: 'dyslexia',
+    name: 'Dyslexia-Friendly',
+    emoji: '♿',
+    fontFamily: "'OpenDyslexic', 'Comic Sans MS', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '0.05em',
+    lineHeightMultiplier: 1.15,
+    googleFontUrl: 'https://fonts.cdnfonts.com/css/opendyslexic',
+  },
+  {
+    id: 'elegant',
+    name: 'Elegant',
+    emoji: '🪶',
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.05,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap',
+  },
+  {
+    id: 'minimal',
+    name: 'Minimal',
+    emoji: '◻️',
+    fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
+    lineHeightMultiplier: 1.0,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap',
+  },
+  {
+    id: 'cozy',
+    name: 'Cozy',
+    emoji: '☕',
+    fontFamily: "'Literata', 'Palatino', serif",
+    fontWeight: 400,
+    letterSpacing: '0.01em',
+    lineHeightMultiplier: 1.08,
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Literata:wght@300;400;500;600;700&display=swap',
+  },
+];

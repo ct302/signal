@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Globe, ArrowRight, Loader2, HelpCircle } from 'lucide-react';
+import { Globe, ArrowRight, Loader2, HelpCircle, Mic, MicOff } from 'lucide-react';
 import { getRandomQuickStartDomains } from '../constants';
 import { DisambiguationData } from '../types';
 
@@ -11,6 +11,9 @@ interface DomainSelectionProps {
   disambiguation: DisambiguationData | null;
   setDisambiguation: (value: DisambiguationData | null) => void;
   handleSetDomain: (override?: string | null) => Promise<void> | void;
+  isListening?: boolean;
+  onMicClick?: () => void;
+  isMicSupported?: boolean;
 }
 
 export const DomainSelection: React.FC<DomainSelectionProps> = ({
@@ -20,7 +23,10 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
   domainError,
   disambiguation,
   setDisambiguation,
-  handleSetDomain
+  handleSetDomain,
+  isListening = false,
+  onMicClick,
+  isMicSupported = false
 }) => {
   const [isSelectingOption, setIsSelectingOption] = useState(false);
 
@@ -105,9 +111,23 @@ export const DomainSelection: React.FC<DomainSelectionProps> = ({
               onChange={(e) => setTempDomainInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSetDomain()}
               placeholder="e.g., NFL, Cooking, Music, Video Games..."
-              className="w-full pl-12 pr-4 py-3 md:py-4 text-base md:text-lg rounded-xl border-2 border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+              className={`w-full pl-12 ${isMicSupported ? 'pr-12' : 'pr-4'} py-3 md:py-4 text-base md:text-lg rounded-xl border-2 border-neutral-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none`}
               autoFocus
             />
+            {isMicSupported && onMicClick && (
+              <button
+                onClick={onMicClick}
+                type="button"
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                  isListening
+                    ? 'bg-red-500 text-white animate-pulse'
+                    : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'
+                }`}
+                title={isListening ? 'Stop listening' : 'Voice input'}
+              >
+                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+              </button>
+            )}
           </div>
 
           {domainError && <p className="text-red-500 text-sm">{domainError}</p>}

@@ -6,17 +6,92 @@ interface ContextCardProps {
   isDarkMode: boolean;
 }
 
+// Sticky note color palettes — high-contrast text on warm pastels (light) / muted tones (dark)
+const stickyColors = {
+  light: [
+    { bg: 'bg-yellow-100', border: 'border-yellow-300/60', text: 'text-neutral-800', label: 'text-yellow-800', pin: 'bg-yellow-400', shadow: 'shadow-yellow-200/50' },
+    { bg: 'bg-pink-100', border: 'border-pink-300/60', text: 'text-neutral-800', label: 'text-pink-800', pin: 'bg-pink-400', shadow: 'shadow-pink-200/50' },
+    { bg: 'bg-blue-100', border: 'border-blue-300/60', text: 'text-neutral-800', label: 'text-blue-800', pin: 'bg-blue-400', shadow: 'shadow-blue-200/50' },
+  ],
+  dark: [
+    { bg: 'bg-yellow-900/30', border: 'border-yellow-700/40', text: 'text-yellow-100', label: 'text-yellow-300', pin: 'bg-yellow-500', shadow: 'shadow-yellow-900/30' },
+    { bg: 'bg-pink-900/30', border: 'border-pink-700/40', text: 'text-pink-100', label: 'text-pink-300', pin: 'bg-pink-500', shadow: 'shadow-pink-900/30' },
+    { bg: 'bg-blue-900/30', border: 'border-blue-700/40', text: 'text-blue-100', label: 'text-blue-300', pin: 'bg-blue-500', shadow: 'shadow-blue-900/30' },
+  ]
+};
+
+// Slight rotation for each note to feel handmade
+const rotations = ['-rotate-[1.5deg]', 'rotate-[1deg]', '-rotate-[0.8deg]'];
+
 export const ContextCard: React.FC<ContextCardProps> = ({
   contextData,
   isDarkMode
 }) => {
-  if (!contextData?.narrative) return null;
+  // Gather the available tips
+  const tips: { emoji: string; label: string; text: string }[] = [];
+
+  if (contextData?.narrative) {
+    tips.push({ emoji: '💡', label: 'Intuition', text: contextData.narrative });
+  }
+  if (contextData?.why) {
+    tips.push({ emoji: '🎯', label: 'Why It Matters', text: contextData.why });
+  }
+  if (contextData?.real_world) {
+    tips.push({ emoji: '🌍', label: 'Real World', text: contextData.real_world });
+  }
+
+  if (tips.length === 0) return null;
+
+  const palette = isDarkMode ? stickyColors.dark : stickyColors.light;
 
   return (
-    <p className={`text-sm italic text-center px-4 py-3 ${
-      isDarkMode ? 'text-blue-300/80' : 'text-blue-600/80'
-    }`}>
-      💡 {contextData.narrative}
-    </p>
+    <div className="py-3 px-1 signal-font">
+      <div className={`grid gap-3 ${
+        tips.length === 1 ? 'grid-cols-1 max-w-sm mx-auto'
+        : tips.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto'
+        : 'grid-cols-1 sm:grid-cols-3'
+      }`}>
+        {tips.map((tip, idx) => {
+          const colors = palette[idx % palette.length];
+          const rotation = rotations[idx % rotations.length];
+
+          return (
+            <div
+              key={idx}
+              className={`
+                relative ${rotation} hover:rotate-0
+                transition-transform duration-200 ease-out
+                ${colors.bg} ${colors.border}
+                border rounded-sm shadow-md ${colors.shadow}
+                px-3.5 pt-5 pb-3
+                group
+              `}
+              style={{
+                // Subtle tape/fold effect at top
+                backgroundImage: isDarkMode
+                  ? 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 20%)'
+                  : 'linear-gradient(180deg, rgba(255,255,255,0.6) 0%, transparent 20%)',
+              }}
+            >
+              {/* Pin dot */}
+              <div className={`absolute top-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full ${colors.pin} opacity-60 group-hover:opacity-90 transition-opacity`} />
+
+              {/* Label */}
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-sm">{tip.emoji}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider opacity-70 ${colors.label}`}>
+                  {tip.label}
+                </span>
+              </div>
+
+              {/* Tip text */}
+              <p className={`text-sm leading-relaxed ${colors.text}`}>
+                {tip.text}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 };

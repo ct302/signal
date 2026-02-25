@@ -138,7 +138,11 @@ export const Settings: React.FC<SettingsProps> = ({ isDarkMode }) => {
       }
 
       setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      // Close the modal after a brief delay to show the "saved" feedback
+      setTimeout(() => {
+        setIsOpen(false);
+        setSaveStatus('idle');
+      }, 600);
     } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);

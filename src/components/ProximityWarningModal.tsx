@@ -27,7 +27,7 @@ export const ProximityWarningModal: React.FC<ProximityWarningModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`relative w-full max-w-md mx-4 rounded-2xl shadow-2xl border overflow-hidden ${
+        className={`relative w-full max-w-md mx-3 sm:mx-4 rounded-2xl shadow-2xl border overflow-hidden ${
           isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
         }`}
         onClick={(e) => e.stopPropagation()}

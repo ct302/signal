@@ -39,6 +39,8 @@ export interface SymbolGuideEntry {
   name: string;          // Context-aware name: "Coordinate Ring" not "Matrix A"
   meaning: string;       // Technical meaning in THIS context
   simple: string;        // Plain English for learners
+  formula?: string;      // KaTeX expression showing compound usage, e.g. "$\\frac{\\partial f}{\\partial x}$"
+  domain_analogy?: string; // Domain-mapped isomorphic intuition (e.g., NFL, cooking)
 }
 
 export interface AttentionMapItem {
@@ -79,6 +81,7 @@ export interface Position {
 
 export interface Size {
   width: number;
+  height?: number;
 }
 
 export interface ContextData {
@@ -119,6 +122,10 @@ export interface QuizData {
   explanation?: string;
   difficulty?: QuizDifficulty;
   concept?: string; // The core concept being tested (for retry rephrasing)
+  analogyBridge?: {
+    hint: string;            // 1-2 sentence domain-lens reframing of the question
+    optionHints?: string[];  // Per-option domain analogy (3-8 words each)
+  };
 }
 
 export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'advanced';
@@ -419,6 +426,51 @@ export interface CachedDomainEnrichment {
   shortDomain: string;         // Short name (without disambiguation)
   wasEnriched: boolean;        // Whether domain has granularity signals (enables web search)
   enrichedAt: Date;            // When this was checked
+}
+
+// ============================================
+// STUDY GUIDE TYPES
+// ============================================
+
+export type StudyGuideDepth = 'core' | 'complete';
+
+export interface StudyGuideConcept {
+  id: number;
+  tech_term: string;           // e.g., "The Agent"
+  analogy_term: string;        // e.g., "The Quarterback (Kurt Warner)"
+  one_liner: string;           // 1-sentence hook blending both domains
+  category?: string;           // Optional grouping: "Core Components", "Training Loop", etc.
+}
+
+export interface StudyGuideOutline {
+  topic: string;
+  domain: string;
+  depth: StudyGuideDepth;
+  concepts: StudyGuideConcept[];
+  generated_at: string;
+}
+
+export interface StudyGuideDetail {
+  concept_id: number;
+  tech_explanation: string;    // 2-3 sentences, pure technical
+  analogy_explanation: string; // 2-3 sentences, through domain lens with specific references
+  why_it_maps: string;         // 1-2 sentences, structural connection
+  key_insight: string;         // Memorable one-liner for intuition tattooing
+}
+
+// ============================================
+// FONT PRESET TYPES
+// ============================================
+
+export interface FontPreset {
+  id: string;
+  name: string;
+  emoji: string;
+  fontFamily: string;       // CSS font-family value (with fallbacks)
+  fontWeight: number;        // Default weight for body text
+  letterSpacing: string;     // CSS letter-spacing value
+  lineHeightMultiplier: number; // Multiplied with base line-height
+  googleFontUrl?: string;    // CDN link to load, undefined = system font
 }
 
 export {};

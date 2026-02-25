@@ -1,7 +1,7 @@
 import { DEFAULT_OLLAMA_ENDPOINT, STORAGE_KEYS, DOMAIN_CATEGORIES, OPENROUTER_FALLBACK_MODELS, RATE_LIMIT_CONFIG } from '../constants';
 import { fetchWithRetry, safeJsonParse, ApiError } from '../utils';
 import { stripMathSymbols } from '../utils/text';
-import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment } from '../types';
+import { AmbiguityResult, QuizData, QuizDifficulty, ProviderConfig, OllamaModel, ProximityResult, MasteryKeyword, EvaluationResult, MasteryStage, ConceptMapItem, ImportanceMapItem, MasteryStory, MasteryChatMessage, RoutingDecision, EnrichedContext, CachedDomainEnrichment, StudyGuideConcept, StudyGuideOutline, StudyGuideDetail, StudyGuideDepth } from '../types';
 
 // ============================================
 // CIRCUIT BREAKER PATTERN
@@ -221,8 +221,8 @@ const getProviderConfig = (): ProviderConfig => {
     }
   }
   // Default config without API key - user must provide their own
-  // When using proxy (production, no user key), use a free model by default
-  const defaultModel = shouldUseProxy() ? 'google/gemini-2.0-flash-exp:free' : '';
+  // When using proxy (production, no user key), use the demo tier model
+  const defaultModel = shouldUseProxy() ? 'arcee-ai/trinity-large-preview:free' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',
@@ -266,6 +266,7 @@ interface ApiCallOptions {
   webSearch?: boolean; // Enable OpenRouter web search plugin
   searchPrompt?: string; // Custom prompt for how to integrate web search results
   maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
+  isEnrichment?: boolean; // Enrichment calls don't count against free tier daily limit
 }
 
 // Build request body based on provider
@@ -353,6 +354,10 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
 
   const url = buildApiUrl(config);
   const headers = buildHeaders(config);
+  // Enrichment calls send a header so the proxy skips usage counting
+  if (options.isEnrichment && shouldUseProxy()) {
+    headers['X-Signal-Enrichment'] = 'true';
+  }
   const body = buildRequestBody(prompt, config, options);
 
   try {
@@ -669,11 +674,14 @@ const getComplexityPrompt = (level: number, domain?: string): string => {
 
 ABSOLUTE BANS (violating these = failure):
 - NO formulas, equations, or math symbols ($, \\\\frac, \\\\sum, etc.)
+- NO set notation or Unicode math symbols (∈, ∪, ⊂, ∀, ∃, →, ⟹, ≤, ≥, ≠, ∞, ∂, ∇, etc.)
+  Write "in" not ∈, "for all" not ∀, "leads to" not →, "less than" not ≤
 - NO technical jargon (algorithm, coefficient, derivative, modulus, vector, matrix, etc.)
 - NO acronyms or abbreviations users wouldn't know
 - NO chemical formulas (H2O is fine, C6H12O6 is NOT)
-- NO Greek letters (alpha, beta, sigma, etc.)
+- NO Greek letters (alpha, beta, sigma, etc.) — not even spelled out in technical context
 - NO "imagine you're a scientist" framing - they're 5!
+- NO LaTeX notation of any kind — not even inline $x$
 
 REQUIRED STYLE:
 - Use words a kindergartener knows: big, small, fast, slow, push, pull, mix, share
@@ -686,6 +694,8 @@ GOOD EXAMPLES:
 - "Photosynthesis" → "Plants eat sunlight! They use sunshine to make their own food, like having a snack that's made of light."
 - "Gravity" → "Earth is like a big magnet for everything! It pulls you down so you don't float away."
 - "Encryption" → "It's like writing a secret message that only your best friend can read."
+
+NUMBER FORMAT: Write numbers as digits: "5 cookies" not "five cookies", "2 pieces" not "two pieces"
 
 TARGET LENGTH: 150-200 words for EACH explanation
 Remember: If a 5-year-old would say "huh?" - rewrite it simpler!`;
@@ -700,35 +710,40 @@ Write as if you're an expert who deeply understands BOTH the technical concept A
 Your voice should sound like: "Just as [${domain || 'domain'} experts] intuitively [do X], this concept formalizes that same logic..."
 The ${domain || 'domain'} integration should feel NATURAL, not forced - like you're genuinely passionate about both fields.
 
-REQUIRED STRUCTURE FOR technical_explanation (400-500 words):
+REQUIRED STRUCTURE FOR technical_explanation (200-280 words MAX):
 
-1. FORMAL DEFINITION (1 paragraph)
-   - Precise mathematical/technical definition with proper LaTeX notation
-   - Key equations or formal relationships
-   - This IS the advanced level - use real math: $\\\\int$, $\\\\nabla$, $\\\\partial$, matrices, etc.
+IMPORTANT: Be CONCISE. Every sentence must earn its place. No filler, no repetition, no restating what was just said.
 
-2. DOMAIN-GROUNDED EXPLANATION (2 paragraphs)
-   - Explain the concept THROUGH THE LENS of ${domain || 'the chosen domain'}
-   - Show how ${domain || 'domain'} experts intuitively do what this concept formalizes
-   - Use ${domain || 'domain'} vocabulary naturally alongside technical terms
-   - Make the reader think "Oh, I already understand this from ${domain || 'my domain knowledge'}!"
+1. CORE DEFINITION (2-3 sentences)
+   - What is it? Give a precise, tight definition with key LaTeX notation.
+   - Include the essential equation or relationship if applicable.
 
-3. DEEPER INSIGHT - THE "AHA MOMENT" (1 paragraph)
-   - A NON-OBVIOUS connection or insight that rewards the advanced learner
-   - Something that makes an expert say "I never thought of it that way"
-   - Connect to broader patterns, historical context, or surprising applications
-   - This is what separates ELI100 from Wikipedia
+2. HOW IT WORKS (1 short paragraph)
+   - The key mechanism or process, explained clearly.
+   - Use ${domain || 'domain'} intuition to ground it: "Think of it like [domain analogy]..."
+   - DO NOT enumerate every property — focus on the ONE central insight.
 
-4. WHERE THIS LEADS (2-3 sentences)
-   - What concepts build on this? What doors does understanding this open?
-   - Give the learner a roadmap for going deeper
+3. WHY IT MATTERS (2-3 sentences)
+   - One practical application or deeper insight.
+   - What doors does understanding this open?
 
-QUALITY BAR: The explanation should feel like a conversation with a brilliant professor who happens to love ${domain || 'the domain'} - not a textbook, not a Wikipedia stub.`;
+WRITING RULES:
+- NEVER repeat information. If you said "A decomposes into B" don't say "This decomposition produces B" in the next sentence.
+- NEVER use filler phrases: "It is important to note that", "In other words", "Essentially", "Fundamentally"
+- Prefer SHORT sentences. Break up long compound sentences.
+- Use LaTeX ONLY for actual math expressions. Don't use LaTeX commands for normal words.
+- NEVER use \\n, \\\\, or line break commands in your output. Use normal paragraph spacing.
+- Use NUMERIC format for all numbers, dates, years, and scores: "February 2, 2002" NOT "February two thousand two", "17" NOT "seventeen", "3rd" NOT "third"
+
+QUALITY BAR: A brilliant professor explaining to a sharp grad student over coffee — clear, tight, no wasted words.`;
     default:
       return `Write for a general adult audience with some familiarity with the subject.
 - Balance clarity with technical accuracy
-- TARGET LENGTH: 280-330 words for EACH explanation (tech and analogy)
-- Include WHAT it is, WHY it matters, and a practical example`;
+- TARGET LENGTH: 150-220 words for EACH explanation (tech and analogy)
+- Be CONCISE - no filler phrases, no repetition. Every sentence adds new information.
+- Include WHAT it is, WHY it matters, and a practical example
+- Do NOT use \\n or \\\\ for line breaks. Use normal paragraph spacing.
+- Use NUMERIC format for all numbers, dates, years, and scores: "February 2, 2002" NOT "February two thousand two", "17" NOT "seventeen", "3rd" NOT "third"`;
   }
 };
 
@@ -796,39 +811,32 @@ REQUIRED FACTUAL ELEMENTS (extract from search results):
     : ''; // No web search for general domains - use LLM knowledge
 
   // LaTeX instruction depends on whether topic is STEM-related
-  const latexInstruction = topicIsSTEM
+  const latexInstruction = (topicIsSTEM && complexity !== 5)
     ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
-    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧.';
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters (α, β, Σ), NO set notation (∈, ∪, ⊂, ∀, ∃), NO LaTeX. Write "in" not ∈, "sum" not Σ, "and" not ∧, "for all" not ∀.';
 
   const prompt = `${webSearchContext}Create a comprehensive learning module for "${topic}" using "${shortDomain}" as an analogical lens.
 
-TOPIC SCOPING - CRITICAL INSTRUCTION:
-When the topic is a BROAD FIELD (like "calculus", "physics", "linear algebra", "machine learning", "chemistry"):
-- Provide an OVERVIEW of the entire topic - what it IS as a field, its main branches, and its core purpose
-- Do NOT arbitrarily pick one subtopic (like only covering "differentiation" when asked about "calculus")
-- The header should reflect the ACTUAL topic requested ("Calculus" not "Differentiation")
-- Cover the topic at the level of specificity the user requested
-
-When the topic is SPECIFIC (like "derivatives", "Taylor series", "gradient descent"):
-- Dive deep into that specific topic as requested
-
-Examples:
-- Topic "calculus" → Overview of calculus as a field (limits, derivatives, integrals, their relationship)
-- Topic "differentiation" → Deep dive on differentiation specifically
-- Topic "neural networks" → Overview of neural network architectures and principles
-- Topic "backpropagation" → Deep dive on backpropagation specifically
+TOPIC SCOPING:
+- BROAD topics (e.g. "calculus"): Provide an OVERVIEW of the entire field, its branches, and core purpose. Do NOT pick one subtopic arbitrarily.
+- SPECIFIC topics (e.g. "derivatives"): Dive deep into that specific topic.
+- The header must reflect the ACTUAL topic requested.
 
 ${complexityInstructions}
 
 REQUIRED JSON STRUCTURE (strict compliance):
 {
-  "technical_explanation": "Thorough technical explanation (3-4 paragraphs, 250+ words). MUST include: (1) WHAT it is - clear definition and core concept, (2) WHY it matters - its purpose and significance, (3) HOW it works - the mechanism or process. ${latexInstruction} This section is for the TECHNICAL side only - give real substance, not generic word salad.",
-  "analogy_explanation": "A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)",
+  "technical_explanation": "${complexity === 5
+    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows — big, small, fast, slow, push, pull, mix, share. NO jargon, NO formulas, NO Greek letters, NO equations. Compare everything to toys, snacks, playgrounds, building blocks, animals. One idea per sentence. Make it FUN like a storybook. Do NOT use \\n or \\\\ for line breaks.`
+    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - tight definition with key equation, (2) HOW - the core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler, no repetition. Every sentence must add new information. Do NOT use \\n or \\\\ for line breaks.`}",
+  "analogy_explanation": "${complexity === 5
+    ? `A fun, SHORT story from ${shortDomain} that a kid would love hearing at bedtime (1-2 paragraphs, 100-150 words MAX). Use simple words only. Make it feel like a storybook, NOT a textbook. Through this story, the kid understands the idea without any hard words. ZERO technical terms.`
+    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms allowed - write ONLY in ${shortDomain} vocabulary. The reader should feel like they're reading a ${shortDomain} documentary or sports article, NOT a technical explanation. Through this story, they will intuitively understand ${topic} without seeing any technical jargon. (3-4 paragraphs, 250+ words)`}",
   "segments": [
     {
-      "tech": "A single sentence or concept from the technical explanation",
-      "analogy": "The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms",
-      "narrative": "A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon",
+      "tech": "${complexity === 5 ? 'A super simple sentence about the idea using kid-friendly words only' : 'A single sentence or concept from the technical explanation'}",
+      "analogy": "${complexity === 5 ? `The matching ${shortDomain} story moment — simple words only, fun and memorable` : `The corresponding ${shortDomain} narrative moment - written in PURE ${shortDomain} vocabulary with NO technical terms`}",
+      "narrative": "${complexity === 5 ? `A fun story bit (1-2 sentences) with ${shortDomain} references a kid would enjoy` : `A brief story element (1-2 sentences) with real ${shortDomain} references - NO technical jargon`}",
       "intuitions": [
         "First memorable one-liner (under 12 words). Format: '[Tech concept] is like [${shortDomain} analogy]'",
         "Second memorable one-liner - different angle or metaphor on the same concept",
@@ -839,11 +847,11 @@ REQUIRED JSON STRUCTURE (strict compliance):
   "concept_map": [
     {
       "id": 0,
-      "tech_term": "technical term from tech text",
+      "tech_term": "${complexity === 5 ? 'Simple name for the idea (use the easiest word possible)' : 'technical term from tech text'}",
       "analogy_term": "${shortDomain}-native equivalent from analogy text",
-      "six_word_definition": "EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)",
-      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.",
-      "causal_explanation": "First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).",
+      "six_word_definition": "${complexity === 5 ? 'EXACTLY six simple words a kid would understand explaining what this thing IS' : 'EXACTLY six words defining the tech_term in plain English (domain-agnostic, describes what it IS)'}",
+      "narrative_mapping": "${complexity === 5 ? `A fun 1-2 sentence story connecting the idea to ${shortDomain} using simple words a kid knows` : `2-3 sentence vivid mini-story showing HOW these concepts connect through a specific ${shortDomain} scenario. Not generic - use real ${shortDomain} vocabulary and situations.`}",
+      "causal_explanation": "${complexity === 5 ? 'Simple explanation of WHY these two things are alike — use words like because, just like, same as' : `First-principles explanation of WHY this mapping works structurally - what shared mechanics, properties, or patterns make these concepts genuinely analogous (not just superficially similar).`}",
       "why_it_matters": {
         "connection": "One sentence explaining WHY these two concepts structurally connect—what shared pattern or mechanism links them (not just THAT they connect, but WHY).",
         "importance": "One sentence explaining WHY understanding the specific link between THIS tech_term and THIS analogy_term unlocks deeper understanding. Be SPECIFIC: name what concepts become easier, what confusion it prevents, or what capability it enables. NEVER use generic phrases like 'this is foundational', 'key bridge', or 'cornerstone concept'.",
@@ -856,21 +864,28 @@ REQUIRED JSON STRUCTURE (strict compliance):
   ],
   "attention_map": {
     "tech": [
-      {"word": "each significant word from technical_explanation", "weight": 0.0-1.0}
+      {"word": "significant word or multi-word phrase (keep compound concepts together: 'vector calculus' not 'vector','calculus'; keep proper nouns together: 'Tom Brady' not 'Tom','Brady')", "weight": 0.0-1.0}
     ],
     "analogy": [
-      {"word": "each significant word from analogy_explanation", "weight": 0.0-1.0}
+      {"word": "significant word or multi-word phrase (keep compound concepts together; keep names together: 'New England Patriots' not 'New','England','Patriots')", "weight": 0.0-1.0}
     ]
   },
+  CONTEXT CARD RULES:
+  - The "context" object MUST be about "${topic}" specifically — NOT about any other concept
+  - Generate ORIGINAL content. Do NOT copy examples from these instructions.
+  - "why" and "real_world" must reference ${topic} by name at least once
+
   "context": {
     "header": "Topic header",
     "emoji": "🎯 (single relevant emoji)",
-    "why": "2-3 sentences on why this concept matters in real life",
-    "real_world": "2-3 sentences with a specific real-world application",
-    "narrative": "A memorable one-liner or mental hook for the concept"
+    "why": "2-3 sentences explaining WHY ${topic} matters — grounded in the user's domain (${domain || 'everyday life'}). Write like explaining to a friend using THEIR world. Must be SPECIFICALLY about ${topic}, not any other concept.",
+    "real_world": "2-3 sentences with a VIVID, SPECIFIC, EVERYDAY scenario showing ${topic} in action using ${domain || 'daily life'} vocabulary. Make it visceral and relatable. Must demonstrate how ${topic} works in practice — not a different concept.",
+    "narrative": "A punchy one-liner mapping ${topic} to ${domain || 'real life'} — visceral, memorable, zero jargon. Must be ABOUT ${topic} specifically."
   },
   "synthesis": {
-    "summary": "2-3 sentence integration of both perspectives",
+    "one_liner": "ONE punchy sentence — the simplest possible bridge between ${topic} and ${domain || 'real life'}. Visceral, zero jargon, a complete 'aha' in one breath.",
+    "core": "2-3 sentence integration showing HOW ${topic} connects to ${domain || 'real life'} through specific shared mechanics. Build on the one_liner with concrete detail.",
+    "deep": "3-4 sentences revealing the STRUCTURAL mechanics — WHY this mapping works at a fundamental level. What shared patterns, constraints, or dynamics drive both ${topic} and ${domain || 'real life'} concepts. This is the 'engineer\\'s view' of the analogy.",
     "citation": "A memorable quote or principle that ties it together"
   },
   "condensed": {
@@ -899,157 +914,45 @@ REQUIRED JSON STRUCTURE (strict compliance):
       "symbol": "the symbol exactly as written (e.g., 'A', 'λ', '∫', 'f(x)')",
       "name": "Context-specific name for THIS topic (e.g., 'Coordinate Ring' not 'Matrix A' if A represents a ring)",
       "meaning": "What this symbol represents in THIS specific context",
-      "simple": "Plain English explanation a beginner would understand"
+      "simple": "Plain English explanation a beginner would understand",
+      "formula": "$LaTeX expression showing this symbol used in a compound expression from your technical_explanation$ (ONLY include for symbols that appear in fractions, sums, integrals, or other compound expressions — omit entirely for standalone symbols like Greek letters)"${domain ? `,
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Reference a SPECIFIC moment, character, or element — never generic."` : ''}
     }
   ]
 }
 
-${topicIsSTEM ? `LaTeX RULES FOR technical_explanation (SIMPLIFIED - FOLLOW EXACTLY):
-ALLOWED LaTeX (use these ONLY):
-- Variables and subscripts: $x$, $T_{ij}$, $v^k$
-- Greek letters: $\\\\alpha$, $\\\\beta$, $\\\\nabla$, $\\\\partial$
-- Simple fractions: $\\\\frac{a}{b}$
-- Sums/integrals: $\\\\sum_{i}$, $\\\\int$
-- Simple operators: $\\\\times$, $\\\\cdot$, $\\\\rightarrow$, $=$
-- Superscripts/subscripts: $x^2$, $a_n$
+${domain ? `SYMBOL_GUIDE DOMAIN_ANALOGY RULES:
+- Map each symbol to a SPECIFIC ${domain} moment/character — visceral, one sentence, zero jargon
+- Each symbol MUST reference a DIFFERENT ${domain} element — never reuse the same analogy
+- Must be so specific it could ONLY apply to ${domain} (no generic filler)
+` : ''}${topicIsSTEM ? `LaTeX RULES (technical_explanation only):
+ALLOWED: $x$, $T_{ij}$, $\\\\frac{a}{b}$, $\\\\sum_{i}$, $\\\\int$, $\\\\alpha$, $\\\\nabla$, $x^2$ — simple inline math only.
+FORBIDDEN: \\\\array, \\\\matrix, \\\\begin/\\\\end environments, LaTeX commands as English words (write "in" not \\\\in, "to" not \\\\to), \\n or \\\\\\\\ for line breaks, raw Unicode math symbols (∈, ∑, →).
+Keep LaTeX simple — when in doubt, use plain English.` : `NON-STEM TOPIC: Use ONLY plain English — NO LaTeX ($...$), NO Greek letters, NO math symbols (∈, →, ∑), NO subscripts/superscripts. Write as for a general audience magazine.`}
 
-FORBIDDEN (DO NOT USE):
-- \\\\array, \\\\matrix, \\\\begin, \\\\end (these are environments, not inline math)
-- \\\\tilde, \\\\hat, \\\\bar as standalone words (wrong: "a \\\\tilde of x")
-- Complex nested environments
-- Any LaTeX command used as an English word
-- NEVER use \\\\in to mean "in" (write the word "in")
-- NEVER use \\\\to to mean "to" (write the word "to")
+ZERO JARGON IN ANALOGY (HARD RULE):
+All analogy_explanation and "analogy" segment fields must use ONLY ${shortDomain} vocabulary — write as a ${shortDomain} journalist who has never studied math.
+- ZERO technical terms (no tensor, vector, function, variable, derivative, integral, equation, parameter, etc.)
+- ZERO symbols (no →, ∈, ∑, ∫, $...$, Greek letters, subscripts, LaTeX — only standard English characters)
+- Technical concepts are conveyed IMPLICITLY through the story structure, never explicitly
+- Test: if a character is not a letter, digit, or basic punctuation (.,;:!?'"-), rewrite the sentence
 
-EXAMPLES:
-- WRONG: "A tensor is a \\\\array of numbers" or "the \\\\matrix representation"
-- WRONG: "apply the \\\\tilde transformation"
-- WRONG: "x is \\\\in the set" (use "x is in the set")
-- RIGHT: "A tensor is an array of numbers"
-- RIGHT: "the transformation $\\\\tilde{T}_{ij}$" (command inside $ delimiters)
-- RIGHT: "the metric tensor $g_{\\\\mu\\\\nu}$"
-
-Keep LaTeX simple. When in doubt, use plain English.` : `CRITICAL - NO MATHEMATICAL SYMBOLS (This is NOT a STEM topic):
-Since "${topic}" is not a mathematical/scientific topic, use ONLY plain English:
-- NO LaTeX: No $...$ blocks, no \\\\frac, \\\\sum, \\\\int, etc.
-- NO Greek letters: No α, β, γ, δ, Σ, etc.
-- NO set notation: No ∈, ∪, ∩, ⊂, etc. (write "in", "and", "or" instead)
-- NO arrows: No →, ←, ⟶ (write "to", "from", "leads to" instead)
-- NO subscripts/superscripts: No x₁, x², etc.
-
-EXAMPLES FOR NON-STEM TOPICS:
-- WRONG: "The note ∈ the chord" → RIGHT: "The note in the chord"
-- WRONG: "Voice leading → resolution" → RIGHT: "Voice leading leads to resolution"
-- WRONG: "The ∑ of intervals" → RIGHT: "The sum of intervals"
-
-Write as if for a general audience magazine - clear, readable English only.`}
-
-ABSOLUTE RULE - ZERO TECHNICAL JARGON IN ANALOGY (THIS IS CRITICAL):
-The analogy_explanation and all "analogy" fields in segments must contain ZERO technical terminology:
-- NO parenthetical technical terms like "(covariant)" or "(tensor)"
-- NO technical vocabulary whatsoever - not even simple terms like "function" or "variable"
-- ONLY ${shortDomain} vocabulary that a ${shortDomain} enthusiast would use
-- Write as if you're a ${shortDomain} journalist writing about ${shortDomain} - you wouldn't mention math!
-- The technical concepts should be IMPLICIT through the story structure, not EXPLICIT through terminology
-
-FORBIDDEN WORDS IN ANALOGY (never use these - use ${shortDomain} equivalents only):
-tensor, vector, scalar, matrix, array, coordinate, dimension, transformation,
-covariant, contravariant, derivative, integral, function, variable, equation,
-component, index, rank, metric, manifold, space, field, operator, mapping,
-linear, nonlinear, invariant, gradient, divergence, curl, differential,
-parameter, coefficient, basis, eigenvalue, eigenvector, projection, orthogonal,
-limit, infinity, continuous, discrete, rate, slope, tangent, area, curve,
-sum, summation, product, series, sequence, convergence, divergence
-
-FORBIDDEN SYMBOLS IN ANALOGY - THIS IS A HARD REQUIREMENT:
-⚠️ ZERO SYMBOLS ALLOWED - The analogy MUST be plain English text only:
-- NO arrows of any kind: → ← ↔ ⟶ ⇒ ⇔ (write "to", "from", "leads to" instead)
-- NO mathematical operators: ∑ ∫ ∂ ∇ × ÷ ± ∞ ≈ ≠ ≤ ≥ (write words instead)
-- NO set notation: ∈ ∉ ⊂ ⊃ ∪ ∩ (write "in", "contains", "and" instead)
-- NO LaTeX or math notation: $...$ blocks, \\frac, \\sum, \\int, etc.
-- NO subscripts/superscripts: x₁, x², aₙ, etc.
-- NO Greek letters: α, β, γ, δ, Δ, θ, π, σ, Σ
-- NO special Unicode math characters whatsoever
-
-The analogy text must look like it came from a ${shortDomain} magazine or newspaper article.
-If a ${shortDomain} journalist wouldn't write it, don't include it.
-
-EXAMPLE OF WHAT NOT TO DO:
-❌ "The quarterback's throw → the receiver" (has arrow symbol)
-❌ "Each play ∈ the drive" (has set notation)
-❌ "The ∑ of all yards" (has summation symbol)
-
-CORRECT APPROACH:
-✅ "The quarterback's throw reached the receiver"
-✅ "Each play within the drive"
-✅ "The total of all yards"
-
-If you catch yourself writing ANY symbol in the analogy, STOP and rewrite using ONLY plain English words.
-
-CRITICAL: STORY vs TERMINOLOGY SOUP
-
-You MUST write a NARRATIVE STORY with characters, setting, conflict, and resolution.
-You must NOT write "terminology soup" - generic vocabulary definitions strung together.
-
-❌ BAD EXAMPLE (terminology soup - NO STORY, just vocabulary):
-"A [${shortDomain} term] is a collection of [${shortDomain} term] that [generic action]. The [${shortDomain} term] shows how many [${shortDomain} term] are needed for each [${shortDomain} term]. Each [${shortDomain} term] is defined by the [${shortDomain} term]."
-
-This pattern is BAD because:
-- No specific people, names, dates, or events - just generic vocabulary
-- Reads like a dictionary/glossary, not a story
-- No narrative arc (beginning, middle, end)
-- No characters the reader can follow
-- Sentences are definitions, not plot points
-
-✅ GOOD STORY STRUCTURE (what you MUST do):
-"On [SPECIFIC DATE], [REAL PERSON by name] faced [SPECIFIC SITUATION]. As [EVENT UNFOLDED], [PERSON] noticed [OBSERVATION]. [ACTION TAKEN]. [REACTION/CONSEQUENCE]. This [OUTCOME] became [SIGNIFICANCE]."
-
-This pattern is GOOD because:
-- Opens with specific date/time anchoring the story
-- Names a real person the reader can look up
-- Describes a specific situation with stakes
-- Has cause and effect (action → reaction)
-- Ends with resolution or significance
-- Reads like a documentary or journalism piece
-
-FOR ${shortDomain} SPECIFICALLY:
-Think of a FAMOUS moment, person, or event from ${shortDomain} history. Build your story around that real moment. The reader should be able to verify the facts you mention.
-
-NARRATIVE STORYTELLING REQUIREMENT:
-The analogy_explanation must read like a ${shortDomain} DOCUMENTARY - real people, real events, real moments:
-
-CRITICAL - NAMED INDIVIDUALS REQUIRED:
-- You MUST name specific PEOPLE (with full names), not just organizations/teams/groups
-- ❌ WRONG: "The Raiders' offense shifted formation" (no individual named)
-- ✅ RIGHT: "Rich Gannon dropped back, scanning the field as Jerry Rice cut across the middle"
-- ❌ WRONG: "The chef prepared the dish" (generic role, no name)
-- ✅ RIGHT: "Julia Child lifted the copper pan, letting the butter foam and sizzle"
-- The story must feature at least 2-3 NAMED INDIVIDUALS that ${shortDomain} enthusiasts would recognize
-
-SPECIFIC DETAILS REQUIRED:
-- PICK A SPECIFIC MOMENT: Choose ONE memorable event, performance, or turning point from ${shortDomain}
-- Use REAL names: actual people WITH THEIR NAMES (not just roles like "the quarterback" or "the chef")
-- Use REAL events: actual moments that happened and can be verified
-- Use REAL details: specific dates, scores, statistics, or measurable facts
-- NEVER use generic phrases - always reference SPECIFIC ${shortDomain} moments
-- Tell a STORY that happens to teach the concept through its structure
-- The story needs a NARRATIVE ARC: setup, development, climax/resolution
+NARRATIVE STORYTELLING (NOT TERMINOLOGY SOUP):
+The analogy_explanation must be a REAL ${shortDomain} STORY — like a documentary, not a glossary:
+- Pick ONE famous ${shortDomain} moment/event and build the story around it
+- Name 2-3 REAL PEOPLE with FULL NAMES (not just roles like "the quarterback")
+- Include REAL dates, scores, statistics (use digits: "February 2, 2002", "21-17")
+- Structure: setup → development → climax/resolution (narrative arc)
+- ❌ BAD: "The team's offense shifted formation" (generic, no names, no story)
+- ✅ GOOD: "On [DATE], [FULL NAME] faced [SITUATION]... [ACTION]... [OUTCOME]"
+- The ${shortDomain} fan reading this should recognize the story and be able to verify the facts
 
 CONCEPT_MAP RULES:
-The concept_map creates a vocabulary mapping between technical terms and ${shortDomain} terms.
-IMPORTANT: You MUST provide AT LEAST 10 concept mappings for comprehensive coverage (Mastery Mode requires 10).
-- tech_term: appears in technical_explanation
-- analogy_term: appears in analogy_explanation (must be ${shortDomain} vocabulary, NOT technical)
-- six_word_definition: EXACTLY 6 words that define the tech_term in plain English. This is domain-agnostic (same definition regardless of analogy domain). Focus on WHAT the concept IS, not what it does. Examples:
-  - "tensor components" → "Numbers describing multi-directional physical quantities"
-  - "covariant derivative" → "Rate of change respecting curved space"
-  - "eigenvalue" → "Scaling factor for special direction vectors"
-- narrative_mapping: A 2-3 sentence VIVID MINI-STORY showing HOW these concepts connect through a SPECIFIC ${shortDomain} scenario. NOT generic templates - use real ${shortDomain} vocabulary, names, situations. The reader should think "Oh, THAT'S what it means!" Examples:
-  - Bad: "defensive assignments is like tensor components because they both track multiple things"
-  - Good: "When Monte Kiffin designed the Tampa 2, each defender's gap responsibility was a component in his defensive tensor—change one assignment, and the entire coverage matrix shifts."
-- causal_explanation: First-principles reasoning for WHY this analogy works at a deep structural level. Not just "they're similar" but the underlying mechanics that make them genuinely isomorphic. What shared patterns, constraints, or dynamics do both concepts obey? Examples:
-  - Bad: "Both involve tracking multiple things"
-  - Good: "Both systems must satisfy a conservation constraint - in tensors, component transformations preserve magnitude; in zone defense, assignment shifts must preserve total coverage. The math of 'nothing leaks through' is identical."
+Provide AT LEAST 10 concept mappings (Mastery Mode requires 10).
+- tech_term: from technical_explanation; analogy_term: from analogy_explanation (${shortDomain} vocabulary, NOT technical)
+- six_word_definition: EXACTLY 6 words defining the tech_term in plain English (domain-agnostic, what it IS)
+- narrative_mapping: 2-3 sentence vivid mini-story connecting these concepts through a SPECIFIC ${shortDomain} scenario with real names/situations
+- causal_explanation: First-principles WHY this analogy works structurally — shared mechanics/patterns, not just surface similarity
 
 CONDENSED VIEW RULES:
 The "condensed" object provides a stripped-down, first-principles view of the concept:
@@ -1062,47 +965,16 @@ The "condensed" object provides a stripped-down, first-principles view of the co
   - If you removed any bullet, understanding would be incomplete
   - Order them from most fundamental to most nuanced
 
-ATTENTION_MAP RULES (CRITICAL FOR VISUAL HIGHLIGHTING):
-The attention_map provides word-level importance weights for the attention-based highlighting system.
-This simulates transformer attention - showing which words carry semantic weight vs. which are just connectors.
-
-WEIGHT GUIDELINES:
-- 1.0: Core concept terms, key technical vocabulary, central ideas (e.g., "derivative", "quarterback", "algorithm")
-- 0.8-0.9: Important supporting terms, action verbs central to meaning (e.g., "calculates", "intercepted", "transforms")
-- 0.6-0.7: Descriptive words that add meaning (e.g., "instantaneous", "crucial", "complex")
-- 0.4-0.5: Common verbs and adjectives (e.g., "shows", "different", "important")
-- 0.2-0.3: Generic words with low semantic load (e.g., "very", "also", "just", "really")
-- 0.1: Function words / connectors (e.g., "the", "a", "is", "in", "of", "and", "to", "with", "that")
-
-MULTI-WORD ENTITY RULE (CRITICAL):
-Keep multi-word entities as SINGLE entries - they are ONE semantic unit:
-- Full names: "Tom Brady" (not separate "Tom" and "Brady")
-- Compound terms: "running back", "offensive line", "gradient descent"
-- Technical phrases: "covariant derivative", "Taylor series", "neural network"
-- Place names: "Gillette Stadium", "New England"
-- Team names: "New England Patriots" or just "Patriots"
-Examples:
-  {"word": "Tom Brady", "weight": 0.9}
-  {"word": "gradient descent", "weight": 1.0}
-  {"word": "Super Bowl", "weight": 0.85}
-
-REQUIREMENTS:
-- Include EVERY content word from both explanations (not just key terms)
-- For technical_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
-- For analogy_explanation: cover ALL nouns, verbs, adjectives (50-100+ words)
-- Skip only: articles (a, an, the), prepositions (in, on, at, of), conjunctions (and, or, but)
-- Multi-word entities count as ONE entry (e.g., "Tom Brady" = 1 entry, not 2)
-- Proper nouns (names, places) should be 0.7-0.9 depending on centrality to the narrative
+ATTENTION_MAP RULES:
+Weights: 1.0=core concepts, 0.8-0.9=important terms, 0.6-0.7=descriptive, 0.4-0.5=common words, 0.1-0.3=function words/connectors.
+- Keep multi-word entities as ONE entry: "Tom Brady" not "Tom","Brady"; "gradient descent" not separate words
+- Cover ALL content words (nouns, verbs, adjectives) from BOTH explanations — 50-100+ per explanation
+- Skip only articles, prepositions, conjunctions
 
 SYMBOL_GUIDE RULES:
-The symbol_guide provides CONTEXT-AWARE explanations for mathematical symbols used in technical_explanation.
-- Include ALL symbols, variables, and mathematical notation used (Greek letters, operators, single-letter variables)
-- Names must be CONTEXT-SPECIFIC to THIS topic: if 'A' represents a coordinate ring in algebraic geometry, name it "Coordinate Ring", NOT "Matrix A"
-- If 'λ' represents eigenvalues, name it "Eigenvalue", not just "Lambda"
-- Order by importance/first appearance in the explanation
-- The "simple" field should be genuinely helpful for beginners - use analogies or plain English
-- Only include symbols that ACTUALLY APPEAR in your technical_explanation
-- For non-STEM topics with no mathematical symbols, return an empty array: "symbol_guide": []
+- Include ALL symbols from technical_explanation; names must be CONTEXT-SPECIFIC (e.g. if 'A' is a coordinate ring, name it "Coordinate Ring")
+- "formula" field: only for symbols in compound expressions (fractions, sums, integrals) — omit for standalone symbols
+- For non-STEM topics: return empty array "symbol_guide": []
 
 CRITICAL RULES:
 1. Segments MUST cover ALL content from both explanations - no gaps
@@ -1146,43 +1018,381 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
 };
 
 /**
+ * CORE: Generate the essential content users see immediately.
+ * Returns: technical_explanation, analogy_explanation, segments, attention_map
+ * Designed to be fast (~5-10s with paid model) — core fields only, trimmed prompt.
+ */
+export const generateAnalogyCore = async (
+  topic: string,
+  domain: string,
+  complexity: number = 50,
+  cachedDomainEnrichment?: CachedDomainEnrichment
+) => {
+  const shortDomain = getShortDomain(domain);
+  const complexityInstructions = getComplexityPrompt(complexity, shortDomain);
+  const topicIsSTEM = isSTEMTopic(topic);
+
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const webSearchContext = domainGranularity.isGranular
+    ? `CRITICAL - WEB SEARCH REQUIRED: Search for "${domain}" to get real facts (dates, names, scores). Use ONLY search results — do NOT fabricate details.\n\n---\n\n`
+    : '';
+
+  const latexInstruction = (topicIsSTEM && complexity !== 5)
+    ? 'Include mathematical notation in LaTeX ($...$) where appropriate for formulas and equations.'
+    : 'Use PLAIN ENGLISH ONLY - NO mathematical symbols, NO Greek letters, NO LaTeX.';
+
+  const corePrompt = `${webSearchContext}Create a learning module for "${topic}" using "${shortDomain}" as an analogical lens.
+
+TOPIC SCOPING:
+- BROAD topics (e.g. "calculus"): Provide an OVERVIEW of the entire field.
+- SPECIFIC topics (e.g. "derivatives"): Dive deep into that specific topic.
+
+${complexityInstructions}
+
+REQUIRED JSON STRUCTURE:
+{
+  "technical_explanation": "${complexity === 5
+    ? `Super simple explanation a 5-year-old would understand (1-2 SHORT paragraphs, 80-120 words MAX). Use ONLY words a kindergartener knows. Compare everything to toys, snacks, playgrounds. Make it FUN. Do NOT use \\n or \\\\ for line breaks.`
+    : `CONCISE technical explanation (2-3 short paragraphs, 150-250 words MAX). Cover: (1) WHAT - definition with key equation, (2) HOW - core mechanism, (3) WHY it matters. ${latexInstruction} Be DIRECT - no filler. Do NOT use \\n or \\\\ for line breaks.`}",
+  "analogy_explanation": "${complexity === 5
+    ? `A fun, SHORT story from ${shortDomain} that a kid would love (1-2 paragraphs, 100-150 words MAX). Simple words only. ZERO technical terms.`
+    : `A PURE NARRATIVE STORY from REAL ${shortDomain} history. ZERO technical terms — write ONLY in ${shortDomain} vocabulary. The reader should feel like reading a ${shortDomain} documentary. (3-4 paragraphs, 250+ words)`}",
+  "segments": [
+    {
+      "tech": "${complexity === 5 ? 'Simple sentence using kid-friendly words' : 'A single concept from the technical explanation'}",
+      "analogy": "${complexity === 5 ? `Matching ${shortDomain} story moment — simple words` : `Corresponding ${shortDomain} narrative moment - PURE ${shortDomain} vocabulary, NO technical terms`}",
+      "narrative": "Brief story element (1-2 sentences) with real ${shortDomain} references",
+      "intuitions": [
+        "First one-liner (under 12 words): '[Tech concept] is like [${shortDomain} analogy]'",
+        "Second one-liner - different angle",
+        "Third one-liner - the 'aha' moment"
+      ]
+    }
+  ],
+  "attention_map": {
+    "tech": [ {"word": "significant word or multi-word phrase", "weight": 0.0-1.0} ],
+    "analogy": [ {"word": "significant word or multi-word phrase", "weight": 0.0-1.0} ]
+  }
+}
+
+${topicIsSTEM ? `LaTeX RULES: ALLOWED: $x$, $T_{ij}$, $\\\\frac{a}{b}$, $\\\\sum_{i}$, $\\\\int$, $\\\\alpha$, $\\\\nabla$, $x^2$ — simple inline math only.
+FORBIDDEN: \\\\array, \\\\matrix, \\\\begin/\\\\end environments, LaTeX commands as English words, \\n or \\\\\\\\ for line breaks, raw Unicode symbols.` : `NON-STEM: Use ONLY plain English — NO LaTeX, NO Greek letters, NO math symbols.`}
+
+ZERO JARGON IN ANALOGY: All analogy fields must use ONLY ${shortDomain} vocabulary — zero technical terms, zero symbols. Write as a ${shortDomain} journalist.
+
+NARRATIVE STORYTELLING: The analogy must be a REAL ${shortDomain} STORY with 2-3 NAMED people (full names), real dates/scores, and a narrative arc (setup → climax → resolution).
+
+ATTENTION MAP: Weights 1.0=core concepts, 0.8-0.9=important, 0.6-0.7=descriptive, 0.1-0.3=connectors. Keep multi-word entities as ONE entry ("Tom Brady" not "Tom","Brady"). Cover ALL content words from BOTH explanations (50-100+ each).
+
+RULES:
+1. Segments MUST cover ALL content from both explanations
+2. LaTeX escaping: use \\\\ not \\ for backslashes
+3. Return ONLY valid JSON, no markdown code blocks`;
+
+  const searchPromptText = domainGranularity.isGranular
+    ? `Use ONLY facts from search results about "${domain}". Extract exact dates, names, scores, key moments.`
+    : `Use search results to ground the ${shortDomain} story in REAL history with real names and events.`;
+
+  const text = await callApi(corePrompt, {
+    jsonMode: true,
+    webSearch: needsWebSearch,
+    searchPrompt: searchPromptText
+  });
+  return safeJsonParse(text);
+};
+
+/**
+ * ENRICHMENT: Generate metadata for secondary views (concept map, synthesis, context, etc.).
+ * Takes the core explanations as context so generated terms match the actual content.
+ * Fires in the background after core content is displayed. Does NOT count against free tier.
+ */
+export const generateAnalogyEnrichment = async (
+  topic: string,
+  domain: string,
+  complexity: number = 50,
+  coreResult: { technical_explanation: string; analogy_explanation: string }
+) => {
+  const shortDomain = getShortDomain(domain);
+  const topicIsSTEM = isSTEMTopic(topic);
+
+  const enrichmentPrompt = `Given the following learning content about "${topic}" using "${shortDomain}" as an analogical lens, generate enrichment metadata. All terms in concept_map MUST reference actual words from the provided explanations.
+
+TECHNICAL EXPLANATION:
+${coreResult.technical_explanation}
+
+ANALOGY EXPLANATION:
+${coreResult.analogy_explanation}
+
+Generate ONLY this JSON:
+{
+  "concept_map": [
+    {
+      "id": 0,
+      "tech_term": "technical term from the explanation above",
+      "analogy_term": "${shortDomain}-native equivalent from the analogy above",
+      "six_word_definition": "EXACTLY six words defining the tech_term in plain English",
+      "narrative_mapping": "2-3 sentence vivid mini-story showing HOW these concepts connect through ${shortDomain}",
+      "causal_explanation": "WHY this mapping works structurally — shared mechanics/patterns",
+      "why_it_matters": {
+        "connection": "WHY these concepts structurally connect",
+        "importance": "WHY understanding this link unlocks deeper understanding",
+        "critical": "WHY the system would fail without this concept"
+      }
+    }
+  ],
+  "importance_map": [ {"term": "key term", "importance": 0.0-1.0} ],
+  "context": {
+    "header": "Topic header",
+    "emoji": "🎯",
+    "why": "2-3 sentences on WHY ${topic} matters, using ${domain || 'everyday life'} vocabulary",
+    "real_world": "2-3 sentences with a vivid scenario showing ${topic} in action",
+    "narrative": "Punchy one-liner mapping ${topic} to ${domain || 'real life'}"
+  },
+  "synthesis": {
+    "one_liner": "ONE punchy sentence bridging ${topic} and ${domain || 'real life'}",
+    "core": "2-3 sentences showing HOW ${topic} connects to ${domain || 'real life'}",
+    "deep": "3-4 sentences on WHY this mapping works at a structural level",
+    "citation": "A memorable quote or principle"
+  },
+  "condensed": {
+    "what": "One sentence: WHAT this concept is",
+    "why": "One sentence: WHY this matters",
+    "bullets": ["5 irreducibly simple truths about ${topic}"],
+    "mnemonic": {
+      "phrase": "Catchy phrase where each word starts with first letter of each bullet",
+      "breakdown": ["E = Word → Concept from bullet"]
+    }
+  },
+  "symbol_guide": [${topicIsSTEM ? `
+    {
+      "symbol": "symbol as written",
+      "name": "Context-specific name for THIS topic",
+      "meaning": "What it represents in this context",
+      "simple": "Plain English explanation",
+      "formula": "$LaTeX compound expression$ (only for symbols in fractions/sums/integrals)"${domain ? `,
+      "domain_analogy": "One sentence mapping this symbol to ${domain}"` : ''}
+    }` : ''}
+  ]
+}
+
+CONCEPT_MAP RULES:
+- Provide AT LEAST 10 concept mappings. tech_term and analogy_term must be DIFFERENT words.
+- six_word_definition: EXACTLY 6 words, domain-agnostic, what the concept IS
+- narrative_mapping: Use SPECIFIC ${shortDomain} scenarios with real names
+
+CONTEXT must be specifically about "${topic}". Generate ORIGINAL content.
+${topicIsSTEM ? '' : `For non-STEM topics: symbol_guide should be an empty array [].`}
+${domain ? `SYMBOL domain_analogy: Map each symbol to a SPECIFIC ${domain} moment — visceral, unique, never reuse.` : ''}
+importance_map: 15-25 significant terms with weights 0.0-1.0.
+Return ONLY valid JSON.`;
+
+  const text = await callApi(enrichmentPrompt, {
+    jsonMode: true,
+    isEnrichment: true // Don't count against free tier daily limit
+  });
+  return safeJsonParse(text);
+};
+
+/**
+ * Generate a semantic word→concept color map via a lightweight second-pass API call.
+ * The AI reads the generated explanation texts and the concept list, then returns
+ * which words belong to which concept — handling synonyms, abbreviations, and
+ * morphological variants that the rule-based stemming system misses.
+ *
+ * Returns null on any failure (never throws). Caller uses this as a non-blocking
+ * overlay on top of the existing fallback coloring system.
+ */
+export const generateSemanticColorMap = async (
+  technicalText: string,
+  analogyText: string,
+  conceptMap: ConceptMapItem[]
+): Promise<{ tech: Map<string, number>; analogy: Map<string, number> } | null> => {
+  try {
+    if (!technicalText && !analogyText) return null;
+
+    // Truncate texts to keep the request cheap and fast
+    const techSlice = (technicalText || '').slice(0, 1500);
+    const analSlice = (analogyText || '').slice(0, 1500);
+
+    const hasConceptMap = conceptMap && conceptMap.length > 0;
+
+    let prompt: string;
+    if (hasConceptMap) {
+      // Mode 1: Concept map exists — tag words to known concepts
+      const conceptList = conceptMap.map(c =>
+        `${c.id}: "${c.tech_term}" / "${c.analogy_term}"`
+      ).join('\n');
+
+      prompt = `You are a word-level concept tagger for a learning app. Given two explanation texts and a numbered concept list, identify which individual words from the texts belong to which concept.
+
+CONCEPTS:
+${conceptList}
+
+TECHNICAL TEXT:
+${techSlice}
+
+ANALOGY TEXT:
+${analSlice}
+
+For each concept, list the INDIVIDUAL words (lowercase, no punctuation) from both texts that semantically relate to that concept. Include:
+- The exact words from the concept name (e.g., "singular", "value", "decomposition")
+- Synonyms and abbreviations used in the text (e.g., "SVD", "factorize" for decomposition)
+- Morphological variants (e.g., "matrices" for "matrix", "decomposed" for "decomposition")
+- Domain-specific terms the text uses to explain that concept
+
+Return ONLY this JSON — no other text:
+{"concept_colors":[{"id":0,"tech_words":["word1","word2"],"analogy_words":["word3","word4"]},{"id":1,"tech_words":["word5"],"analogy_words":["word6"]}]}
+
+Rules:
+- All words lowercase, no punctuation
+- Each word belongs to at most ONE concept (pick the most relevant)
+- Skip common stop words (the, a, is, are, and, or, it, to, of, in, for, by, etc.)
+- Include 3-8 words per concept per text where applicable
+- If a concept isn't mentioned in a text, use an empty array for that text`;
+    } else {
+      // Mode 2: No concept map — identify concepts AND tag words in one shot
+      prompt = `You are a concept identifier and word-level tagger for a learning app. Given a technical explanation and its analogy, identify 5-10 key concepts, then tag which words belong to each concept.
+
+TECHNICAL TEXT:
+${techSlice}
+
+ANALOGY TEXT:
+${analSlice}
+
+Step 1: Identify 5-10 KEY CONCEPTS from the technical text (important ideas, entities, processes).
+Step 2: For each concept, find the INDIVIDUAL words (lowercase, no punctuation) in BOTH texts that relate to it.
+
+Return ONLY this JSON — no other text:
+{"concept_colors":[{"id":0,"tech_words":["word1","word2"],"analogy_words":["word3","word4"]},{"id":1,"tech_words":["word5"],"analogy_words":["word6"]}]}
+
+Rules:
+- Use sequential IDs starting from 0
+- All words lowercase, no punctuation
+- Each word belongs to at most ONE concept (pick the most relevant)
+- Skip common stop words (the, a, is, are, and, or, it, to, of, in, for, by, etc.)
+- Include 3-8 words per concept per text where applicable
+- Group multi-word terms together: tag each word of "singular value decomposition" under the same concept
+- In the analogy text, find the CORRESPONDING words that map to the same concept`;
+    }
+
+    const text = await callApi(prompt, { jsonMode: true });
+    const result = safeJsonParse(text);
+    if (!result || !Array.isArray(result.concept_colors)) return null;
+
+    // Build valid concept ID set for validation
+    const validIds = hasConceptMap
+      ? new Set(conceptMap.map(c => c.id))
+      : new Set(result.concept_colors.map((c: any) => c.id).filter((id: any) => typeof id === 'number'));
+
+    const techMap = new Map<string, number>();
+    const analogyMap = new Map<string, number>();
+
+    for (const entry of result.concept_colors) {
+      const id = entry.id;
+      if (typeof id !== 'number' || !validIds.has(id)) continue;
+
+      if (Array.isArray(entry.tech_words)) {
+        for (const word of entry.tech_words) {
+          if (typeof word === 'string' && word.length > 1) {
+            const cleaned = word.toLowerCase().trim().replace(/[^a-z0-9'-]/g, '');
+            if (cleaned && !techMap.has(cleaned)) {
+              techMap.set(cleaned, id);
+            }
+          }
+        }
+      }
+      if (Array.isArray(entry.analogy_words)) {
+        for (const word of entry.analogy_words) {
+          if (typeof word === 'string' && word.length > 1) {
+            const cleaned = word.toLowerCase().trim().replace(/[^a-z0-9'-]/g, '');
+            if (cleaned && !analogyMap.has(cleaned)) {
+              analogyMap.set(cleaned, id);
+            }
+          }
+        }
+      }
+    }
+
+    // Only return if we got meaningful results
+    if (techMap.size === 0 && analogyMap.size === 0) return null;
+
+    return { tech: techMap, analogy: analogyMap };
+  } catch (e) {
+    console.warn('Semantic color map generation failed (non-critical):', e);
+    return null;
+  }
+};
+
+/**
  * Check input for ambiguity or typos with enhanced context detection
  */
 export const checkAmbiguity = async (text: string, contextType: string): Promise<AmbiguityResult> => {
-  const prompt = `Analyze user input for an analogy-based learning app: "${text}"
-Context type: ${contextType}
+  const prompt = `You are a search intent classifier for an analogy-based learning app. A user typed: "${text}"
+Context: This is a ${contextType} (either a topic they want to LEARN about, or an expert domain they already know).
 
-Your task:
-1. Check for TYPOS: If the input appears to be a misspelling, suggest corrections
-2. Check for AMBIGUITY: If the input could refer to multiple distinct things, list them with brief descriptions
+TASK: Determine if this input needs clarification before we can generate a good analogy. Check ALL of the following IN ORDER:
 
-IMPORTANT: For ambiguous inputs, format each option as "[Name] (brief description)" to help user choose.
+**CHECK THIS FIRST — GRANULAR/SPECIFIC INPUTS:**
+If the user provides a highly specific, granular input that includes qualifiers like season numbers, episode numbers, chapter numbers, version numbers, specific dates, specific people + context, or other precision markers — the user clearly knows EXACTLY what they want. Do NOT genericize or broaden their intent.
+Examples of SPECIFIC inputs that should be ACCEPTED as-is (isAmbiguous: false):
+   - "Saved by the Bell, Season 4, Episode 5" → ACCEPT (user wants that specific episode as their lens)
+   - "Breaking Bad S2E10" → ACCEPT (specific episode)
+   - "Harry Potter Chapter 12" → ACCEPT (specific chapter)
+   - "React v18.2" → ACCEPT (specific version)
+   - "Super Bowl XLII" → ACCEPT (specific game)
+   - "Naruto Shippuden Episode 133" → ACCEPT (specific episode)
+   - "The Office Season 3" → ACCEPT (specific season)
+   - "World War 2, Battle of Midway" → ACCEPT (specific event)
+For these, set isAmbiguous: false, set "corrected" to a cleaned-up version of their input, and move on.
 
-Examples of ambiguous inputs:
-- "King of Queens" → ["The King of Queens (TV sitcom with Kevin James)", "King (playing card rank in Queens deck)"]
-- "GOT" → ["Game of Thrones (HBO fantasy TV series)", "Got (English verb, past tense of 'get')"]
-- "Python" → ["Python (programming language)", "Python (snake species)"]
-- "Apex" → ["Apex Legends (video game)", "Apex (general term for peak/summit)"]
-- "Hamilton" → ["Hamilton (Broadway musical)", "Hamilton (founding father Alexander Hamilton)"]
+Only if the input is NOT granular/specific, check the following:
 
-Examples of typos:
-- "nfll" → options: ["NFL (National Football League)"]
-- "basebal" → options: ["Baseball (sport)"]
+1. TYPOS & CASING: Fix misspellings and wrong capitalization of known terms.
+   - "SVd" → "SVD (Singular Value Decomposition)" (wrong case)
+   - "nfll" → "NFL (National Football League)" (misspelling)
+   - "basebal" → "Baseball (sport)" (misspelling)
+   - "machien learning" → "Machine Learning" (misspelling)
+   - "eigan values" → "Eigenvalues (linear algebra)" (misspelling)
 
-Only set isAmbiguous: true if:
-1. There's a likely typo that needs correction, OR
-2. The input genuinely refers to multiple well-known distinct things
+2. AMBIGUOUS TERMS: Could refer to multiple distinct, well-known things.
+   - "Python" → ["Python (programming language)", "Python (snake species)"]
+   - "Apex" → ["Apex Legends (battle royale video game)", "Apex (general term for peak/summit)"]
+   - "Hamilton" → ["Hamilton (Broadway musical by Lin-Manuel Miranda)", "Alexander Hamilton (founding father)"]
+   - "GOT" → ["Game of Thrones (HBO fantasy TV series)", "Got (past tense of get)"]
+   - "Mercury" → ["Mercury (planet)", "Mercury (element)", "Freddie Mercury (musician)"]
 
-Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4 options with descriptions), "corrected": string (best guess), "emoji": string (relevant emoji) }
+3. COMPOUND TERMS WITH YEARS/NUMBERS: These are VERY often ambiguous — a year + topic can mean different things!
+   - "NFL 2002" → ["2002 NFL Season (the actual football season)", "NFL 2K2 / Madden 2002 (video game)", "Super Bowl XXXVI (2002 Super Bowl)"]
+   - "NBA 2024" → ["2023-24 NBA Season", "NBA 2K24 (video game)", "2024 NBA Draft"]
+   - "World Cup 2022" → ["2022 FIFA World Cup (tournament in Qatar)", "FIFA World Cup 2022 (video game)"]
+   - "Zelda 2023" → ["Tears of the Kingdom (2023 Zelda game)", "The Legend of Zelda (franchise overview)"]
+   BUT: "NFL 2002 Season" → ACCEPT (the word "Season" makes it specific enough)
+   BUT: "NBA 2K24" → ACCEPT (clearly a video game, not ambiguous)
 
-Return ONLY valid JSON, no other text.`;
+4. BROAD TOPICS: If the input is very broad, offer focused sub-areas.
+   - "Calculus" → ["Differential Calculus (derivatives, rates of change)", "Integral Calculus (areas, accumulation)", "Multivariable Calculus (3D, partial derivatives)"]
+   - "Chemistry" → ["Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry", "Biochemistry"]
+
+RULES:
+- MOST IMPORTANT: If the user was specific and granular, RESPECT their specificity — set isAmbiguous: false
+- Set isAmbiguous: true ONLY if the input is genuinely vague, ambiguous, misspelled, or too broad
+- Format each option as "[Specific Name] (brief clarifying description)"
+- Max 4 options, ordered by most likely interpretation first
+- "corrected" should be your best single guess if forced to pick one (for specific inputs, just clean up the formatting)
+- For typos with only one obvious correction, still set isAmbiguous: true so user confirms
+
+Return JSON: { "isValid": bool, "isAmbiguous": bool, "options": [string] (max 4), "corrected": string (best guess), "emoji": string (a SINGLE emoji that BEST represents this specific topic/domain - e.g., 🏈 for NFL, 🧬 for genetics, 🎸 for guitar, 🍳 for cooking, 🎮 for gaming, 💻 for programming, ⚽ for soccer, 🎬 for movies, 📐 for geometry. MUST be specific and relevant to the topic, NEVER use generic emojis like ⚡ or 🎯) }
+
+Return ONLY valid JSON, no markdown, no explanation.`;
 
   try {
-    const responseText = await callApi(prompt, { jsonMode: true });
+    const responseText = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(responseText);
-    return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+    return result || { isValid: true, isAmbiguous: false, corrected: text, emoji: "🧠" };
   } catch {
-    return { isValid: true, isAmbiguous: false, corrected: text, emoji: "⚡" };
+    return { isValid: true, isAmbiguous: false, corrected: text, emoji: "🧠" };
   }
 };
 
@@ -1191,9 +1401,9 @@ Return ONLY valid JSON, no other text.`;
  * Word count targets:
  * - ELI5: 80-100 words (simple, engaging, memorable)
  * - ELI50: 130-150 words (balanced, clear, practical)
- * - ELI100: 150-180 words (thorough, technical, precise)
+ * - ELI100: 220-280 words (graduate-level, formal, dense)
  */
-export const fetchDefinition = async (term: string, context: string, level: number) => {
+export const fetchDefinition = async (term: string, context: string, level: number, domain?: string) => {
   // Word count and style guidance per level
   const levelConfig = {
     5: {
@@ -1226,9 +1436,20 @@ Make it click instantly. If a 5-year-old would say "huh?" - simpler!`
       style: "Balance clarity with substance. Include WHAT it is, WHY it matters, and a practical example. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac."
     },
     100: {
-      name: "Advanced Academic",
-      words: "150-180 words",
-      style: "Include technical depth, mathematical notation where appropriate, precise terminology, and nuanced explanations. Cover the concept thoroughly with WHAT/WHY/HOW. CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes."
+      name: "Advanced Academic (Graduate Level)",
+      words: "220-280 words",
+      style: `TARGET: A graduate student or expert who wants FULL technical depth.
+
+REQUIREMENTS:
+- Begin with a FORMAL DEFINITION using precise mathematical/scientific notation in LaTeX
+- Include the governing equation, theorem statement, or formal relationship
+- Explain the mechanism/proof sketch - HOW and WHY it works at a fundamental level
+- Note edge cases, limitations, or common misconceptions
+- Reference connections to related advanced concepts
+
+WRITING STYLE: Dense, precise, no hand-holding. Write like a top textbook author - every sentence earns its place. Use domain-specific jargon freely.
+
+CRITICAL LaTeX rules: ALL math MUST be in $...$ delimiters with proper backslashes. Use $\\mathbf{x}$ not mathbf x, $\\frac{a}{b}$ not frac.`
     }
   };
 
@@ -1236,6 +1457,7 @@ Make it click instantly. If a 5-year-old would say "huh?" - simpler!`
 
   // For ELI5, we don't need symbol_guide (no math symbols)
   const includeSymbolGuide = level !== 5;
+  const includeDomain = domain && domain.trim() && level !== 5;
 
   let promptText = `Define "${term}" in context of: "${context}".
 
@@ -1246,13 +1468,17 @@ ${config.style}
 
 Return JSON in this EXACT format:
 {
-  "definition": "Your definition here...",
+  "title": "Concise 2-5 word canonical name for this concept. If the user selected a long phrase, distill it to the proper term (e.g. 'Instantaneous Rate of Change' or 'Derivative'). If a single word, just capitalize it.",
+  "definition": "Your definition here...",${includeDomain ? `
+  "domain_intuition": "One visceral sentence mapping this ENTIRE concept to ${domain}. Must feel like an 'aha' moment — physical, gut-level, zero jargon. Must be SPECIFICALLY about the concept being defined.",` : ''}
   "symbol_guide": [${includeSymbolGuide ? `
     {
       "symbol": "symbol as written",
       "name": "Context-specific name for THIS definition (not generic)",
       "meaning": "What it represents in THIS context",
-      "simple": "Plain English for beginners"
+      "simple": "Plain English for beginners",
+      "formula": "$LaTeX compound expression from your definition$ (only for symbols in fractions/sums/integrals — omit for standalone)"${includeDomain ? `,
+      "domain_analogy": "One visceral sentence mapping THIS symbol's role to ${domain}. Reference a SPECIFIC moment, character, or element — never generic."` : ''}
     }
   ` : ''}]
 }
@@ -1262,20 +1488,46 @@ SYMBOL_GUIDE RULES:
 - Names must be CONTEXT-SPECIFIC (if 'x' is an input value, call it "Input Value", not "Variable X")
 - For ELI5 with no math symbols, return empty array: "symbol_guide": []
 - The "simple" field should genuinely help beginners understand
+- The "formula" field shows the ACTUAL compound expression from your definition — only include when the symbol appears in a fraction, sum, integral, etc.
+${includeDomain ? `
+DOMAIN_ANALOGY RULES:
+- Map each symbol to a specific ${domain} concept — visceral and physical, not abstract
+- One sentence maximum, make it hit the gut
+- CRITICAL: Every symbol MUST reference a DIFFERENT moment/character/element from ${domain} — NEVER reuse the same analogy
+- If the domain is a specific episode, season, or event, reference specific scenes, characters, or plot points unique to it
+- NO generic filler — every analogy must be specific to ${domain}
 
+DOMAIN_INTUITION RULES (top-level field):
+- One sentence mapping the ENTIRE concept to ${domain}
+- Must be DIFFERENT from any individual symbol's domain_analogy
+- Must feel like an "aha" moment connecting the abstract to lived ${domain} experience
+` : ''}
 Return ONLY valid JSON, no markdown code blocks.`;
 
   try {
-    const response = await callApi(promptText);
+    const response = await callApi(promptText, {});
 
-    // Try to parse as JSON
-    try {
-      const parsed = JSON.parse(response);
+    // Use safeJsonParse — handles markdown code blocks, LaTeX backslashes,
+    // control characters, and truncated JSON (same as every other API function)
+    const parsed = safeJsonParse(response);
+    if (parsed && typeof parsed === 'object' && parsed.definition) {
       return parsed;
-    } catch {
-      // If parsing fails, return the raw text as definition (backwards compatibility)
-      return { definition: response, symbol_guide: [] };
     }
+
+    // safeJsonParse returned null or missing definition — treat response as plain text
+    // Strip any markdown wrapping for clean fallback
+    const clean = response.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+
+    // Last resort: try to extract definition field from raw JSON text via regex
+    const defMatch = clean.match(/"definition"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (defMatch) {
+      return {
+        definition: defMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+        symbol_guide: [],
+      };
+    }
+
+    return { definition: clean, symbol_guide: [] };
   } catch {
     return { definition: "Could not load definition.", symbol_guide: [] };
   }
@@ -1321,7 +1573,7 @@ EXAMPLES OF GOOD RESPONSES:
 Return ONLY valid JSON: { "foundationalMapping": "Your 2-3 sentence explanation here" }`;
 
   try {
-    const response = await callApi(prompt, { jsonMode: true });
+    const response = await callApi(prompt, { jsonMode: true});
     const parsed = safeJsonParse(response);
     if (parsed && parsed.foundationalMapping) {
       return { foundationalMapping: parsed.foundationalMapping };
@@ -1383,9 +1635,10 @@ CRITICAL RULES:
 6. Use LaTeX ($...$) ONLY for mathematical symbols - NOT for prose text!
    - CORRECT: "The value is $x = 5$"
    - WRONG: "$The value is x = 5$"
+7. The "analogyBridge" helps the user THINK through their ${domain} knowledge to arrive at the technical answer — NEVER give away which option is correct
 
 Return ONLY this JSON:
-{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}"}`;
+{"question": "your question about ${topic}", "options": ["Text option", "Another option", "Third option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "concept": "${retryMode.concept}", "analogyBridge": {"hint": "1-2 sentence hint reframing the question through ${domain} — help them think, don't reveal the answer", "optionHints": ["${domain} analogy for option A (3-8 words)", "${domain} analogy for B", "${domain} analogy for C", "${domain} analogy for D"]}}`;
   } else {
     // Normal mode: Generate new question with difficulty
     const difficultyPrompt = getDifficultyPrompt(difficulty);
@@ -1406,16 +1659,17 @@ CRITICAL RULES:
 6. Use LaTeX ($...$) ONLY for mathematical symbols and equations - NOT for prose text!
    - CORRECT: "The resulting equation is $x = 10$"
    - WRONG: "$The resulting equation is x = 10$" (entire text in LaTeX breaks rendering)
+7. The "analogyBridge" helps the user THINK through their ${domain} knowledge to arrive at the technical answer — NEVER give away which option is correct through the hint
 
 GOOD question example: "What is the derivative of $f(x) = x^2$?"
 BAD question example: "Which NFL player is like an eigenvector?" (meaningless)
 
 Return ONLY this JSON:
-{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name"}`;
+{"question": "your question with $math$ inline", "options": ["Text with $math$ if needed", "Plain text option", "Another option", "Fourth option"], "correctIndex": 0, "explanation": "why correct", "difficulty": "${difficulty}", "concept": "2-5 word concept name", "analogyBridge": {"hint": "1-2 sentence hint reframing the question through ${domain} — help the user think using their ${domain} knowledge without revealing the answer", "optionHints": ["${domain} analogy for option A (3-8 words)", "${domain} analogy for B", "${domain} analogy for C", "${domain} analogy for D"]}}`;
   }
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(text);
     if (result) {
       result.difficulty = difficulty;
@@ -1438,7 +1692,7 @@ export const askTutor = async (
   const prompt = `Tutor this user on "${topic}" via analogy "${domain}". Context: ${conversationContext}. Question: "${query}". Keep it short. IMPORTANT: Use plain text only - no mathematical symbols, Greek letters, or LaTeX. Write "cup" not ∪, "in" not ∈, "and" not ∧, "sum" not Σ.`;
 
   try {
-    const response = await callApi(prompt);
+    const response = await callApi(prompt, {});
     // Sanitize math symbols from response (∪ → and, ∈ → in, etc.)
     return stripMathSymbols(response);
   } catch {
@@ -1504,7 +1758,7 @@ Return ONLY this JSON (no markdown):
 {"isTooClose": true/false, "reason": "brief explanation if too close"}`;
 
   try {
-    const responseText = await callApi(prompt, { jsonMode: true });
+    const responseText = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(responseText);
 
     if (result?.isTooClose) {
@@ -1653,7 +1907,7 @@ Return ONLY this JSON (no markdown):
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(text);
 
     if (result?.keywords && Array.isArray(result.keywords)) {
@@ -1807,7 +2061,7 @@ Return ONLY this JSON (no markdown):
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(text);
 
     if (result?.definitions && Array.isArray(result.definitions)) {
@@ -1952,7 +2206,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(text);
 
     if (result) {
@@ -2073,28 +2327,48 @@ export const generateMasteryStory = async (
     console.log(`[generateMasteryStory] Granular signals: ${domainGranularity.signals.join(', ')}`);
   }
 
+  // Detect domain type for appropriate search queries and fictional vs real framing
+  const domainLower = domain.toLowerCase();
+  const isFictionalDomain = /\b(show|series|sitcom|anime|cartoon|movie|film|book|novel|manga|comic|video\s*game)\b/i.test(domainLower)
+    || /\b(season|episode|s\d+e\d+)\b/i.test(domainLower);
+
+  let granularSearchQueries: string;
+  if (/\b(season|episode|ep\b|s\d+e\d+|series|show|sitcom|drama|anime|cartoon)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} plot summary recap"\n2. "${domain} characters scenes"\n3. "${domain} episode guide synopsis"`;
+  } else if (/\b(album|song|track|concert|tour|band|musician)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} review tracklist"\n2. "${domain} artists performers"\n3. "${domain} release history background"`;
+  } else if (/\b(recipe|dish|cook|cuisine|restaurant|chef)\b/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} recipe ingredients technique"\n2. "${domain} history origin"\n3. "${domain} famous preparation"`;
+  } else if (/\b(game\s*\d|match|playoff|championship|super\s*bowl|world\s*cup|tournament)/i.test(domainLower)) {
+    granularSearchQueries = `1. "${domain} game results score"\n2. "${domain} key players highlights"\n3. "${domain} date opponent final score"`;
+  } else {
+    granularSearchQueries = `1. "${domain} summary overview"\n2. "${domain} key details facts"\n3. "${domain} history background"`;
+  }
+
   // Web search context - different prompts for granular (specific event) vs general domains
   // Both get web search, but granular domains are more constrained to the exact event
   const webSearchContext = isGranularDomain
-    ? `CRITICAL - WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
+    ? `WEB SEARCH FOR SPECIFIC EVENT ACCURACY:
 
-SEARCH FOR THIS SPECIFIC EVENT: "${domain}"
+SEARCH FOR: "${domain}"
 Search queries to use:
-1. "${domain} game results score"
-2. "${domain} key players highlights"
-3. "${domain} date opponent final score"
+${granularSearchQueries}
 
-YOU MUST USE ONLY FACTS FROM THE SEARCH RESULTS.
-- The story MUST be about THIS EXACT EVENT - "${domain}"
-- Do NOT use generic knowledge about this domain
-- Do NOT fabricate or guess any details
-- If search results mention specific people, dates, scores, or events - USE THOSE EXACT FACTS
+GROUNDING RULES (in priority order):
+1. PREFER facts from the search results — if results contain relevant info about "${domain}", use those facts
+2. If search results are sparse or irrelevant for "${domain}", supplement with your general knowledge — but keep facts REAL and VERIFIABLE
+3. NEVER refuse to generate a story — always produce an engaging narrative
+4. NEVER output apologies, refusals, or meta-commentary about search results — just write the story
 
-REQUIRED FACTUAL ELEMENTS (extract from search results):
-- Specific date of the event
-- Names of key individuals involved (WITH FULL NAMES)
-- Specific outcome/result (scores, statistics, achievements)
-- Key moments that happened during this specific event
+The story MUST be about "${domain}".
+${isFictionalDomain
+    ? '- Since this is fictional source material, "facts" means REAL plot points, character names, and storylines from the actual show/film/book/game'
+    : '- If search results mention specific people, dates, scores, or events — USE THOSE EXACT FACTS'}
+
+REQUIRED FACTUAL ELEMENTS (from search results OR your knowledge of "${domain}"):
+- Specific details about this ${isFictionalDomain ? 'episode/scene/chapter' : 'event'} (names, ${isFictionalDomain ? 'plot points, character actions' : 'dates, scores, outcomes'})
+- Names of key ${isFictionalDomain ? 'characters' : 'individuals'} involved
+- What actually happened (${isFictionalDomain ? 'storyline, key scenes, dialogue moments' : 'outcome, key moments, significance'})
 
 ---
 
@@ -2133,8 +2407,10 @@ DO NOT FABRICATE:
     1: `STAGE 1 - THE BIG PICTURE (ZERO TECHNICAL JARGON):
 Create a narrative story that explains the CONCEPT of "${topic}" using ONLY ${domain} vocabulary.
 
-NARRATIVE SCOPE: Tell the story of a GAME/MATCH/EVENT - the overall arc, who was involved, what happened.
-Example: "The 2011 playoff series between the Grizzlies and Spurs..." - broad strokes, key players, the outcome.
+NARRATIVE SCOPE: Tell the story of a REAL moment from ${domain} — the overall arc, who was involved, what happened.
+${isFictionalDomain
+    ? 'Since this is from fictional source material, use REAL plot points, character names, and storylines from the actual show/film/book/game.'
+    : 'Use REAL historical facts, people, and events that enthusiasts would recognize.'}
 
 CRITICAL RULES:
 - NO technical terms whatsoever - not even simple ones
@@ -2250,9 +2526,11 @@ STORY REQUIREMENTS:
 HISTORICAL ACCURACY (MANDATORY):
 - Feature REAL people, characters, figures, or entities that ${domain} enthusiasts would recognize
 - Reference ACTUAL events, moments, episodes, performances, or achievements from ${domain}
-- Include SPECIFIC details: dates, numbers, statistics, records, achievements
-- Ground the story in ${domain} history that enthusiasts would recognize
-- NO fictional scenarios - this must reference real ${domain} moments that actually happened
+- Include SPECIFIC details: ${isFictionalDomain ? 'character names, plot points, episode details, dialogue moments' : 'dates, numbers, statistics, records, achievements'}
+- Ground the story in ${domain} ${isFictionalDomain ? 'canon that fans would recognize' : 'history that enthusiasts would recognize'}
+${isFictionalDomain
+    ? '- Use REAL plot points and characters from the source material — actual episodes, scenes, and storylines'
+    : `- NO fictional scenarios — this must reference real ${domain} moments that actually happened`}
 - Write as if creating a documentary about ${domain} that happens to explain the technical concept
 
 Return ONLY the story text (no JSON, no explanations, just the story).`;
@@ -2261,19 +2539,18 @@ Return ONLY the story text (no JSON, no explanations, just the story).`;
     // Build search prompt to guide how web results are used
     // We're getting 8 sources - synthesize them into accurate, verifiable narratives
     const searchPromptText = isGranularDomain
-      ? `STRICT REQUIREMENT: Synthesize facts from these 8 web search results about "${domain}".
+      ? `GROUNDING GUIDANCE: Use these web search results to enrich your story about "${domain}".
 
-The story MUST be about THIS SPECIFIC EVENT: "${domain}"
-- Cross-reference the search results to extract VERIFIED facts
-- Use the EXACT date, opponent/participants, score/outcome from search results
-- Extract SPECIFIC player/character names mentioned in search results
-- Extract KEY MOMENTS described in search results
+The story should be about "${domain}".
+- If results contain relevant facts about "${domain}", weave them into your narrative
+- If results are NOT relevant to "${domain}", rely on your general knowledge of "${domain}" instead
+- The goal is an ACCURATE, ENGAGING story — not a refusal
+- NEVER output apologies, meta-commentary about search quality, or "I'm sorry" — just write the story
 
 SYNTHESIS RULES:
 - If multiple sources agree on a fact, use it confidently
 - If sources disagree, pick the most commonly cited version
-- NEVER fabricate details that don't appear in the search results
-- The story must be verifiable against the search results provided.`
+- ${isFictionalDomain ? 'For fictional source material, "facts" = real plot points, characters, and storylines from the show/film/book' : 'Keep all facts verifiable — use real names, dates, and outcomes'}`
       : `SYNTHESIZE these 8 web search results to ground your ${shortDomain} story in REAL history.
 
 SYNTHESIS REQUIREMENTS:
@@ -2313,6 +2590,23 @@ Do NOT write generic scenarios - use the SPECIFIC historical content from search
         .trim()
         .replace(/^["']|["']$/g, '') // Remove surrounding quotes if any
         .replace(/^Story:\s*/i, ''); // Remove "Story:" prefix if any
+
+      // Detect AI refusal patterns (AI followed strict grounding instructions too literally)
+      const refusalPatterns = [
+        /^I'm sorry/i, /^I cannot/i, /^I apologize/i,
+        /^Unfortunately,?\s+I/i, /^I don't have/i,
+        /search results.*do not contain/i, /no information about/i,
+        /I'm unable to/i, /cannot generate/i, /cannot create/i
+      ];
+      const isRefusal = refusalPatterns.some(p => p.test(cleanContent));
+      if (isRefusal) {
+        console.warn(`[generateMasteryStory] Stage ${stage} attempt ${attempts}: AI refusal detected, retrying...`);
+        cleanContent = ''; // Force word count check to fail → triggers retry
+        if (attempts < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        continue;
+      }
 
       const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
       const minWords = MIN_WORD_COUNT[stage];
@@ -2437,7 +2731,7 @@ TUTOR GUIDELINES:
 Respond as the tutor (just the response, no "Tutor:" prefix):`;
 
   try {
-    const response = await callApi(prompt);
+    const response = await callApi(prompt, {});
     return response.trim();
   } catch (error) {
     console.error('Failed to generate chat response:', error);
@@ -2479,7 +2773,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const text = await callApi(prompt, { jsonMode: true });
+    const text = await callApi(prompt, { jsonMode: true});
     const result = safeJsonParse(text);
 
     if (result) {
@@ -2502,3 +2796,167 @@ const getDefaultMasterySummary = (topic: string, domain: string) => ({
   coreIntuition: `Demonstrated understanding of ${topic} through ${domain} analogies.`,
   uniqueApproach: 'Applied personal knowledge to explain complex concepts.'
 });
+
+// ============================================
+// STUDY GUIDE GENERATION
+// ============================================
+
+/**
+ * Generate a study guide outline — a full topic decomposition mapped through the user's expert domain.
+ * Phase 1 of 2: produces the outline with one-liners (fast, cheap — 1 API call).
+ * Phase 2 (expandStudyGuideConcept) expands individual sections on demand.
+ */
+export const generateStudyGuideOutline = async (
+  topic: string,
+  domain: string,
+  depth: StudyGuideDepth = 'core',
+  cachedDomainEnrichment?: CachedDomainEnrichment
+): Promise<StudyGuideOutline | null> => {
+  const shortDomain = getShortDomain(domain);
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const conceptCount = depth === 'core' ? '8-10' : '25-40';
+  const categoryInstruction = depth === 'complete'
+    ? `Group concepts into logical categories (e.g., "Core Components", "Training Loop", "Advanced Concepts"). Include a "category" field for each concept.`
+    : `Do NOT include a "category" field — just list the concepts in logical learning order.`;
+
+  const prompt = `You are a study guide architect. Your job is to decompose the technical topic "${topic}" into its sub-concepts and map EACH one to a hyper-specific element of the expert domain "${domain}".
+
+TASK: Create a study guide with ${conceptCount} concept mappings.
+
+CRITICAL RULES FOR DOMAIN REFERENCES:
+- Every analogy_term MUST be hyper-specific to "${shortDomain}" — use REAL names, REAL events, REAL scenarios
+- BAD: "The Quarterback (a football player)" — too generic
+- GOOD: "The Quarterback (Kurt Warner)" — specific real person
+- BAD: "A defensive play" — too vague
+- GOOD: "The Tampa 2 Cover Defense (Monte Kiffin's signature scheme)" — specific and real
+- The ${shortDomain} fan reading this should immediately recognize every reference
+- Each one_liner must blend BOTH the technical meaning AND the domain reference in a single punchy sentence
+
+${categoryInstruction}
+
+${needsWebSearch ? `USE WEB SEARCH to verify real names, events, and facts about "${domain}". Every domain reference must be historically accurate.` : ''}
+
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "concepts": [
+    {
+      "id": 1,
+      "tech_term": "The technical sub-concept name",
+      "analogy_term": "The specific ${shortDomain} element (with real name/event)",
+      "one_liner": "A single punchy sentence that tattoos the intuition by blending both domains"${depth === 'complete' ? ',\n      "category": "Category Name"' : ''}
+    }
+  ]
+}`;
+
+  const searchPromptText = needsWebSearch
+    ? `USE WEB SEARCH to find REAL facts about "${domain}" — specific names, events, dates, scores. Every ${shortDomain} reference must be verifiable.`
+    : undefined;
+
+  try {
+    const text = await callApi(prompt, {
+      jsonMode: true,
+      webSearch: needsWebSearch,
+      searchPrompt: searchPromptText
+    });
+    const result = safeJsonParse(text);
+
+    if (result && result.concepts && Array.isArray(result.concepts)) {
+      // Ensure each concept has an id
+      const concepts: StudyGuideConcept[] = result.concepts.map((c: any, i: number) => ({
+        id: c.id || i + 1,
+        tech_term: c.tech_term || `Concept ${i + 1}`,
+        analogy_term: c.analogy_term || shortDomain,
+        one_liner: c.one_liner || '',
+        ...(c.category ? { category: c.category } : {})
+      }));
+
+      return {
+        topic,
+        domain,
+        depth,
+        concepts,
+        generated_at: new Date().toISOString()
+      };
+    }
+
+    console.error('[generateStudyGuideOutline] Invalid response structure:', result);
+    return null;
+  } catch (error) {
+    console.error('[generateStudyGuideOutline] Failed:', error);
+    throw error; // Let the component handle the error (show message, don't count against free tier)
+  }
+};
+
+/**
+ * Expand a single study guide concept into full detail.
+ * Phase 2 of 2: triggered on-demand when user clicks to expand an accordion section.
+ */
+export const expandStudyGuideConcept = async (
+  concept: StudyGuideConcept,
+  topic: string,
+  domain: string,
+  cachedDomainEnrichment?: CachedDomainEnrichment
+): Promise<StudyGuideDetail | null> => {
+  const shortDomain = getShortDomain(domain);
+  const { domainGranularity } = detectGranularitySignals(topic, domain);
+  const needsWebSearch = domainGranularity.isGranular;
+
+  const prompt = `You are expanding a study guide entry for someone learning "${topic}" through the lens of "${domain}".
+
+CONCEPT TO EXPAND:
+- Technical term: "${concept.tech_term}"
+- Domain mapping: "${concept.analogy_term}"
+- One-liner: "${concept.one_liner}"
+
+Write 4 pieces:
+
+1. tech_explanation: 2-3 clear sentences explaining "${concept.tech_term}" technically. No jargon soup — explain it like the reader is smart but new to this.
+
+2. analogy_explanation: 2-3 sentences explaining this concept THROUGH "${concept.analogy_term}" using hyper-specific ${shortDomain} references. Use REAL names, REAL events, REAL scenarios. The ${shortDomain} fan should feel at home.
+
+3. why_it_maps: 1-2 sentences explaining the STRUCTURAL reason this mapping works. WHY does "${concept.tech_term}" behave like "${concept.analogy_term}"? What shared structure makes this click?
+
+4. key_insight: ONE memorable sentence — the "tattoo" insight that makes this concept stick forever. It should blend both domains.
+
+${needsWebSearch ? `USE WEB SEARCH to verify facts about "${domain}" — real names, real events, real stats.` : ''}
+
+Return ONLY this JSON:
+{
+  "concept_id": ${concept.id},
+  "tech_explanation": "...",
+  "analogy_explanation": "...",
+  "why_it_maps": "...",
+  "key_insight": "..."
+}`;
+
+  const searchPromptText = needsWebSearch
+    ? `Search for real facts about "${concept.analogy_term}" in the context of "${domain}".`
+    : undefined;
+
+  try {
+    const text = await callApi(prompt, {
+      jsonMode: true,
+      webSearch: needsWebSearch,
+      searchPrompt: searchPromptText
+    });
+    const result = safeJsonParse(text);
+
+    if (result) {
+      return {
+        concept_id: concept.id,
+        tech_explanation: result.tech_explanation || 'Technical explanation unavailable.',
+        analogy_explanation: result.analogy_explanation || 'Domain explanation unavailable.',
+        why_it_maps: result.why_it_maps || 'Structural mapping explanation unavailable.',
+        key_insight: result.key_insight || concept.one_liner
+      };
+    }
+
+    console.error('[expandStudyGuideConcept] Invalid response:', result);
+    return null;
+  } catch (error) {
+    console.error('[expandStudyGuideConcept] Failed:', error);
+    throw error;
+  }
+};

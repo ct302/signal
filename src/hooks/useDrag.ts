@@ -11,6 +11,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const [synthPos, setSynthPos] = useState<Position | null>(null);
   const [defSize, setDefSize] = useState<Size>({ width: 340 });
   const [miniDefSize, setMiniDefSize] = useState<Size>({ width: 280 });
+  const [synthSize, setSynthSize] = useState<Size>({ width: 512, height: 500 });
   const [miniDefPosition, setMiniDefPosition] = useState<Position | null>(null);
 
   const isDraggingRef = useRef(false);
@@ -19,7 +20,9 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const isResizingRef = useRef(false);
   const resizeTargetRef = useRef<string | null>(null);
   const resizeStartXRef = useRef(0);
+  const resizeStartYRef = useRef(0);
   const resizeStartWidthRef = useRef(0);
+  const resizeStartHeightRef = useRef(0);
 
   // Track current values in refs so the useEffect doesn't need to re-run on every change
   const defSizeRef = useRef(defSize);
@@ -47,12 +50,29 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     isResizingRef.current = true;
     resizeTargetRef.current = target;
     resizeStartXRef.current = e.clientX;
+    resizeStartYRef.current = e.clientY;
     if (target.startsWith('def')) {
-      resizeStartWidthRef.current = defSizeRef.current.width;
+      resizeStartWidthRef.current = defSize.width;
+      // If no explicit height yet, measure the current rendered element height
+      if (defSize.height) {
+        resizeStartHeightRef.current = defSize.height;
+      } else {
+        const el = (e.currentTarget as HTMLElement).closest('.def-window');
+        resizeStartHeightRef.current = el ? el.getBoundingClientRect().height : 350;
+      }
     } else if (target.startsWith('mini')) {
-      resizeStartWidthRef.current = miniDefSizeRef.current.width;
+      resizeStartWidthRef.current = miniDefSize.width;
+      resizeStartHeightRef.current = 0;
+    } else if (target.startsWith('synth')) {
+      resizeStartWidthRef.current = synthSize.width;
+      if (synthSize.height) {
+        resizeStartHeightRef.current = synthSize.height;
+      } else {
+        const el = (e.currentTarget as HTMLElement).closest('.synthesis-window');
+        resizeStartHeightRef.current = el ? el.getBoundingClientRect().height : 500;
+      }
     }
-  }, [isMobile]);
+  }, [isMobile, defSize.width, defSize.height, miniDefSize.width, synthSize.width, synthSize.height]);
 
   const handleMiniHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     if (isMobile || !(e.target as HTMLElement).closest('.header-drag-area')) return;
@@ -72,43 +92,78 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       if (isDraggingRef.current && dragTargetRef.current) {
         const newX = e.clientX - dragOffsetRef.current.x;
         const newY = e.clientY - dragOffsetRef.current.y;
+        // Clamp to viewport bounds — keep at least 100px visible vertically, 200px horizontally
+        const clampToViewport = (x: number, y: number) => ({
+          top: Math.max(0, Math.min(window.innerHeight - 100, y)),
+          left: Math.max(0, Math.min(window.innerWidth - 200, x)),
+        });
         if (dragTargetRef.current === 'def') {
-          setDefPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setDefPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'quiz') {
-          setQuizPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setQuizPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'synthesis') {
-          setSynthPos({ top: Math.max(0, newY), left: Math.max(0, newX) });
+          setSynthPos(clampToViewport(newX, newY));
         } else if (dragTargetRef.current === 'mini') {
-          setMiniDefPosition({
-            top: Math.max(0, e.clientY - dragOffsetRef.current.y),
-            left: Math.max(0, e.clientX - dragOffsetRef.current.x)
-          });
+          setMiniDefPosition(clampToViewport(
+            e.clientX - dragOffsetRef.current.x,
+            e.clientY - dragOffsetRef.current.y
+          ));
         }
       }
 
       if (isResizingRef.current && resizeTargetRef.current) {
         const deltaX = e.clientX - resizeStartXRef.current;
-        const isLeft = resizeTargetRef.current.includes('left');
-        const newWidth = isLeft
-          ? resizeStartWidthRef.current - deltaX
-          : resizeStartWidthRef.current + deltaX;
-        const clampedWidth = Math.max(200, Math.min(600, newWidth));
+        const deltaY = e.clientY - resizeStartYRef.current;
+        const target = resizeTargetRef.current;
+        const isLeft = target.includes('left');
+        const isBottom = target.includes('bottom');
+        const isCorner = target.includes('corner');
 
-        if (resizeTargetRef.current.startsWith('def')) {
-          setDefSize({ width: clampedWidth });
-          if (isLeft) {
-            const widthDelta = defSizeRef.current.width - clampedWidth;
-            setDefPos(prev =>
-              prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
-            );
+        // Horizontal resize
+        if (!isBottom || isCorner) {
+          const newWidth = isLeft
+            ? resizeStartWidthRef.current - deltaX
+            : resizeStartWidthRef.current + deltaX;
+          const clampedWidth = Math.max(200, Math.min(600, newWidth));
+
+          if (target.startsWith('def')) {
+            setDefSize(prev => ({ ...prev, width: clampedWidth }));
+            if (isLeft && defPos) {
+              const widthDelta = defSize.width - clampedWidth;
+              setDefPos(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
+          } else if (target.startsWith('mini')) {
+            setMiniDefSize({ width: clampedWidth });
+            if (isLeft && miniDefPosition) {
+              const widthDelta = miniDefSize.width - clampedWidth;
+              setMiniDefPosition(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
+          } else if (target.startsWith('synth')) {
+            const synthClampedWidth = Math.max(300, Math.min(800, newWidth));
+            setSynthSize(prev => ({ ...prev, width: synthClampedWidth }));
+            if (isLeft && synthPos) {
+              const widthDelta = synthSize.width - synthClampedWidth;
+              setSynthPos(prev =>
+                prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
+              );
+            }
           }
-        } else if (resizeTargetRef.current.startsWith('mini')) {
-          setMiniDefSize({ width: clampedWidth });
-          if (isLeft) {
-            const widthDelta = miniDefSizeRef.current.width - clampedWidth;
-            setMiniDefPosition(prev =>
-              prev ? { ...prev, left: (typeof prev.left === 'number' ? prev.left : 0) + widthDelta } : null
-            );
+        }
+
+        // Vertical resize (bottom or corner)
+        if (isBottom || isCorner) {
+          if (target.startsWith('def')) {
+            const newHeight = resizeStartHeightRef.current + deltaY;
+            const clampedHeight = Math.max(200, Math.min(window.innerHeight * 0.85, newHeight));
+            setDefSize(prev => ({ ...prev, height: clampedHeight }));
+          } else if (target.startsWith('synth')) {
+            const newHeight = resizeStartHeightRef.current + deltaY;
+            const clampedHeight = Math.max(250, Math.min(window.innerHeight * 0.85, newHeight));
+            setSynthSize(prev => ({ ...prev, height: clampedHeight }));
           }
         }
       }
@@ -127,7 +182,7 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []); // Empty deps - listeners registered once, use refs for current values
+  }, [defSize.width, defSize.height, miniDefSize.width, defPos, miniDefPosition, synthSize.width, synthSize.height, synthPos]);
 
   return {
     defPos,
@@ -140,6 +195,8 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
     setDefSize,
     miniDefSize,
     setMiniDefSize,
+    synthSize,
+    setSynthSize,
     miniDefPosition,
     setMiniDefPosition,
     startDrag,

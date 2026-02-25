@@ -1,20 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles } from 'lucide-react';
+import { X, Columns, Zap, ChevronRight, Lightbulb, BookOpen, Sparkles, Loader2 } from 'lucide-react';
 import { ConceptMapItem, ImportanceMapItem } from '../types';
-
-// Mobile detection hook
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  return isMobile;
-};
+import { useMobile } from '../hooks/useMobile';
 
 type MobilePane = 'tech' | 'connection' | 'analogy';
 
@@ -134,11 +121,41 @@ const generateIsomorphicInsight = (
   return { structural, transferTip };
 };
 
+// Extract a short structural label from causal_explanation for bridge display
+const extractBridgeLabel = (
+  causalExplanation: string,
+  techTerm: string,
+  analogyTerm: string,
+  importance: number,
+  index: number
+): string => {
+  if (causalExplanation) {
+    // Try to get first clause (before " — ", " - ", ", ", or first sentence)
+    const cleaned = causalExplanation
+      .replace(/^(both|they|this|it|the)\s+/i, '') // Strip weak openers
+      .replace(/["""]/g, '');
+    const clause = cleaned.split(/\s*[—–\-]\s*|\.\s+|,\s+/)[0]?.trim();
+    if (clause && clause.length > 5 && clause.length < 60) {
+      // Capitalize first letter
+      return clause.charAt(0).toUpperCase() + clause.slice(1);
+    }
+  }
+  // Fallback based on importance tier
+  const labels = importance > 0.7
+    ? ['Same core mechanic', 'Structural equivalent', 'Identical architecture', 'Parallel systems']
+    : importance > 0.4
+      ? ['Same organizing principle', 'Shared pattern', 'Parallel logic', 'Common framework']
+      : ['Same vocabulary', 'Matching intuition', 'Shared concept', 'Parallel idea'];
+  return labels[index % labels.length];
+};
+
 interface IsomorphicDualPaneProps {
   conceptMap: ConceptMapItem[];
   importanceMap: ImportanceMapItem[];
   isDarkMode: boolean;
   analogyDomain: string;
+  domainEmoji?: string;
+  isEnrichmentLoading?: boolean;
   onClose: () => void;
 }
 
@@ -182,6 +199,8 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   importanceMap,
   isDarkMode,
   analogyDomain,
+  domainEmoji = '',
+  isEnrichmentLoading = false,
   onClose
 }) => {
   const [selectedConcept, setSelectedConcept] = useState<number | null>(null);
@@ -190,7 +209,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   const [scrollHighlight, setScrollHighlight] = useState<number | null>(null);
 
   // Mobile responsive state
-  const isMobile = useIsMobile();
+  const isMobile = useMobile();
   const [mobileActivePane, setMobileActivePane] = useState<MobilePane>('tech');
 
   // Auto-switch to connection tab when concept is selected on mobile
@@ -255,7 +274,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
   }, [activeConcept]);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col">
+    <div className="fixed inset-0 z-[80] bg-black/95 flex flex-col signal-font">
       {/* Header */}
       <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-neutral-700 bg-neutral-900">
         <div className="flex items-center gap-3 md:gap-4">
@@ -312,7 +331,22 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
       {/* Main Content */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        {/* Desktop: Three Column Layout | Mobile: Single Pane */}
+        {conceptMap.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center">
+            {isEnrichmentLoading ? (
+              <>
+                <Loader2 className="animate-spin mb-4 text-blue-400" size={32} />
+                <p className="text-sm font-medium text-neutral-300">Loading concept mappings...</p>
+                <p className="text-xs mt-1 text-neutral-500">Building isomorphic connections</p>
+              </>
+            ) : (
+              <>
+                <Columns className="mb-4 text-neutral-600" size={32} />
+                <p className="text-sm text-neutral-500">No concept data available</p>
+              </>
+            )}
+          </div>
+        ) : (
         <div className="h-full flex">
           {/* Left Column - Technical Terms */}
           <div className={`
@@ -416,33 +450,78 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                         </div>
                       )}
 
-                      {/* Pulsing connection indicator */}
-                      <div className="text-center">
-                        <div
-                          className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center animate-pulse"
-                          style={{ backgroundColor: color + '30', boxShadow: `0 0 25px ${color}40` }}
-                        >
-                          <Zap size={24} style={{ color }} />
-                        </div>
+                      {/* Structure Bridge Diagram */}
+                      {(() => {
+                        const bridgeLabel = extractBridgeLabel(concept.causal_explanation || '', techTerm, analogyTerm, importance, index);
+                        const importancePct = Math.round(importance * 100);
+                        return (
+                          <div className="bridge-stagger">
+                            {/* Two-node bridge layout */}
+                            <div className="flex items-stretch gap-0 my-2">
+                              {/* Tech Node */}
+                              <div
+                                className={`flex-1 rounded-xl p-3 border-l-4 bridge-node-left ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
+                                style={{ borderLeftColor: color, boxShadow: `0 0 12px ${color}15` }}
+                              >
+                                <p className="text-base font-semibold" style={{ color }}>{techTerm}</p>
+                                {sixWordDef && (
+                                  <p className={`text-sm italic mt-1 leading-snug ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    "{sixWordDef}"
+                                  </p>
+                                )}
+                                {/* Mini importance ring */}
+                                <div className="flex items-center gap-1.5 mt-2">
+                                  <div
+                                    className="w-5 h-5 rounded-full flex-shrink-0"
+                                    style={{
+                                      background: `conic-gradient(${color} ${importance * 360}deg, ${isDarkMode ? '#404040' : '#e5e5e5'} ${importance * 360}deg)`
+                                    }}
+                                  >
+                                    <div className={`w-3 h-3 rounded-full m-1 ${isDarkMode ? 'bg-neutral-800' : 'bg-white'}`} />
+                                  </div>
+                                  <span className={`text-sm font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>{importancePct}%</span>
+                                </div>
+                              </div>
 
-                        <p className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                          maps to
-                        </p>
+                              {/* Bridge connector */}
+                              <div className="flex flex-col items-center justify-center w-10 flex-shrink-0 bridge-node-center">
+                                <div className="flex-1 w-px" style={{ borderLeft: `2px dashed ${color}40` }} />
+                                <div
+                                  className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse"
+                                  style={{ backgroundColor: color + '25', boxShadow: `0 0 12px ${color}30` }}
+                                >
+                                  <Zap size={13} style={{ color }} />
+                                </div>
+                                <div className="flex-1 w-px" style={{ borderLeft: `2px dashed ${color}40` }} />
+                              </div>
 
-                        {/* Importance bar */}
-                        <div className="mt-3 px-4 max-w-[180px] mx-auto">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>Importance</span>
-                            <span style={{ color }} className="font-bold">{Math.round(importance * 100)}%</span>
+                              {/* Analogy Node */}
+                              <div
+                                className={`flex-1 rounded-xl p-3 border-r-4 bridge-node-right ${isDarkMode ? 'bg-neutral-800/70' : 'bg-white'}`}
+                                style={{ borderRightColor: color, boxShadow: `0 0 12px ${color}15` }}
+                              >
+                                <p className="text-base font-semibold" style={{ color }}>
+                                  {domainEmoji && <span className="mr-1">{domainEmoji}</span>}
+                                  {analogyTerm}
+                                </p>
+                                <p className={`text-sm mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                  maps to {techTerm}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Bridge label pill */}
+                            <div className="text-center -mt-1 mb-1">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bridge-node-label ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-100 border border-neutral-200'}`}
+                              >
+                                <Sparkles size={10} style={{ color }} />
+                                <span className={isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}>{bridgeLabel}</span>
+                              </span>
+                            </div>
                           </div>
-                          <div className={`h-1.5 rounded-full ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-200'}`}>
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{ width: `${importance * 100}%`, backgroundColor: color }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Expanded Content - Only when concept is clicked/selected */}
                       {isExpanded && (
@@ -451,11 +530,11 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                           <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-neutral-700' : 'bg-gradient-to-br from-amber-50 to-blue-50 border border-neutral-200'}`}>
                             <div className="flex items-center gap-2 mb-3">
                               <BookOpen size={16} style={{ color }} />
-                              <h4 className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              <h4 className={`font-semibold text-base ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
                                 The Connection
                               </h4>
                             </div>
-                            <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                            <p className={`text-base leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                               {narrativeMapping || generateBridgeNarrative(techTerm, analogyTerm, analogyDomain, index)}
                             </p>
                           </div>
@@ -468,14 +547,14 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                                 {/* Structural insight - WHY it works */}
                                 <div className="flex items-start gap-2">
                                   <Lightbulb size={14} style={{ color }} className="mt-0.5 flex-shrink-0" />
-                                  <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                                     {structural}
                                   </p>
                                 </div>
                                 {/* Transfer tip - actionable memory hook */}
                                 <div className={`flex items-start gap-2 pt-2 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-100'}`}>
                                   <Zap size={12} style={{ color }} className="mt-0.5 flex-shrink-0 opacity-70" />
-                                  <p className={`text-xs italic leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                  <p className={`text-sm italic leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                                     {transferTip}
                                   </p>
                                 </div>
@@ -487,7 +566,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
                           <div className="text-center">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: color + '20' }}>
                               <Sparkles size={12} style={{ color }} />
-                              <span className={`text-xs font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
                                 {analogyTerm} = {techTerm}
                               </span>
                             </div>
@@ -497,7 +576,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
 
                       {/* Click hint when hovering but not selected */}
                       {!isExpanded && (
-                        <p className={`text-xs mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                        <p className={`text-sm mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                           Click to explore the connection
                         </p>
                       )}
@@ -580,6 +659,7 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -630,6 +710,18 @@ export const IsomorphicDualPane: React.FC<IsomorphicDualPaneProps> = ({
         }
         .hover\\:scale-102:hover {
           transform: scale(1.02);
+        }
+        .bridge-stagger .bridge-node-left {
+          animation: fadeIn 0.3s ease-out both;
+        }
+        .bridge-stagger .bridge-node-center {
+          animation: fadeIn 0.3s ease-out 0.1s both;
+        }
+        .bridge-stagger .bridge-node-right {
+          animation: fadeIn 0.3s ease-out 0.2s both;
+        }
+        .bridge-stagger .bridge-node-label {
+          animation: fadeIn 0.3s ease-out 0.25s both;
         }
       `}</style>
     </div>

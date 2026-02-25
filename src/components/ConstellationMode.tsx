@@ -1,19 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb } from 'lucide-react';
-
-// Mobile detection hook
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  return isMobile;
-};
+import { X, ArrowRight, Sparkles, BookOpen, ChevronRight, Layers, Maximize2, Minimize2, ChevronDown, ChevronUp, Atom, Lightbulb, Loader2 } from 'lucide-react';
+import { useMobile } from '../hooks/useMobile';
 
 interface ConceptMapItem {
   id: number;
@@ -42,6 +29,7 @@ interface ConstellationModeProps {
   onClose: () => void;
   domainName?: string;
   topicName?: string;
+  isEnrichmentLoading?: boolean;
   renderRichText?: (text: string, colorClass?: string) => React.ReactNode;
   onFetchFoundationalMapping?: (
     techTerm: string,
@@ -203,6 +191,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   onClose,
   domainName = 'Your Expertise',
   topicName = 'New Topic',
+  isEnrichmentLoading = false,
   renderRichText,
   onFetchFoundationalMapping
 }) => {
@@ -212,12 +201,13 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showCausalMechanics, setShowCausalMechanics] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const explanationContentRef = useRef<HTMLDivElement>(null);
 
   // Foundational mapping cache (pre-generated on mount)
   const [foundationalMappingCache, setFoundationalMappingCache] = useState<Map<number, string>>(new Map());
 
   // Mobile responsive
-  const isMobile = useIsMobile();
+  const isMobile = useMobile();
 
   // Get importance for a concept
   const getConceptImportance = useCallback((concept: ConceptMapItem): number => {
@@ -272,6 +262,27 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, isFullScreen]);
 
+  // Auto-scroll Deep Dive content to top when concept changes
+  useEffect(() => {
+    if (selectedConcept !== null && explanationContentRef.current) {
+      explanationContentRef.current.scrollTo({ top: 0 });
+    }
+  }, [selectedConcept]);
+
+  // Hide body scrollbar while Knowledge Bridge overlay is mounted
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Auto-expand Causal Mechanics when entering fullscreen on desktop
+  useEffect(() => {
+    if (isFullScreen && !isMobile) {
+      setShowCausalMechanics(true);
+    }
+  }, [isFullScreen, isMobile]);
+
   // Pre-generate foundational mappings for ALL concepts on mount
   useEffect(() => {
     if (!onFetchFoundationalMapping || conceptData.length === 0) return;
@@ -308,7 +319,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
   }, [onFetchFoundationalMapping, domainName, topicName]);
 
   return (
-    <div className={`fixed inset-0 z-[80] flex flex-col ${
+    <div className={`fixed inset-0 z-[80] flex flex-col signal-font ${
       isDarkMode
         ? 'bg-gradient-to-br from-neutral-800 via-neutral-850 to-neutral-900'
         : 'bg-gradient-to-br from-slate-50 via-neutral-100 to-blue-50'
@@ -338,7 +349,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               {getShortName(topicName)}
             </span>
           </div>
-          <span className={`hidden md:inline text-sm ml-4 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+          <span className={`text-xs md:text-sm ml-2 md:ml-4 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
             {conceptMap.length} concept mappings
           </span>
         </div>
@@ -385,6 +396,22 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
           </div>
 
           {/* Concept Bridges */}
+          {conceptMap.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 md:py-24">
+              {isEnrichmentLoading ? (
+                <>
+                  <Loader2 className={`animate-spin mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-500'}`} size={32} />
+                  <p className={`text-sm font-medium ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>Loading concept bridges...</p>
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Mapping connections between domains</p>
+                </>
+              ) : (
+                <>
+                  <Layers className={`mb-4 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-300'}`} size={32} />
+                  <p className={`text-sm ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>No concept data available</p>
+                </>
+              )}
+            </div>
+          ) : (
           <div className="space-y-3 md:space-y-4">
             {conceptData.map((data) => {
               const isSelected = selectedConcept === data.concept.id;
@@ -405,7 +432,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   {/* Left Pill (Analogy/Expertise) */}
                   <div
                     className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
-                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102 active:scale-95'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(251, 191, 36, 0.15)' : 'rgba(251, 191, 36, 0.2)'),
@@ -413,7 +440,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${
+                    <span className={`font-semibold text-sm md:text-base truncate block ${
                       isActive
                         ? (isDarkMode ? 'text-white' : 'text-neutral-900')
                         : (isDarkMode ? 'text-amber-100' : 'text-amber-800')
@@ -436,8 +463,8 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       }}
                     />
 
-                    {/* Animated dot on hover - desktop only */}
-                    {isHovered && !isMobile && (
+                    {/* Animated dot on hover (desktop) or selected (mobile) */}
+                    {((isHovered && !isMobile) || (isSelected && isMobile)) && (
                       <div
                         className="absolute w-2 h-2 rounded-full animate-bridge-flow z-10"
                         style={{ backgroundColor: data.color, boxShadow: `0 0 8px ${data.color}` }}
@@ -459,7 +486,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   {/* Right Pill (Tech/Learning) */}
                   <div
                     className={`flex-shrink-0 px-3 md:px-5 py-2 md:py-3 rounded-xl cursor-pointer transition-all duration-300 max-w-[38%] md:max-w-[40%] min-h-touch ${
-                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102'
+                      isActive ? 'scale-105 md:scale-105' : 'hover:scale-102 active:scale-95'
                     }`}
                     style={{
                       backgroundColor: isActive ? data.color + '35' : (isDarkMode ? 'rgba(96, 165, 250, 0.15)' : 'rgba(59, 130, 246, 0.15)'),
@@ -467,7 +494,7 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                       boxShadow: isActive ? `0 4px 20px ${data.color}50` : undefined
                     }}
                   >
-                    <span className={`font-semibold text-sm md:text-base ${
+                    <span className={`font-semibold text-sm md:text-base truncate block ${
                       isActive
                         ? (isDarkMode ? 'text-white' : 'text-neutral-900')
                         : (isDarkMode ? 'text-blue-100' : 'text-blue-800')
@@ -479,17 +506,26 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
               );
             })}
           </div>
+          )}
         </div>
+        )}
+
+        {/* Mobile backdrop for Deep Dive */}
+        {isMobile && showExplanation && selectedConceptData && (
+          <div
+            className="fixed inset-0 bg-black/40 z-[85]"
+            onClick={() => setShowExplanation(false)}
+          />
         )}
 
         {/* Explanation Panel - Desktop: Side Panel | Mobile: Bottom Sheet */}
         {showExplanation && selectedConceptData && (
           <div className={`
             ${isMobile
-              ? 'fixed bottom-0 left-0 right-0 h-[60vh] rounded-t-2xl animate-slide-up z-[90]'
+              ? 'fixed bottom-0 left-0 right-0 h-[92vh] rounded-t-2xl animate-slide-up z-[90] pb-safe-bottom'
               : (isFullScreen ? 'w-full' : 'w-1/3 border-l')
             }
-            ${isDarkMode ? 'border-neutral-600 bg-neutral-800/98' : 'border-neutral-200 bg-white/98'}
+            ${isDarkMode ? 'border-neutral-600 bg-neutral-800' : 'border-neutral-200 bg-white'}
             ${isFullScreen && !isMobile ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-300
           `}>
             {/* Mobile Drag Handle */}
@@ -552,9 +588,9 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
             </div>
 
             {/* Concept Comparison - Scrollable content area */}
-            <div className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
-              isMobile ? 'max-h-[calc(60vh-80px)]' : 'max-h-[calc(100vh-140px)]'
-            } ${isFullScreen && !isMobile ? 'max-w-6xl mx-auto px-8' : ''}`}>
+            <div ref={explanationContentRef} className={`p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto pb-safe ${
+              isMobile ? 'max-h-[calc(92vh-80px)]' : 'max-h-[calc(100vh-140px)]'
+            } ${isFullScreen && !isMobile ? 'max-w-[92vw] mx-auto px-5' : ''}`}>
               {/* Expertise Term */}
               <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-amber-900/30 border border-amber-700/60' : 'bg-amber-50 border border-amber-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -716,11 +752,92 @@ export const ConstellationMode: React.FC<ConstellationModeProps> = ({
                   </button>
                   {showCausalMechanics && (
                     <div className={`p-4 border-t ${isDarkMode ? 'bg-neutral-800/50 border-neutral-600' : 'bg-white border-neutral-200'}`}>
+                      {/* Causal explanation text */}
                       <div className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
                         {renderRichText
                           ? renderRichText(selectedConceptData.concept.causal_explanation || '', isDarkMode ? 'text-neutral-300' : 'text-neutral-700')
                           : selectedConceptData.concept.causal_explanation
                         }
+                      </div>
+
+                      {/* Isomorphic Mapping State Machine Diagram */}
+                      <div className={`mt-4 pt-4 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                        <div className={`text-[10px] font-medium uppercase tracking-wider mb-3 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          Structural Mapping
+                        </div>
+                        <div className="flex items-center gap-2 md:gap-3">
+                          {/* Source State Node — What You Know */}
+                          <div
+                            className={`flex-1 rounded-xl p-3 border-2 text-center transition-colors ${
+                              isDarkMode ? 'bg-neutral-700/40' : 'bg-amber-50/80'
+                            }`}
+                            style={{ borderColor: selectedConceptData.color + '50' }}
+                          >
+                            <div className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+                              isDarkMode ? 'text-amber-400/70' : 'text-amber-600/70'
+                            }`}>
+                              What You Know
+                            </div>
+                            <div className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              {cleanLabel(selectedConceptData.concept.analogy_term)}
+                            </div>
+                            <div className={`text-[10px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                              {getShortName(domainName || 'Domain')}
+                            </div>
+                          </div>
+
+                          {/* Arrow with relationship label */}
+                          <div className="flex flex-col items-center gap-1 flex-shrink-0 min-w-[60px] md:min-w-[100px]">
+                            <div
+                              className="w-full h-px"
+                              style={{ backgroundColor: selectedConceptData.color + '50' }}
+                            />
+                            <div
+                              className="px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap"
+                              style={{
+                                backgroundColor: selectedConceptData.color + '15',
+                                color: selectedConceptData.color
+                              }}
+                            >
+                              {selectedConceptData.relationshipLabel}
+                            </div>
+                            <div className="relative w-full">
+                              <div
+                                className="w-full h-px"
+                                style={{ backgroundColor: selectedConceptData.color + '50' }}
+                              />
+                              {/* CSS triangle arrowhead */}
+                              <div
+                                className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0"
+                                style={{
+                                  borderTop: '4px solid transparent',
+                                  borderBottom: '4px solid transparent',
+                                  borderLeft: `6px solid ${selectedConceptData.color}`
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Target State Node — What You're Learning */}
+                          <div
+                            className={`flex-1 rounded-xl p-3 border-2 text-center transition-colors ${
+                              isDarkMode ? 'bg-neutral-700/40' : 'bg-blue-50/80'
+                            }`}
+                            style={{ borderColor: selectedConceptData.color + '50' }}
+                          >
+                            <div className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+                              isDarkMode ? 'text-blue-400/70' : 'text-blue-600/70'
+                            }`}>
+                              What You're Learning
+                            </div>
+                            <div className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                              {cleanLabel(selectedConceptData.concept.tech_term)}
+                            </div>
+                            <div className={`text-[10px] mt-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                              {getShortName(topicName || 'Topic')}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

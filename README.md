@@ -94,15 +94,6 @@ Each mapping includes definitions, narrative context, and structural justificati
 
 ---
 
-## Deployment
-
-### Vercel (Recommended)
-
-1. Push to GitHub
-2. Import repo at [vercel.com](https://vercel.com)
-3. Deploy
-
-Users will need to provide their own OpenRouter API key in the app settings.
 
 ### Local LLM Support
 

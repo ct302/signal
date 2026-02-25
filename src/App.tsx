@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Eye,
   Zap,
@@ -36,7 +36,12 @@ import {
   ChevronDown,
   Minus,
   GripHorizontal,
-  Lightbulb
+  Lightbulb,
+  Sun,
+  Moon,
+  Search,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 // Types
@@ -60,7 +65,9 @@ import {
   ProximityResult,
   CompleteMasteryHistory,
   CachedDomainEnrichment,
-  SymbolGuideEntry
+  SymbolGuideEntry,
+  StudyGuideOutline,
+  FontPreset
 } from './types';
 
 // Constants
@@ -68,21 +75,27 @@ import {
   STOP_WORDS,
   LATEX_REGEX,
   CONCEPT_COLORS,
+  CONCEPT_COLORS_DARK,
   CONCEPT_BG_COLORS,
+  CONCEPT_BG_COLORS_DARK,
   MAX_TUTOR_HISTORY,
-  QUICK_START_DOMAINS,
-  SYMBOL_GLOSSARY
+  ALL_QUICK_START_DOMAINS,
+  SYMBOL_GLOSSARY,
+  FONT_PRESETS,
+  STORAGE_KEYS
 } from './constants';
 
 // Utils
-import { cleanText, fixUnicode, wrapBareLatex, sanitizeLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences } from './utils';
+import { cleanText, cleanProseArtifacts, fixUnicode, wrapBareLatex, sanitizeLatex, convertUnicodeToLatex, findContext, stripMathSymbols, ApiError, unescapeControlSequences, stemWord, ensureFormulaDelimiters, fuzzyScore } from './utils';
 
 // Hooks
-import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition } from './hooks';
+import { useMobile, useKatex, useDrag, useHistory, useSpeechRecognition, useBottomSheetDrag } from './hooks';
 
 // Services
 import {
   generateAnalogy,
+  generateAnalogyCore,
+  generateAnalogyEnrichment,
   checkAmbiguity,
   checkDomainProximity,
   fetchDefinition as fetchDefinitionApi,
@@ -93,7 +106,8 @@ import {
   getFreeTierState,
   subscribeToFreeTier,
   isOnFreeTier,
-  FreeTierExhaustedError
+  FreeTierExhaustedError,
+  generateSemanticColorMap,
 } from './services';
 
 // Components
@@ -112,7 +126,10 @@ import {
   ProximityWarningModal,
   MasteryMode,
   MasterySessionCache,
-  SkeletonLoader
+  StudyGuide,
+  SkeletonLoader,
+  FontPicker,
+  Settings
 } from './components';
 
 // Greek and Math Symbol Lookup Table - Technical meanings for hybrid definitions
@@ -222,8 +239,10 @@ export default function App() {
     setDefPos,
     quizPos,
     synthPos,
+    setSynthPos,
     defSize,
     miniDefSize,
+    synthSize,
     miniDefPosition,
     setMiniDefPosition,
     startDrag,
@@ -237,11 +256,38 @@ export default function App() {
     stopListening,
     isBrowserSupported: isMicSupported
   } = useSpeechRecognition();
+  const {
+    isListening: isAskListening,
+    transcript: askTranscript,
+    startListening: startAskListening,
+    stopListening: stopAskListening,
+    isBrowserSupported: isAskMicSupported
+  } = useSpeechRecognition();
+  const {
+    isListening: isDomainListening,
+    transcript: domainTranscript,
+    startListening: startDomainListening,
+    stopListening: stopDomainListening,
+    isBrowserSupported: isDomainMicSupported
+  } = useSpeechRecognition();
+
+  // Synthesis modal touch drag handlers (mobile)
+  const synthTouchRef = useRef<{ startY: number; startTop: number }>({ startY: 0, startTop: 0 });
+  const handleSynthTouchStart = useCallback((e: React.TouchEvent) => {
+    synthTouchRef.current.startY = e.touches[0].clientY;
+    synthTouchRef.current.startTop = typeof synthPos?.top === 'number' ? synthPos.top : window.innerHeight * 0.2;
+  }, [synthPos]);
+  const handleSynthTouchMove = useCallback((e: React.TouchEvent) => {
+    const delta = e.touches[0].clientY - synthTouchRef.current.startY;
+    const newTop = Math.max(10, synthTouchRef.current.startTop + delta);
+    setSynthPos(prev => prev ? { ...prev, top: newTop } : { top: newTop, left: 0 });
+  }, [setSynthPos]);
+  const handleSynthTouchEnd = useCallback(() => {}, []);
 
   // Domain State
   const [analogyDomain, setAnalogyDomain] = useState("NFL");
   const [tempDomainInput, setTempDomainInput] = useState("");
-  const [domainEmoji, setDomainEmoji] = useState("🏈");
+  const [domainEmoji, setDomainEmoji] = useState("🧠");
   const [hasSelectedDomain, setHasSelectedDomain] = useState(false);
   const [isSettingDomain, setIsSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
@@ -258,19 +304,44 @@ export default function App() {
     }
   }, [transcript]);
 
+  // Voice input: auto-populate Ask follow-up when speech recognition completes
+  useEffect(() => {
+    if (askTranscript) {
+      setFollowUpQuery(askTranscript);
+    }
+  }, [askTranscript]);
+
+  // Voice input: auto-populate domain input when speech recognition completes
+  useEffect(() => {
+    if (domainTranscript) {
+      setTempDomainInput(domainTranscript);
+    }
+  }, [domainTranscript]);
+
   // Content State
   const [segments, setSegments] = useState<Segment[]>([]);
   const [conceptMap, setConceptMap] = useState<ConceptMapItem[]>([]);
   const [importanceMap, setImportanceMap] = useState<ImportanceMapItem[]>([]);
   const [attentionMap, setAttentionMap] = useState<AttentionMap | null>(null);
   const [entityLookup, setEntityLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
+  const [conceptLookup, setConceptLookup] = useState<{ tech: EntityWordLookup; analogy: EntityWordLookup } | null>(null);
+  const [multiWordPhraseLookup, setMultiWordPhraseLookup] = useState<{ tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } | null>(null);
+  const [semanticColorMap, setSemanticColorMap] = useState<{ tech: Map<string, number>; analogy: Map<string, number> } | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
+  const [techProcessedWords, setTechProcessedWords] = useState<ProcessedWord[]>([]);
+  const [analogyProcessedWords, setAnalogyProcessedWords] = useState<ProcessedWord[]>([]);
   const [contextData, setContextData] = useState<ContextData | null>(null);
   const [condensedData, setCondensedData] = useState<CondensedData | null>(null);
+  const [synthesisOneLiner, setSynthesisOneLiner] = useState("");
   const [synthesisSummary, setSynthesisSummary] = useState("");
+  const [synthesisDeep, setSynthesisDeep] = useState("");
   const [synthesisCitation, setSynthesisCitation] = useState("");
+  const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(false);
   const [symbolGuide, setSymbolGuide] = useState<SymbolGuideEntry[]>([]);
   const [defSymbolGuide, setDefSymbolGuide] = useState<SymbolGuideEntry[]>([]);
+  const [defDomainIntuition, setDefDomainIntuition] = useState<string | null>(null);
+  const [defTitle, setDefTitle] = useState<string | null>(null);
+  const [miniDefTitle, setMiniDefTitle] = useState<string | null>(null);
   const [technicalExplanation, setTechnicalExplanation] = useState<string>(""); // Full 250+ word technical explanation
   const [analogyExplanation, setAnalogyExplanation] = useState<string>(""); // Full 250+ word analogy explanation
 
@@ -296,8 +367,10 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'morph' | 'nfl' | 'tech'>('morph');
   const [mode, setMode] = useState<'opacity' | 'size' | 'heatmap'>('opacity');
   const [threshold, setThreshold] = useState(0.3);
+  const [isAttentionMeterCollapsed, setIsAttentionMeterCollapsed] = useState(true);
   const [isIsomorphicMode, setIsIsomorphicMode] = useState(true);
   const [isBulletMode, setIsBulletMode] = useState(false); // Bullet point mode for Tech Lock
+  const [activeBulletIndex, setActiveBulletIndex] = useState<number | null>(null); // Bullet analogy tooltip
   const [isNarrativeMode, setIsNarrativeMode] = useState(false);
   const [textScale, setTextScale] = useState<1 | 1.25 | 1.5 | 2>(1); // Text scale multiplier
 
@@ -309,6 +382,36 @@ export default function App() {
   const [isLoadingDef, setIsLoadingDef] = useState(false);
   const [defThreshold, setDefThreshold] = useState(0.3);
   const [isDefColorMode, setIsDefColorMode] = useState(false);
+
+  // Mobile word search (replaces press-and-hold touch-to-define)
+  const [isWordSearchOpen, setIsWordSearchOpen] = useState(false);
+  const [wordSearchQuery, setWordSearchQuery] = useState('');
+  const [wordSearchResults, setWordSearchResults] = useState<string[]>([]);
+  const wordSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Bottom sheet drag for Definition Popup (mobile)
+  const defSheet = useBottomSheetDrag({
+    initialHeight: 60,
+    minHeight: 25,
+    maxHeight: 90,
+    dismissThreshold: 20,
+    onDismiss: () => {
+      setDefPosition(null);
+      setSelectedTerm(null);
+      setMiniDefPosition(null);
+    },
+    snapPoints: [40, 60, 85],
+  });
+
+  // Reset definition sheet height only on FIRST open (null → value), not on every term change
+  const prevSelectedTermRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedTerm && !prevSelectedTermRef.current) {
+      defSheet.setSheetHeight(60);
+    }
+    prevSelectedTermRef.current = selectedTerm;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTerm]);
 
   // Mini Definition State
   const [miniSelectedTerm, setMiniSelectedTerm] = useState<string | null>(null);
@@ -358,6 +461,26 @@ export default function App() {
   const [isDraggingSymbolGuide, setIsDraggingSymbolGuide] = useState(false);
   const symbolGuideDragStart = useRef({ x: 0, y: 0 });
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+
+  // Bottom sheet drag for Symbol Guide (mobile)
+  const symbolSheet = useBottomSheetDrag({
+    initialHeight: 70,
+    minHeight: 25,
+    maxHeight: 85,
+    dismissThreshold: 20,
+    onDismiss: () => {
+      setShowSymbolGlossary(false);
+      setSymbolGuidePos({ x: 0, y: 0 });
+      setIsSymbolGuideMinimized(false);
+    },
+    snapPoints: [40, 70, 85],
+  });
+
+  // Reset symbol guide sheet height when it opens
+  useEffect(() => {
+    if (showSymbolGlossary) symbolSheet.setSheetHeight(70);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSymbolGlossary]);
 
   // Free Tier State
   const [freeTierRemaining, setFreeTierRemaining] = useState<number | null>(null);
@@ -436,10 +559,51 @@ export default function App() {
   const [selectedMasteryEntry, setSelectedMasteryEntry] = useState<CompleteMasteryHistory | null>(null);
   const [masterySessionCache, setMasterySessionCache] = useState<MasterySessionCache | null>(null);
   const [showIntuitionModal, setShowIntuitionModal] = useState(false); // Intuition Mode modal
+  const [isStudyGuideMode, setIsStudyGuideMode] = useState(false);
+  const [studyGuideCache, setStudyGuideCache] = useState<StudyGuideOutline | null>(null);
+
+  // Font Preset State
+  const [fontPreset, setFontPreset] = useState<FontPreset>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.FONT_PRESET);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const found = FONT_PRESETS.find(p => p.id === parsed.id);
+        if (found) return found;
+      }
+    } catch { /* ignore */ }
+    return FONT_PRESETS[0];
+  });
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
+
+  // Font persistence, CSS variables, and Google Font loading
+  useEffect(() => {
+    // Persist selection
+    localStorage.setItem(STORAGE_KEYS.FONT_PRESET, JSON.stringify({ id: fontPreset.id }));
+    // Set CSS custom properties for global font inheritance (used by .signal-font class)
+    document.documentElement.style.setProperty('--signal-font-family', fontPreset.fontFamily);
+    document.documentElement.style.setProperty('--signal-letter-spacing', fontPreset.letterSpacing);
+    // Load Google Font CSS if needed
+    if (fontPreset.googleFontUrl) {
+      const existingLink = document.getElementById('signal-custom-font') as HTMLLinkElement;
+      if (existingLink) {
+        existingLink.href = fontPreset.googleFontUrl;
+      } else {
+        const link = document.createElement('link');
+        link.id = 'signal-custom-font';
+        link.rel = 'stylesheet';
+        link.href = fontPreset.googleFontUrl;
+        document.head.appendChild(link);
+      }
+    }
+  }, [fontPreset]);
 
   // Disambiguation State
   const [disambiguation, setDisambiguation] = useState<DisambiguationData | null>(null);
   const [isDisambiguating, setIsDisambiguating] = useState(false);
+  // Cache last disambiguation result so cancel + re-search shows it again (LLM is non-deterministic)
+  const disambiguationCacheRef = useRef<{ topic: string; data: DisambiguationData } | null>(null);
 
   // Proximity Warning State
   const [proximityWarning, setProximityWarning] = useState<{ topic: string; result: ProximityResult } | null>(null);
@@ -457,6 +621,7 @@ export default function App() {
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const attentionMeterRef = useRef<HTMLDivElement>(null);
   const controlsPanelRef = useRef<HTMLDivElement>(null);
   const controlsButtonRef = useRef<HTMLButtonElement>(null);
   const historyPanelRef = useRef<HTMLDivElement>(null);
@@ -464,7 +629,8 @@ export default function App() {
   const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const condensedMorphTimerRef = useRef<NodeJS.Timeout | null>(null);
   const extendedLoadingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const definitionCacheRef = useRef<Map<string, { definition: string; symbol_guide: any[] }>>(new Map());
+  const tutorResponseRef = useRef<HTMLDivElement>(null);
+  const followUpContainerRef = useRef<HTMLDivElement>(null);
 
   // Extended loading indicator - shows after 5 seconds of loading
   useEffect(() => {
@@ -491,6 +657,199 @@ export default function App() {
   // Computed values
   const isAnalogyVisualMode = viewMode === 'nfl' || (viewMode === 'morph' && isHovering);
 
+  /** Strip leading/trailing punctuation for word-level lookups.
+   *  Text tokens from split(/\s+/) retain punctuation ("matrix," "decomposition.") but
+   *  concept lookup keys are stored without punctuation. This normalizes before lookup. */
+  const stripWordPunctuation = (word: string): string =>
+    word.replace(/[.,!?;:'")\]}/]+$/g, '').replace(/^['"([{]+/g, '');
+
+  // Build entity lookup from concept_map for multi-word term grouping
+  // Words from the same concept (e.g., "vector" and "calculus" from "vector calculus") share an entityId
+  // Multi-word phrase entry: first word maps to the full phrase words + entity id
+  type MultiWordPhrase = { words: string[]; entityId: number };
+  type MultiWordPhraseLookup = Record<string, MultiWordPhrase[]>;
+
+  const buildConceptEntityLookup = (concepts: ConceptMapItem[]): {
+    tech: EntityWordLookup; analogy: EntityWordLookup;
+    multiWordPhrases: { tech: MultiWordPhraseLookup; analogy: MultiWordPhraseLookup };
+  } => {
+    const techLookup: EntityWordLookup = {};
+    const analogyLookup: EntityWordLookup = {};
+    const techPhrases: MultiWordPhraseLookup = {};
+    const analogyPhrases: MultiWordPhraseLookup = {};
+
+    // Sort independently — tech terms by tech length, analogy terms by analogy length
+    // Ensures "Singular Value Decomposition" (30 chars tech) claims "singular" before
+    // "singular values" (15 chars tech), even if the latter has a longer analogy term
+    const techSorted = [...concepts].sort((a, b) => b.tech_term.length - a.tech_term.length);
+    const analogySorted = [...concepts].sort((a, b) => b.analogy_term.length - a.analogy_term.length);
+
+    techSorted.forEach(concept => {
+      const techPhrase = cleanText(concept.tech_term).toLowerCase();
+      const contentWords = techPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      contentWords.forEach(word => {
+        if (!techLookup[word]) {
+          techLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
+        }
+        // Store stemmed form so morphological variants (matrix/matrices) match
+        const stemmed = stemWord(word);
+        if (stemmed !== word && !techLookup[stemmed]) {
+          techLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: techPhrase };
+        }
+      });
+      // Build multi-word phrase index (2+ content words)
+      // Uses ALL words (not just content words) so lookahead matches "divergence theorem" not just "divergence"
+      const allWords = techPhrase.split(/\s+/).filter(w => w.length > 0);
+      if (allWords.length >= 2) {
+        const firstWord = allWords[0];
+        if (!techPhrases[firstWord]) techPhrases[firstWord] = [];
+        techPhrases[firstWord].push({ words: allWords, entityId: concept.id });
+        // Also index by stemmed first word
+        const stemmedFirst = stemWord(firstWord);
+        if (stemmedFirst !== firstWord) {
+          if (!techPhrases[stemmedFirst]) techPhrases[stemmedFirst] = [];
+          techPhrases[stemmedFirst].push({ words: allWords, entityId: concept.id });
+        }
+      }
+    });
+
+    analogySorted.forEach(concept => {
+      const analogyPhrase = cleanText(concept.analogy_term).toLowerCase();
+      const contentWords = analogyPhrase.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      contentWords.forEach(word => {
+        if (!analogyLookup[word]) {
+          analogyLookup[word] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
+        }
+        const stemmed = stemWord(word);
+        if (stemmed !== word && !analogyLookup[stemmed]) {
+          analogyLookup[stemmed] = { weight: 1.0, entityId: concept.id, fullEntity: analogyPhrase };
+        }
+      });
+      // Build multi-word phrase index for analogy terms (e.g., "Deacon Palmer")
+      const allWords = analogyPhrase.split(/\s+/).filter(w => w.length > 0);
+      if (allWords.length >= 2) {
+        const firstWord = allWords[0];
+        if (!analogyPhrases[firstWord]) analogyPhrases[firstWord] = [];
+        analogyPhrases[firstWord].push({ words: allWords, entityId: concept.id });
+        const stemmedFirst = stemWord(firstWord);
+        if (stemmedFirst !== firstWord) {
+          if (!analogyPhrases[stemmedFirst]) analogyPhrases[stemmedFirst] = [];
+          analogyPhrases[stemmedFirst].push({ words: allWords, entityId: concept.id });
+        }
+      }
+    });
+
+    // Sort phrase entries longest-first so "singular value decomposition" matches before "singular values"
+    for (const entries of Object.values(techPhrases)) entries.sort((a, b) => b.words.length - a.words.length);
+    for (const entries of Object.values(analogyPhrases)) entries.sort((a, b) => b.words.length - a.words.length);
+
+    return { tech: techLookup, analogy: analogyLookup, multiWordPhrases: { tech: techPhrases, analogy: analogyPhrases } };
+  };
+
+  // Shared helper: pre-scan a token array for multi-word phrase matches
+  // Returns a map of tokenIndex → entityId for words that are part of a compound concept
+  // Used by BOTH renderAttentiveText and processedWords effect to ensure consistent coloring
+  const buildPhraseOverrides = (
+    tokens: string[],
+    phraseLookup: Record<string, MultiWordPhrase[]>
+  ): Record<number, number> => {
+    const overrides: Record<number, number> = {};
+    // Extract non-whitespace tokens with their indices for lookahead
+    const wordTokens: { word: string; idx: number }[] = [];
+    tokens.forEach((t, idx) => {
+      if (t && !/^\s+$/.test(t)) wordTokens.push({ word: t, idx });
+    });
+    for (let wi = 0; wi < wordTokens.length; wi++) {
+      const cleaned = stripWordPunctuation(cleanText(wordTokens[wi].word).toLowerCase());
+      const stemmed = stemWord(cleaned);
+      const candidates = phraseLookup[cleaned] || phraseLookup[stemmed] || [];
+      for (const candidate of candidates) {
+        // Check if next N words match the phrase
+        if (wi + candidate.words.length > wordTokens.length) continue;
+        let matches = true;
+        for (let k = 0; k < candidate.words.length; k++) {
+          const tokenCleaned = stripWordPunctuation(cleanText(wordTokens[wi + k].word).toLowerCase());
+          const tokenStemmed = stemWord(tokenCleaned);
+          const phraseWord = candidate.words[k];
+          const phraseStemmed = stemWord(phraseWord);
+          if (tokenCleaned !== phraseWord && tokenStemmed !== phraseStemmed && tokenCleaned !== phraseStemmed && tokenStemmed !== phraseWord) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          // Override all words in this phrase to use the same entityId
+          for (let k = 0; k < candidate.words.length; k++) {
+            overrides[wordTokens[wi + k].idx] = candidate.entityId;
+          }
+          wi += candidate.words.length - 1; // skip matched words
+          break; // longest match first (already sorted)
+        }
+      }
+    }
+    return overrides;
+  };
+
+  // Merge entity lookups preserving concept_map entityIds (>= 0) from being overwritten
+  // When attention_map has the same word as concept_map, keep concept's entityId but take higher weight
+  const mergePreservingConceptIds = (
+    conceptBase: EntityWordLookup,
+    ...overlays: EntityWordLookup[]
+  ): EntityWordLookup => {
+    const result = { ...conceptBase };
+    for (const overlay of overlays) {
+      for (const [word, entry] of Object.entries(overlay)) {
+        if (!result[word]) {
+          result[word] = entry;
+        } else if (result[word].entityId < 0) {
+          // Existing entry has no concept color — replace with overlay
+          result[word] = entry;
+        } else {
+          // Existing entry has a real concept entityId — preserve it, take higher weight
+          result[word] = {
+            ...result[word],
+            weight: Math.max(result[word].weight, entry.weight)
+          };
+        }
+      }
+    }
+    return result;
+  };
+
+  // All proper nouns (names, places, titles) share a single color instead of each getting a unique one
+  // 9998 % 12 = 2 → maps to a consistent palette slot across all proper noun phrases
+  const PROPER_NOUN_ENTITY_ID = 9998;
+
+  // Detect consecutive capitalized words (proper nouns) and group them with a shared entityId
+  // Catches player names ("Tom Brady"), team names ("New England Patriots"), etc. not in concept_map
+  // All proper noun phrases share PROPER_NOUN_ENTITY_ID so they all get the same color
+  const detectProperNounPhrases = (text: string, existingLookup: EntityWordLookup, startEntityId: number): {
+    lookup: EntityWordLookup;
+    nextEntityId: number;
+  } => {
+    const lookup: EntityWordLookup = {};
+    const nextId = startEntityId;
+
+    const regex = /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)\b/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const phrase = match[1];
+      const words = phrase.split(/\s+/);
+      const phraseLower = phrase.toLowerCase();
+
+      // Skip if all words already covered by concept-map lookup
+      if (words.every(w => existingLookup[w.toLowerCase()])) continue;
+
+      words.forEach(word => {
+        const low = word.toLowerCase();
+        if (low.length > 2 && !existingLookup[low] && !lookup[low]) {
+          lookup[low] = { weight: 0.85, entityId: PROPER_NOUN_ENTITY_ID, fullEntity: phraseLower };
+        }
+      });
+    }
+    return { lookup, nextEntityId: nextId };
+  };
+
   // Load content from API response
   const loadContent = (data: any, topicName: string) => {
     const technicalExplanation = findContext(data, ["technical_explanation", "technicalExplanation", "original", "technical"]);
@@ -501,21 +860,27 @@ export default function App() {
     const context = findContext(data, ["context"]);
     const synthesis = findContext(data, ["synthesis"]);
 
+    // Will be populated from concept_map multi-word terms, used by entity lookup merge below
+    let conceptEntityLookupRef: { tech: EntityWordLookup; analogy: EntityWordLookup; multiWordPhrases: { tech: Record<string, { words: string[]; entityId: number }[]>; analogy: Record<string, { words: string[]; entityId: number }[]> } } | null = null;
+
     if (segmentsArray && Array.isArray(segmentsArray)) {
       setSegments(segmentsArray.map((s: any) => ({
-        // Tech text: keep most math symbols but fix common prose-context issues
-        // Must aggressively fix symbols that shouldn't appear in readable prose
-        tech: cleanText(fixUnicode(s.tech || s.technical || ""))
-          // Fix ∈ when used as prose "in" - broader pattern (before any lowercase word)
-          .replace(/∈\s*(?=[a-z])/gi, 'in ')
-          // Fix △/▲ triangle symbols to word "triangle" in prose context
-          .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
-          // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
-          .replace(/(?<=\s|^)\/ust\b/gi, 'just')
-          .replace(/(?<=\s|^)\/ot\b/gi, 'not')
-          // Fix stray "/" between words that should be "not"
-          .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
-          .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not '),
+        // Tech text: ELI5 strips ALL math symbols; normal mode fixes common prose-context issues
+        tech: mainComplexity === 5
+          ? stripMathSymbols(cleanText(fixUnicode(s.tech || s.technical || "")))
+          : cleanText(fixUnicode(s.tech || s.technical || ""))
+              // Fix ∈ when used as prose "in" — unconditional (bare Unicode ∈ should never appear in prose)
+              .replace(/\s*∈\s*/g, ' in ')
+              // Fix △/▲ triangle symbols to word "triangle" in prose context
+              .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+              // Fix /ust → just, /ot → not, etc. - slash replacing first letter from LaTeX artifacts
+              .replace(/(?<=\s|^)\/ust\b/gi, 'just')
+              .replace(/(?<=\s|^)\/ot\b/gi, 'not')
+              // Fix stray "/" between words that should be "not"
+              .replace(/\s+[\/∕]\s+(?=[a-z])/gi, ' not ')
+              .replace(/\s+[\/∕]\s*(?=just|only|merely|simply)\b/gi, ' not ')
+              // Generic: slash immediately before a word = LaTeX artifact (e.g., "/obvious" → "obvious")
+              .replace(/(?<=\s|^)\/(?=[a-z]{2,})/gi, ''),
         // Strip math symbols from analogy/narrative at load time to ensure pure prose in ALL display paths
         analogy: stripMathSymbols(cleanText(fixUnicode(s.analogy || s.nfl || ""))),
         narrative: stripMathSymbols(cleanText(fixUnicode(s.narrative || ""))),
@@ -529,18 +894,25 @@ export default function App() {
     // Store full explanations (250+ words each) - these are the main content
     // Apply unescapeControlSequences to convert literal \n sequences to actual newlines
     if (technicalExplanation) {
+      const cleaned = cleanText(fixUnicode(technicalExplanation));
       setTechnicalExplanation(
-        unescapeControlSequences(
-          cleanText(fixUnicode(technicalExplanation))
-            .replace(/∈\s*(?=[a-z])/gi, 'in ')
-            .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+        cleanProseArtifacts(
+          unescapeControlSequences(
+            mainComplexity === 5
+              ? stripMathSymbols(cleaned)
+              : cleaned
+                  .replace(/\s*∈\s*/g, ' in ')
+                  .replace(/[△▲▵⊿]\s*[\/∕]?\s*/g, 'triangle ')
+          )
         )
       );
     }
     if (analogyExplanation) {
       setAnalogyExplanation(
-        unescapeControlSequences(
-          stripMathSymbols(cleanText(fixUnicode(analogyExplanation)))
+        cleanProseArtifacts(
+          unescapeControlSequences(
+            stripMathSymbols(cleanText(fixUnicode(analogyExplanation)))
+          )
         )
       );
     }
@@ -555,7 +927,14 @@ export default function App() {
           // Load the new fields for rich concept isomorphism display
           six_word_definition: cleanText(c.six_word_definition || c.sixWordDefinition || ""),
           narrative_mapping: cleanText(c.narrative_mapping || c.narrativeMapping || ""),
-          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || "")
+          causal_explanation: cleanText(c.causal_explanation || c.causalExplanation || ""),
+          ...(c.why_it_matters || c.whyItMatters ? {
+            why_it_matters: {
+              connection: cleanText((c.why_it_matters || c.whyItMatters)?.connection || ""),
+              importance: cleanText((c.why_it_matters || c.whyItMatters)?.importance || ""),
+              critical: cleanText((c.why_it_matters || c.whyItMatters)?.critical || "")
+            }
+          } : {})
         }))
         .filter((c: { tech_term: string; analogy_term: string }) => {
           const techLower = c.tech_term.toLowerCase().trim();
@@ -567,6 +946,12 @@ export default function App() {
           return true;
         });
       setConceptMap(validMappings);
+
+      // Build entity lookup from concept_map multi-word terms
+      // This ensures "vector" + "calculus" → same entityId, "Tom" + "Brady" → same entityId
+      conceptEntityLookupRef = buildConceptEntityLookup(validMappings);
+      setConceptLookup({ tech: conceptEntityLookupRef.tech, analogy: conceptEntityLookupRef.analogy });
+      setMultiWordPhraseLookup(conceptEntityLookupRef.multiWordPhrases);
     }
 
     if (importanceMapArray && Array.isArray(importanceMapArray)) {
@@ -583,44 +968,37 @@ export default function App() {
       const techAttention = Array.isArray(attentionMapData.tech) ? attentionMapData.tech : [];
       const analogyAttention = Array.isArray(attentionMapData.analogy) ? attentionMapData.analogy : [];
 
-      // Helper to process attention items and create entity lookup
+      // Helper to process attention items — each phrase gets a unique sequential entityId
+      // so words from the same attention phrase share a color in isomorphic mode
       const processAttentionItems = (items: any[], startEntityId: number): {
         processed: AttentionMapItem[];
-        lookup: EntityWordLookup;
+        weightLookup: EntityWordLookup;
         nextEntityId: number;
       } => {
-        const lookup: EntityWordLookup = {};
-        let entityId = startEntityId;
+        const weightLookup: EntityWordLookup = {};
+        let nextId = startEntityId;
 
         const processed = items.map((item: any) => {
           const fullPhrase = cleanText(item.word || "").toLowerCase();
           const weight = typeof item.weight === 'number' ? item.weight : 0.5;
           const words = fullPhrase.split(/\s+/).filter(w => w.length > 0);
-          const currentEntityId = entityId++;
+          const phraseEntityId = nextId++;
 
-          // Add each word in the phrase to the lookup
           words.forEach(word => {
-            // Only add if not already in lookup, or if this entity has higher weight
-            if (!lookup[word] || lookup[word].weight < weight) {
-              lookup[word] = {
-                weight,
-                entityId: currentEntityId,
-                fullEntity: fullPhrase
-              };
+            if (!weightLookup[word] || weightLookup[word].weight < weight) {
+              weightLookup[word] = { weight, entityId: phraseEntityId, fullEntity: fullPhrase };
             }
           });
 
-          return {
-            word: fullPhrase,
-            weight,
-            entityId: currentEntityId
-          };
+          return { word: fullPhrase, weight, entityId: phraseEntityId };
         });
 
-        return { processed, lookup, nextEntityId: entityId };
+        return { processed, weightLookup, nextEntityId: nextId };
       };
 
-      const techResult = processAttentionItems(techAttention, 0);
+      // Sequential entityIds: concept_map uses 0..N-1, attention phrases continue from N
+      const maxConceptId = conceptMapArray ? conceptMapArray.length : 0;
+      const techResult = processAttentionItems(techAttention, maxConceptId);
       const analogyResult = processAttentionItems(analogyAttention, techResult.nextEntityId);
 
       setAttentionMap({
@@ -628,13 +1006,45 @@ export default function App() {
         analogy: analogyResult.processed
       });
 
+      // Detect proper noun phrases in BOTH tech and analogy text
+      // Continue entityId sequence after attention phrases
+      const techText = technicalExplanation || '';
+      const analogyText = analogyExplanation || '';
+      const { lookup: techProperNounLookup, nextEntityId: afterTechProperNouns } = detectProperNounPhrases(
+        techText, conceptEntityLookupRef?.tech || {}, analogyResult.nextEntityId
+      );
+      const { lookup: analogyProperNounLookup } = detectProperNounPhrases(
+        analogyText, conceptEntityLookupRef?.analogy || {}, afterTechProperNouns
+      );
+
+      // Merge lookups preserving concept_map entityIds — attention/proper noun weights
+      // won't overwrite concept entityIds, ensuring concept terms keep their color
       setEntityLookup({
-        tech: techResult.lookup,
-        analogy: analogyResult.lookup
+        tech: mergePreservingConceptIds(conceptEntityLookupRef?.tech || {}, techProperNounLookup, techResult.weightLookup),
+        analogy: mergePreservingConceptIds(conceptEntityLookupRef?.analogy || {}, analogyProperNounLookup, analogyResult.weightLookup)
+      });
+    } else if (conceptEntityLookupRef) {
+      // No attention map from LLM, but we still have concept-map-based lookup
+      const techText = technicalExplanation || '';
+      const analogyText = analogyExplanation || '';
+      const maxConceptId = conceptMapArray ? conceptMapArray.length : 0;
+      const { lookup: techProperNounLookup, nextEntityId: afterTechProperNouns } = detectProperNounPhrases(
+        techText, conceptEntityLookupRef.tech, maxConceptId
+      );
+      const { lookup: analogyProperNounLookup } = detectProperNounPhrases(
+        analogyText, conceptEntityLookupRef.analogy, afterTechProperNouns
+      );
+
+      setAttentionMap(null);
+      setEntityLookup({
+        tech: mergePreservingConceptIds(conceptEntityLookupRef.tech, techProperNounLookup),
+        analogy: mergePreservingConceptIds(conceptEntityLookupRef.analogy, analogyProperNounLookup)
       });
     } else {
       setAttentionMap(null);
       setEntityLookup(null);
+      setConceptLookup(null);
+      setMultiWordPhraseLookup(null);
     }
 
     if (context) {
@@ -649,7 +1059,9 @@ export default function App() {
     }
 
     if (synthesis) {
-      setSynthesisSummary(stripMathSymbols(cleanText(fixUnicode(synthesis.summary || ""))));
+      setSynthesisOneLiner(stripMathSymbols(cleanText(fixUnicode(synthesis.one_liner || ""))));
+      setSynthesisSummary(stripMathSymbols(cleanText(fixUnicode(synthesis.core || synthesis.summary || ""))));
+      setSynthesisDeep(stripMathSymbols(cleanText(fixUnicode(synthesis.deep || ""))));
       setSynthesisCitation(stripMathSymbols(cleanText(fixUnicode(synthesis.citation || ""))));
     }
 
@@ -702,7 +1114,9 @@ export default function App() {
         symbol: entry.symbol || "",
         name: entry.name || "",
         meaning: entry.meaning || "",
-        simple: entry.simple || ""
+        simple: entry.simple || "",
+        ...(entry.formula ? { formula: entry.formula } : {}),
+        ...(entry.domain_analogy ? { domain_analogy: entry.domain_analogy } : {})
       })));
     } else {
       setSymbolGuide([]);
@@ -729,19 +1143,22 @@ export default function App() {
     // Clear history view mode - this is a fresh search
     setIsViewingFromHistory(false);
 
+    // Check disambiguation cache first — if user cancelled and re-searched the same topic, show cached result
+    const trimmedTopic = topic.trim().toLowerCase();
+    if (disambiguationCacheRef.current && disambiguationCacheRef.current.topic === trimmedTopic) {
+      setDisambiguation(disambiguationCacheRef.current.data);
+      return;
+    }
+
     // Immediate loading feedback - user sees spinner instantly
     setIsLoading(true);
 
     try {
-      // Run ambiguity and proximity checks in parallel for speed
-      // Proximity uses the raw topic optimistically; if ambiguity corrects it, we re-check only when needed
-      const [ambiguityResult, optimisticProximity] = await Promise.all([
-        checkAmbiguity(topic, 'topic'),
-        checkDomainProximity(topic, analogyDomain)
-      ]);
-
-      if (ambiguityResult.isAmbiguous || (ambiguityResult.options && ambiguityResult.options.length > 0)) {
-        setDisambiguation({ type: 'topic', options: ambiguityResult.options || [], original: topic });
+      const result = await checkAmbiguity(topic, 'topic');
+      if (result.isAmbiguous || (result.options && result.options.length > 0)) {
+        const disambigData: DisambiguationData = { type: 'topic', options: result.options || [], original: topic };
+        disambiguationCacheRef.current = { topic: trimmedTopic, data: disambigData };
+        setDisambiguation(disambigData);
         setIsLoading(false); // Stop loading on disambiguation
         return;
       }
@@ -751,7 +1168,9 @@ export default function App() {
         return;
       }
 
-      const confirmedTopic = ambiguityResult.corrected || topic;
+      const confirmedTopic = result.corrected || topic;
+      // Topic passed ambiguity check — clear any stale disambiguation cache
+      disambiguationCacheRef.current = null;
 
       // Use optimistic proximity result if topic wasn't corrected, otherwise re-check
       const proximityResult = confirmedTopic === topic
@@ -781,11 +1200,25 @@ export default function App() {
     setCondensedData(null);
 
     try {
-      const parsed = await generateAnalogy(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
-      if (parsed) {
-        loadContent(parsed, confirmedTopic);
-        saveToHistory(parsed, confirmedTopic, analogyDomain);
-        setApiError(null); // Clear error on success
+      // Single API call — returns ALL fields (technical, analogy, segments, concept_map,
+      // importance_map, attention_map, context, synthesis, condensed, symbol_guide)
+      const result = await generateAnalogy(confirmedTopic, analogyDomain, complexity, cachedDomainEnrichment || undefined);
+      if (result) {
+        loadContent(result, confirmedTopic);
+        saveToHistory(result, confirmedTopic, analogyDomain);
+        setApiError(null);
+        setIsEnrichmentLoading(false); // Everything arrived together
+
+        // Fire semantic color map in background (non-blocking)
+        const techText = findContext(result, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(result, ["analogy_explanation", "analogyExplanation", "analogy"]);
+        const cMap = findContext(result, ["concept_map", "conceptMap"]);
+        if (techText || analText) {
+          setSemanticColorMap(null);
+          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
+            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+            .catch(() => {});
+        }
       } else {
         setApiError("No response received. Please check your model settings and try again.");
       }
@@ -798,6 +1231,9 @@ export default function App() {
         setApiError(null); // Don't show error, modal handles it
         return;
       }
+
+      // Reassurance suffix for free tier users - failed searches don't count
+      const freeTierNote = isOnFreeTier() ? " This may not have counted against your free tier." : "";
 
       // Handle ApiError with detailed status codes
       // Use duck typing as fallback for cases where instanceof might fail due to bundling
@@ -820,37 +1256,34 @@ export default function App() {
         switch (apiError.status) {
           case 401:
           case 403:
-            setApiError("API key issue. Please check your API key in Settings.");
+            setApiError("API key issue. Please check your API key in Settings." + freeTierNote);
             break;
           case 404:
-            setApiError("Model not found. Please check your model name in Settings.");
+            setApiError("Model not found. Please check your model name in Settings." + freeTierNote);
             break;
           case 429:
-            setApiError("Rate limited. The API is busy - please wait a moment and try again.");
+            setApiError("Rate limited. The API is busy - please wait a moment and try again." + freeTierNote);
             break;
           case 500:
           case 502:
           case 503:
           case 504:
-            // Check if server provided a specific error message about configuration
-            if (serverMessage.toLowerCase().includes('not configured') || serverMessage.toLowerCase().includes('server not')) {
-              setApiError("Server not configured. Please add your own API key in Settings, or try again later.");
-            } else {
-              setApiError("Server error. The API is temporarily unavailable - please try again.");
-            }
+            setApiError("Server error. The API is temporarily unavailable - please try again." + freeTierNote);
             break;
           default:
-            setApiError(`Request failed (${apiError.status}): ${apiError.message.slice(0, 80)}`);
+            setApiError(`Request failed (${e.status}): ${e.message.slice(0, 80)}` + freeTierNote);
         }
       } else {
         // Handle other errors (network, parsing, etc.)
         const errorMessage = (e as Error)?.message || "Unknown error occurred";
-        if (errorMessage.includes("Empty response")) {
-          setApiError("The model returned an empty response. It may be overloaded - try again.");
+        if (errorMessage.includes("API key")) {
+          setApiError("API key issue. Please check your API key in Settings." + freeTierNote);
+        } else if (errorMessage.includes("Empty response")) {
+          setApiError("The model returned an empty response. It may be overloaded - try again." + freeTierNote);
         } else if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorMessage.includes("Failed to fetch")) {
-          setApiError("Network error. Please check your connection and try again.");
+          setApiError("Network error. Please check your connection and try again." + freeTierNote);
         } else {
-          setApiError(`Request failed: ${errorMessage.slice(0, 100)}`);
+          setApiError(`Request failed: ${errorMessage.slice(0, 100)}` + freeTierNote);
         }
       }
     } finally {
@@ -863,16 +1296,54 @@ export default function App() {
     if (isRegenerating || isLoading || !lastSubmittedTopic) return;
     if (level === mainComplexity) return;
 
+    const previousLevel = mainComplexity;
     setMainComplexity(level);
     setIsRegenerating(true);
 
     try {
-      const parsed = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
-      if (parsed) {
-        loadContent(parsed, lastSubmittedTopic);
+      // Single API call — returns all fields at once
+      const result = await generateAnalogy(lastSubmittedTopic, analogyDomain, level, cachedDomainEnrichment || undefined);
+      if (result) {
+        loadContent(result, lastSubmittedTopic);
+        saveToHistory(result, lastSubmittedTopic, analogyDomain);
+        setIsEnrichmentLoading(false); // Everything arrived together
+
+        // Background semantic color map
+        const techText = findContext(result, ["technical_explanation", "technicalExplanation", "original", "technical"]);
+        const analText = findContext(result, ["analogy_explanation", "analogyExplanation", "analogy"]);
+        const cMap = findContext(result, ["concept_map", "conceptMap"]);
+        if (techText || analText) {
+          setSemanticColorMap(null);
+          generateSemanticColorMap(techText || '', analText || '', Array.isArray(cMap) ? cMap : [])
+            .then(colorMap => { if (colorMap) setSemanticColorMap(colorMap); })
+            .catch(() => {});
+        }
+      } else {
+        // Parsing failed (safeJsonParse returned null) — show error and revert complexity
+        const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
+        setApiError("Regeneration failed — couldn't parse response. Please try again." + freeTierNote);
+        setMainComplexity(previousLevel);
       }
     } catch (e) {
       console.error("Regeneration failed", e);
+
+      // Handle FreeTierExhaustedError — show modal (same pattern as fetchAnalogy)
+      if (e instanceof FreeTierExhaustedError) {
+        setShowFreeTierModal(true);
+        setMainComplexity(previousLevel);
+        return;
+      }
+
+      // Handle other API errors — show user-facing feedback
+      if (e instanceof ApiError) {
+        const freeTierNote = isOnFreeTier() ? " This didn't count against your free tier." : "";
+        setApiError(`Regeneration failed (${e.status}).${freeTierNote} Please try again.`);
+      } else {
+        setApiError("Regeneration failed. Please try again.");
+      }
+
+      // Revert complexity since regeneration didn't succeed
+      setMainComplexity(previousLevel);
     } finally {
       setIsRegenerating(false);
     }
@@ -900,9 +1371,12 @@ export default function App() {
     setCachedDomainEnrichment(null);
     // Clear mastery session cache when domain changes
     setMasterySessionCache(null);
+    // Clear study guide cache when domain changes
+    setStudyGuideCache(null);
+    setIsStudyGuideMode(false);
 
     // Look up emoji from quick start domains first
-    const quickStartMatch = QUICK_START_DOMAINS.find(
+    const quickStartMatch = ALL_QUICK_START_DOMAINS.find(
       d => d.name.toLowerCase() === inputToUse.toLowerCase()
     );
 
@@ -926,7 +1400,7 @@ export default function App() {
 
       const result = await checkAmbiguity(inputToUse, 'domain');
       const finalDomain = result.corrected || inputToUse;
-      setDomainEmoji(result.emoji || "🎯");
+      setDomainEmoji(result.emoji || "🧠");
       setAnalogyDomain(finalDomain);
       setHasSelectedDomain(true);
       setDisambiguation(null);
@@ -936,12 +1410,23 @@ export default function App() {
       return;
     }
 
+    // Check disambiguation cache first — if user cancelled domain disambiguation and re-submitted
+    const trimmedDomain = inputToUse.trim().toLowerCase();
+    if (disambiguationCacheRef.current &&
+        disambiguationCacheRef.current.topic === trimmedDomain &&
+        disambiguationCacheRef.current.data.type === 'domain') {
+      setDisambiguation(disambiguationCacheRef.current.data);
+      return;
+    }
+
     setIsSettingDomain(true);
     setDomainError("");
 
     const result = await checkAmbiguity(inputToUse, 'domain');
     if (result.isAmbiguous || (result.options && result.options.length > 0)) {
-      setDisambiguation({ type: 'domain', options: result.options || [], original: inputToUse });
+      const disambigData: DisambiguationData = { type: 'domain', options: result.options || [], original: inputToUse };
+      disambiguationCacheRef.current = { topic: trimmedDomain, data: disambigData };
+      setDisambiguation(disambigData);
       setIsSettingDomain(false);
       return;
     }
@@ -951,8 +1436,10 @@ export default function App() {
       return;
     }
 
+    // Domain passed ambiguity check — clear any stale disambiguation cache
+    disambiguationCacheRef.current = null;
     const finalDomain = result.corrected || inputToUse;
-    setDomainEmoji(result.emoji || "⚡");
+    setDomainEmoji(result.emoji || "🧠");
     setAnalogyDomain(finalDomain);
     setHasSelectedDomain(true);
     setIsSettingDomain(false);
@@ -960,23 +1447,29 @@ export default function App() {
     triggerDomainEnrichment(finalDomain);
   };
 
-  // Returns both weight and entityId for consistent multi-word entity coloring
-  const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; entityId: number | undefined } => {
-    const cleanedWord = cleanText(word).toLowerCase();
+  // Returns weight (for bold/opacity), conceptId (concept_map color), and entityId (attention/proper noun color)
+  // Weight: from entityLookup (attention data) → attentionMap → importanceMap → heuristics
+  // ConceptId: from conceptLookup (concept_map ONLY) → getConceptId() fallback → undefined
+  // EntityId: from entityLookup (attention phrases + proper nouns) — used as color fallback when no conceptId
+  const getWordAttention = (word: string, map: ConceptMapItem[], impMap: ImportanceMapItem[], isAnalogy: boolean): { weight: number; conceptId: number | undefined; entityId: number | undefined } => {
+    const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
+    const stemmedWord = stemWord(cleanedWord);
 
-    // Priority 1: Check entity lookup for multi-word entity support
+    // === WEIGHT (from attention data — controls bold/opacity/size) ===
+    let weight: number | undefined;
+
+    // Priority 1: Entity weight lookup (merged concept + attention weights)
     if (entityLookup) {
       const lookup = isAnalogy ? entityLookup.analogy : entityLookup.tech;
       if (lookup[cleanedWord]) {
-        return {
-          weight: lookup[cleanedWord].weight,
-          entityId: lookup[cleanedWord].entityId
-        };
+        weight = lookup[cleanedWord].weight;
+      } else if (lookup[stemmedWord]) {
+        weight = lookup[stemmedWord].weight;
       }
     }
 
-    // Priority 2: Check LLM-provided attention weights (single words)
-    if (attentionMap) {
+    // Priority 2: Direct attention map scan (single words)
+    if (weight === undefined && attentionMap) {
       const attentionList = isAnalogy ? attentionMap.analogy : attentionMap.tech;
       const attentionEntry = attentionList.find(item =>
         item.word === cleanedWord ||
@@ -984,33 +1477,68 @@ export default function App() {
         cleanedWord.includes(item.word)
       );
       if (attentionEntry) {
-        return { weight: attentionEntry.weight, entityId: attentionEntry.entityId };
+        weight = attentionEntry.weight;
       }
     }
 
-    // Fallback: Use heuristics if no attention map or word not found
-    if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) {
-      return { weight: 0.1, entityId: undefined };
+    // Priority 3: Heuristic fallbacks
+    if (weight === undefined) {
+      if (STOP_WORDS.has(cleanedWord) || cleanedWord.length < 3) {
+        weight = 0.1;
+      } else {
+        const terms = isAnalogy
+          ? map.map(c => cleanText(c.analogy_term).toLowerCase())
+          : map.map(c => cleanText(c.tech_term).toLowerCase());
+
+        if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) {
+          weight = 1.0;
+        } else {
+          const importanceEntry = impMap.find(m =>
+            cleanText(m.term).toLowerCase().includes(cleanedWord) ||
+            cleanedWord.includes(cleanText(m.term).toLowerCase())
+          );
+          if (importanceEntry) {
+            weight = importanceEntry.importance;
+          } else if (cleanedWord.length > 6) {
+            weight = 0.55;
+          } else {
+            weight = 0.3;
+          }
+        }
+      }
     }
 
-    const terms = isAnalogy
-      ? map.map(c => cleanText(c.analogy_term).toLowerCase())
-      : map.map(c => cleanText(c.tech_term).toLowerCase());
+    // === CONCEPT ID (from concept_map ONLY — controls color) ===
+    let conceptId: number | undefined;
 
-    if (terms.some(t => t.includes(cleanedWord) || cleanedWord.includes(t))) {
-      return { weight: 1.0, entityId: undefined };
+    // Priority 1: Concept lookup (built from concept_map terms only)
+    if (conceptLookup) {
+      const cLookup = isAnalogy ? conceptLookup.analogy : conceptLookup.tech;
+      if (cLookup[cleanedWord]) {
+        conceptId = cLookup[cleanedWord].entityId;
+      } else if (cLookup[stemmedWord]) {
+        conceptId = cLookup[stemmedWord].entityId;
+      }
     }
 
-    const importanceEntry = impMap.find(m =>
-      cleanText(m.term).toLowerCase().includes(cleanedWord) ||
-      cleanedWord.includes(cleanText(m.term).toLowerCase())
-    );
-    if (importanceEntry) {
-      return { weight: importanceEntry.importance, entityId: undefined };
+    // Priority 2: getConceptId scored matching fallback
+    if (conceptId === undefined) {
+      const mappedId = getConceptId(word, map);
+      if (mappedId !== -1) conceptId = mappedId;
     }
 
-    if (cleanedWord.length > 6) return { weight: 0.55, entityId: undefined };
-    return { weight: 0.3, entityId: undefined };
+    // === ENTITY ID (from entityLookup — attention phrases + proper nouns) ===
+    // Used as color fallback when conceptId is undefined but word is still important
+    let entityId: number | undefined;
+    if (entityLookup) {
+      const lookup = isAnalogy ? entityLookup.analogy : entityLookup.tech;
+      const entry = lookup[cleanedWord] || lookup[stemmedWord];
+      if (entry && entry.entityId >= 0) {
+        entityId = entry.entityId;
+      }
+    }
+
+    return { weight, conceptId, entityId };
   };
 
   // Backward-compatible wrapper that just returns weight
@@ -1019,19 +1547,40 @@ export default function App() {
   };
 
   const getConceptId = (word: string, map: ConceptMapItem[]): number => {
-    const cleanedWord = cleanText(word).toLowerCase();
+    const cleanedWord = stripWordPunctuation(cleanText(word).toLowerCase());
+    if (cleanedWord.length < 3) return -1;
+    if (STOP_WORDS.has(cleanedWord)) return -1;
+    const stemmedWord = stemWord(cleanedWord);
+
+    let bestId = -1;
+    let bestScore = 0; // Higher = better match
+
     for (const concept of map) {
-      if (cleanText(concept.tech_term).toLowerCase().includes(cleanedWord) ||
-          cleanedWord.includes(cleanText(concept.tech_term).toLowerCase())) return concept.id;
-      if (cleanText(concept.analogy_term).toLowerCase().includes(cleanedWord) ||
-          cleanedWord.includes(cleanText(concept.analogy_term).toLowerCase())) return concept.id;
+      const techTerm = cleanText(concept.tech_term).toLowerCase();
+      const analogyTerm = cleanText(concept.analogy_term).toLowerCase();
+
+      // Score 3: exact word match or stemmed match within term's words (highest priority)
+      // Score 2: term contains word as substring (medium)
+      // Score 1: word contains entire term as substring (lowest)
+      for (const term of [techTerm, analogyTerm]) {
+        if (term.split(/\s+/).some(w => w === cleanedWord || stemWord(w) === stemmedWord)) {
+          if (3 > bestScore) {
+            bestId = concept.id;
+            bestScore = 3;
+          }
+        } else if (term.includes(cleanedWord) && cleanedWord.length > 3) {
+          if (2 > bestScore) { bestId = concept.id; bestScore = 2; }
+        } else if (cleanedWord.includes(term) && term.length > 3) {
+          if (1 > bestScore) { bestId = concept.id; bestScore = 1; }
+        }
+      }
     }
-    return -1;
+    return bestId;
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
-    if (viewMode === 'morph') return;
+    // Only allow definitions in Tech Lock mode
+    if (viewMode !== 'tech') return;
 
     let target = e.target as HTMLElement;
 
@@ -1073,12 +1622,24 @@ export default function App() {
     const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
 
     if (defPosition && selectedTerm) {
-      setMiniSelectedTerm(selectedText);
-      const top = showAbove
-        ? rect.top + window.scrollY - popupMinHeight - 10
-        : rect.bottom + window.scrollY + 10;
-      setMiniDefPosition({ top, left: rect.left + window.scrollX });
-      fetchDefinition(selectedText, defText, miniDefComplexity, true);
+      if (isMobile) {
+        // Mobile: replace main popup instead of stacking a mini popup
+        setMiniDefPosition(null);
+        setMiniSelectedTerm(null);
+        setSelectedTerm(selectedText);
+        const top = showAbove
+          ? rect.top + window.scrollY - popupMinHeight - 10
+          : rect.bottom + window.scrollY + 10;
+        setDefPosition({ top, left: rect.left + window.scrollX, placement: showAbove ? 'above' : 'below' });
+        fetchDefinition(selectedText, defText, defComplexity, false);
+      } else {
+        setMiniSelectedTerm(selectedText);
+        const top = showAbove
+          ? rect.top + window.scrollY - popupMinHeight - 10
+          : rect.bottom + window.scrollY + 10;
+        setMiniDefPosition({ top, left: rect.left + window.scrollX });
+        fetchDefinition(selectedText, defText, miniDefComplexity, true);
+      }
     } else {
       setSelectedTerm(selectedText);
       const top = showAbove
@@ -1091,6 +1652,9 @@ export default function App() {
       fetchDefinition(selectedText, context, defComplexity, false);
     }
   };
+
+  // Mobile word definition is now handled by the search bar (8B).
+  // Desktop: double-click + text selection + floating Define button (unchanged).
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
     const cacheKey = `${term.toLowerCase()}::${level}`;
@@ -1111,19 +1675,22 @@ export default function App() {
     if (isMini) {
       setIsLoadingMiniDef(true);
       setMiniDefText("");
+      setMiniDefTitle(null);
       setMiniDefComplexity(level);
     } else {
       setIsLoadingDef(true);
-      setDefText("");
-      setDefSymbolGuide([]); // Clear previous symbol guide
+      setDefTitle(null);
+      // Keep previous definition visible while new one loads (overwritten on API response)
       setDefComplexity(level);
     }
 
     try {
-      const result = await fetchDefinitionApi(term, context, level);
-      // Result is now { definition: string, symbol_guide: SymbolGuideEntry[] }
+      const result = await fetchDefinitionApi(term, context, level, analogyDomain);
+      // Result is now { title?: string, definition: string, symbol_guide: SymbolGuideEntry[], domain_intuition?: string }
       const definition = typeof result === 'string' ? result : (result.definition || "Could not load definition.");
       const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
+      const domainIntuition = typeof result === 'object' && result.domain_intuition ? result.domain_intuition : null;
+      const title = typeof result === 'object' && result.title ? result.title : null;
 
       // Cache the result
       definitionCacheRef.current.set(cacheKey, { definition, symbol_guide: symbolGuideData });
@@ -1135,9 +1702,12 @@ export default function App() {
 
       if (isMini) {
         setMiniDefText(definition);
+        setMiniDefTitle(title);
       } else {
         setDefText(definition);
         setDefSymbolGuide(symbolGuideData);
+        setDefDomainIntuition(domainIntuition);
+        setDefTitle(title);
       }
     } catch (e) {
       const errText = "Could not load definition.";
@@ -1145,6 +1715,7 @@ export default function App() {
       else {
         setDefText(errText);
         setDefSymbolGuide([]);
+        setDefDomainIntuition(null);
       }
     } finally {
       if (isMini) setIsLoadingMiniDef(false);
@@ -1164,18 +1735,39 @@ export default function App() {
     // Only open mini definition if we're in main definition popup (not already nested)
     if (!defPosition || miniDefPosition) return;
 
-    const popupMinHeight = 200;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
+    if (isMobile) {
+      // Mobile: replace main popup content with new term (no stacking)
+      setSelectedTerm(word);
+      setDefText("");
+      fetchDefinition(word, defText, defComplexity, false);
+      // Position stays as bottom sheet, no need to update
+    } else {
+      const popupMinHeight = 200;
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const showAbove = spaceBelow < popupMinHeight && spaceAbove > spaceBelow;
 
+      setMiniSelectedTerm(word);
+      const rawTop = showAbove
+        ? rect.top + window.scrollY - popupMinHeight - 10
+        : rect.bottom + window.scrollY + 10;
+      const clampedTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
+      const clampedLeft = Math.max(10, Math.min(window.innerWidth - 280, rect.left + window.scrollX));
+      setMiniDefPosition({ top: clampedTop, left: clampedLeft });
+      fetchDefinition(word, defText, miniDefComplexity, true);
+    }
+  };
+
+  // Handle word click in MINI definition popup — refreshes mini popup in-place (no 3rd level)
+  const handleMiniDefWordClick = (word: string, _rect: DOMRect) => {
+    if (!miniDefPosition) return;  // Safety: only works when mini popup is open
+
+    // Refresh mini popup in-place with new term
     setMiniSelectedTerm(word);
-    const top = showAbove
-      ? rect.top + window.scrollY - popupMinHeight - 10
-      : rect.bottom + window.scrollY + 10;
-    setMiniDefPosition({ top, left: rect.left + window.scrollX });
-    fetchDefinition(word, defText, miniDefComplexity, true);
+    setMiniDefText("");
+    setMiniDefTitle(null);
+    fetchDefinition(word, miniDefText, miniDefComplexity, true);  // isMini=true
   };
 
   // === Selection Handlers for Multi-Word Definition ===
@@ -1197,8 +1789,8 @@ export default function App() {
 
   // Handle selection end (mouseup/touchend) - detect selection and show button
   const handleSelectionEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    // Disable definitions in Morph mode - only allow in Expert Lock or Tech Lock
-    if (viewMode === 'morph') {
+    // Only allow definitions in Tech Lock mode
+    if (viewMode !== 'tech') {
       setMorphLockedForSelection(false);
       setIsSelectingText(false);
       return;
@@ -1211,13 +1803,44 @@ export default function App() {
 
     selectionTimeoutRef.current = setTimeout(() => {
       const selection = window.getSelection();
-      const selectedText = selection?.toString().trim();
+      const rawSelectedText = selection?.toString().trim();
 
-      if (selectedText && selectedText.length > 0) {
+      if (rawSelectedText && rawSelectedText.length > 0) {
         // Get the selection range to position the button
         const range = selection?.getRangeAt(0);
         if (range) {
           const rect = range.getBoundingClientRect();
+
+          // Reconstruct LaTeX-aware selection text
+          // Walk the range to find katex-source spans and substitute their data-latex
+          let selectedText = rawSelectedText;
+          try {
+            const container = range.commonAncestorContainer;
+            const parentEl = container instanceof Element ? container : container.parentElement;
+            if (parentEl) {
+              const fragment = range.cloneContents();
+              const tempDiv = document.createElement('div');
+              tempDiv.appendChild(fragment);
+              const clonedKatexSpans = tempDiv.querySelectorAll('.katex-source');
+              clonedKatexSpans.forEach((clonedSpan) => {
+                const garbledText = clonedSpan.textContent || '';
+                const latexSource = clonedSpan.getAttribute('data-latex');
+                if (latexSource && garbledText) {
+                  const idx = selectedText.indexOf(garbledText);
+                  if (idx !== -1) {
+                    selectedText =
+                      selectedText.substring(0, idx) +
+                      latexSource +
+                      selectedText.substring(idx + garbledText.length);
+                  }
+                }
+              });
+              selectedText = selectedText.trim();
+            }
+          } catch {
+            // Fall back to raw selection — prepareTermForHeader will still attempt cleanup
+            selectedText = rawSelectedText;
+          }
 
           // Position the button above the selection (or below if near top)
           const buttonTop = rect.top < 60
@@ -1256,17 +1879,28 @@ export default function App() {
     // Clear the browser selection
     window.getSelection()?.removeAllRanges();
 
-    // Get position for the definition popup
+    // Get position for the definition popup, clamped to viewport
     const buttonPos = defineButtonPosition;
-    const popupTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
-    const popupLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
+    const rawTop = buttonPos ? (typeof buttonPos.top === 'number' ? buttonPos.top : parseFloat(String(buttonPos.top))) + 50 : 200;
+    const rawLeft = buttonPos ? Math.max(20, typeof buttonPos.left === 'number' ? buttonPos.left : parseFloat(String(buttonPos.left))) : 100;
+    const popupTop = Math.max(10, Math.min(window.innerHeight - 200, rawTop));
+    const popupLeft = Math.max(10, Math.min(window.innerWidth - 300, rawLeft));
 
     // Open definition popup
     if (defPosition && selectedTerm) {
-      // Already have a popup open - use mini popup
-      setMiniSelectedTerm(pendingSelection);
-      setMiniDefPosition({ top: popupTop, left: popupLeft });
-      fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+      if (isMobile) {
+        // Mobile: replace main popup instead of stacking mini popup
+        setMiniDefPosition(null);
+        setMiniSelectedTerm(null);
+        setSelectedTerm(pendingSelection);
+        // Position stays as bottom sheet on mobile
+        fetchDefinition(pendingSelection, defText, defComplexity, false);
+      } else {
+        // Desktop: open mini popup alongside main popup
+        setMiniSelectedTerm(pendingSelection);
+        setMiniDefPosition({ top: popupTop, left: popupLeft });
+        fetchDefinition(pendingSelection, defText, miniDefComplexity, true);
+      }
     } else {
       // Open main popup
       setSelectedTerm(pendingSelection);
@@ -1279,7 +1913,7 @@ export default function App() {
 
     // Clear selection state
     clearSelectionState();
-  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState]);
+  }, [pendingSelection, defineButtonPosition, defPosition, selectedTerm, defText, miniDefComplexity, isAnalogyVisualMode, segments, defComplexity, clearSelectionState, isMobile]);
 
   // Close define button when clicking outside
   useEffect(() => {
@@ -1334,6 +1968,21 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showHistory, setShowHistory]);
 
+  // Collapse attention meter when clicking outside it
+  useEffect(() => {
+    if (isAttentionMeterCollapsed) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't collapse if clicking inside the meter itself (slider, percentage, etc.)
+      if (attentionMeterRef.current?.contains(target)) return;
+      setIsAttentionMeterCollapsed(true);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAttentionMeterCollapsed]);
+
   // Load mastery history from localStorage
   useEffect(() => {
     const loadMasteryHistory = () => {
@@ -1384,7 +2033,9 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'escape':
           // Close popups/modals in order of priority
-          if (isMasteryMode) setIsMasteryMode(false);
+          if (showFontPicker) setShowFontPicker(false);
+          else if (isStudyGuideMode) setIsStudyGuideMode(false);
+          else if (isMasteryMode) setIsMasteryMode(false);
           else if (isDualPaneMode) setIsDualPaneMode(false);
           else if (isConstellationMode) setIsConstellationMode(false);
           else if (showShortcutsLegend) setShowShortcutsLegend(false);
@@ -1424,6 +2075,7 @@ export default function App() {
           if (!isNarrativeMode) {
             // Turning on Story - disable Bullets and Essence
             setIsBulletMode(false);
+            setActiveBulletIndex(null);
             if (isFirstPrinciplesMode) {
               setShowCondensedView(false);
               setIsFirstPrinciplesMode(false);
@@ -1488,16 +2140,40 @@ export default function App() {
           if (!hasStarted || isLoading) return;
           setIsMasteryMode(!isMasteryMode);
           break;
+        case 'y':
+          // Toggle study guide mode
+          if (!hasStarted || isLoading) return;
+          setIsStudyGuideMode(!isStudyGuideMode);
+          break;
+        case 'f':
+          // Toggle font picker
+          if (!hasStarted) return;
+          setShowFontPicker(!showFontPicker);
+          break;
         case '1':
           // Study mode
           setAmbianceMode(ambianceMode === 'study' ? 'none' : 'study');
+          break;
+        case 'n':
+          // Toggle Intuition modal
+          if (!hasStarted) return;
+          setShowIntuitionModal(!showIntuitionModal);
+          break;
+        case 'x':
+          // Cycle text size: 1 → 1.25 → 1.5 → 2 → 1
+          if (!hasStarted) return;
+          {
+            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+            const idx = scales.indexOf(textScale);
+            setTextScale(scales[(idx + 1) % scales.length]);
+          }
           break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, ambianceMode, textScale, viewMode, isBulletMode]);
+  }, [hasStarted, showQuizModal, showSynthesis, miniDefPosition, defPosition, showControls, showFollowUp, disambiguation, isNarrativeMode, isDarkMode, isImmersive, showHistory, isQuizLoading, isLoading, showShortcutsLegend, isConstellationMode, isDualPaneMode, isMasteryMode, isStudyGuideMode, ambianceMode, textScale, viewMode, isBulletMode, showFontPicker, showIntuitionModal]);
 
   // Noise generator for Study Mode (white, pink, brown noise)
   useEffect(() => {
@@ -1675,6 +2351,11 @@ export default function App() {
         setTutorResponse({ question: query, answer: result, mode: "Tutor" });
         setFollowUpQuery("");
 
+        // Auto-scroll to the response so user doesn't have to hunt for it
+        setTimeout(() => {
+          tutorResponseRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+
         // Update history - if branching, truncate to branch point first
         setTutorHistory(prev => {
           let baseHistory: TutorHistoryEntry[];
@@ -1701,6 +2382,15 @@ export default function App() {
       setIsTutorLoading(false);
     }
   };
+
+  // Auto-scroll follow-up input into view when Ask is toggled on mobile
+  useEffect(() => {
+    if (showFollowUp && isMobile && followUpContainerRef.current) {
+      setTimeout(() => {
+        followUpContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showFollowUp, isMobile]);
 
   const copyToClipboard = (text: string, id: string) => {
     if (!text) return;
@@ -1775,6 +2465,7 @@ export default function App() {
     setIsViewingFromHistory(false);
     setHasStarted(false);
     setTopic("");
+    setActiveBulletIndex(null);
     setProcessedWords([]);
     setSegments([]);
     setTechnicalExplanation("");
@@ -1813,6 +2504,7 @@ export default function App() {
   // Toggle First Principles view in Tech mode with smooth morph transition
   const toggleFirstPrinciplesMode = () => {
     if (!condensedData) return;
+    if (isStudyGuideMode) setIsStudyGuideMode(false);
 
     // Clear any pending timers
     if (condensedMorphTimerRef.current) {
@@ -1831,6 +2523,7 @@ export default function App() {
       // Transition INTO first principles (mutually exclusive with Story and Bullets)
       setIsNarrativeMode(false);
       setIsBulletMode(false);
+      setActiveBulletIndex(null);
       // If in Morph mode, switch to Tech mode so Essence view renders
       if (viewMode === 'morph') {
         setViewMode('tech');
@@ -1852,6 +2545,19 @@ export default function App() {
 
   const cycleViewMode = () => {
     if (isNarrativeMode) { setIsNarrativeMode(false); return; }
+    // Turn off Essence and Bullets when cycling modes
+    if (isFirstPrinciplesMode) {
+      setShowCondensedView(false);
+      setIsFirstPrinciplesMode(false);
+    }
+    if (isBulletMode) {
+      setIsBulletMode(false);
+      setActiveBulletIndex(null);
+    }
+    // Close word search when switching modes
+    setIsWordSearchOpen(false);
+    setWordSearchQuery('');
+    setWordSearchResults([]);
     if (viewMode === 'morph') setViewMode('nfl');
     else if (viewMode === 'nfl') setViewMode('tech');
     else setViewMode('morph');
@@ -1872,13 +2578,18 @@ export default function App() {
     setImportanceMap([]);
     setAttentionMap(null);
     setEntityLookup(null);
+    setConceptLookup(null);
+    setActiveBulletIndex(null);
     setProcessedWords([]);
     setTechnicalExplanation("");
     setAnalogyExplanation("");
     setContextData(null);
     setCondensedData(null);
+    setSynthesisOneLiner("");
     setSynthesisSummary("");
+    setSynthesisDeep("");
     setSynthesisCitation("");
+    setIsEnrichmentLoading(false);
 
     // UI State
     setIsLoading(false);
@@ -1952,6 +2663,10 @@ export default function App() {
     // Mastery mode state - clear cached session when content changes
     setIsMasteryMode(false);
     setMasterySessionCache(null);
+
+    // Study guide state - clear when content changes
+    setIsStudyGuideMode(false);
+    setStudyGuideCache(null);
   };
 
   // Legacy reset function for backwards compatibility
@@ -2025,7 +2740,7 @@ export default function App() {
         if (window.katex) {
           try {
             const html = window.katex.renderToString(latexContent, { throwOnError: false });
-            return <span key={i} dangerouslySetInnerHTML={{ __html: html }} className="inline-block not-italic normal-case" />;
+            return <span key={i} dangerouslySetInnerHTML={{ __html: html }} data-latex={part} className="inline-block not-italic normal-case katex-source" />;
           } catch (e) {
             return <span key={i}>{latexContent}</span>;
           }
@@ -2061,90 +2776,8 @@ export default function App() {
 
     return (
       <div>
-        <p className={`${textColor} text-sm leading-relaxed`}>
-          {textSegments.map((segment, i) => {
-            const isLatex = segment.startsWith('$') || segment.startsWith('\\(') || segment.startsWith('\\[') || (segment.startsWith('\\') && segment.length > 1);
-            let contentToRender = segment;
-            let forceRender = false;
-            if (!isLatex && /^\\[a-zA-Z]+/.test(segment)) {
-              contentToRender = `$${segment}$`;
-              forceRender = true;
-            }
-
-            if (isLatex || forceRender) {
-              try {
-                let latexContent = contentToRender.replace(/\\\\/g, "\\");
-                if (latexContent.startsWith('$$')) latexContent = latexContent.slice(2, -2);
-                else if (latexContent.startsWith('$')) latexContent = latexContent.slice(1, -1);
-                if (window.katex) {
-                  const html = window.katex.renderToString(latexContent, { throwOnError: false });
-                  return <span key={i} dangerouslySetInnerHTML={{ __html: html }} className="inline-block not-italic normal-case" />;
-                }
-                return <span key={i}>{latexContent}</span>;
-              } catch (e) {
-                return <span key={i}>{segment}</span>;
-              }
-            } else {
-              return segment.split(/(\s+)/).map((word, j) => {
-                if (!word) return null;
-                if (/^\s+$/.test(word)) return <span key={`${i}-${j}`}>{word}</span>;
-
-                const activeMap = customMap || conceptMap;
-                // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
-                const { weight, entityId } = getWordAttention(word, activeMap, importanceMap, false);
-                // Invert threshold: low slider = high bar, high slider = low bar
-                // At 100% (threshold >= 0.99), ALL words should be fully visible
-                const effectiveThreshold = 1.1 - currentThreshold;
-                const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
-
-                let colorClassName = "";
-                if (isColorMode && isImportant) {
-                  // Priority 1: Use entityId for consistent multi-word entity coloring
-                  if (entityId !== undefined) {
-                    colorClassName = CONCEPT_COLORS[entityId % CONCEPT_COLORS.length];
-                  } else {
-                    // Fallback: Use conceptId from concept map
-                    const conceptId = getConceptId(word, activeMap);
-                    if (conceptId !== -1) {
-                      colorClassName = CONCEPT_COLORS[conceptId % CONCEPT_COLORS.length];
-                    } else if (weight > 0.6) {
-                      colorClassName = "text-neutral-500";
-                    }
-                  }
-                }
-
-                const scale = (isImportant ? 1.1 : 0.9) * (textScale || 1);
-                const opacity = isImportant ? 1 : 0.7;
-                const fontWeight = isImportant ? 600 : 400;
-                const cleanWord = word.replace(/[.,!?;:'"()[\]{}]/g, '').trim();
-                const isClickable = onWordClick && cleanWord.length > 2;
-
-                return (
-                  <span
-                    key={`${i}-${j}`}
-                    className={`${colorClassName} ${isClickable ? 'cursor-pointer hover:underline hover:decoration-dotted' : ''}`}
-                    style={{
-                      fontSize: `${scale}em`,
-                      opacity: opacity,
-                      fontWeight: fontWeight,
-                      transition: 'all 0.2s ease',
-                      display: 'inline-block'
-                    }}
-                    onClick={isClickable ? (e) => {
-                      e.stopPropagation();
-                      const rect = (e.target as HTMLElement).getBoundingClientRect();
-                      onWordClick(cleanWord, rect);
-                    } : undefined}
-                  >
-                    {word}
-                  </span>
-                );
-              });
-            }
-          })}
-        </p>
         {setThresholdState && (
-          <div className={`pt-3 border-t ${borderColor} flex items-center justify-between gap-4 mt-2`}>
+          <div className={`pb-2 border-b ${borderColor} flex items-center justify-between gap-4 mb-2`}>
             <div className="flex items-center gap-3 flex-1">
               <Eye size={12} className={textColor} />
               <input
@@ -2169,6 +2802,117 @@ export default function App() {
             )}
           </div>
         )}
+        <p className={`${textColor} text-sm leading-relaxed`}>
+          {textSegments.map((segment, i) => {
+            const isLatex = segment.startsWith('$') || segment.startsWith('\\(') || segment.startsWith('\\[') || (segment.startsWith('\\') && segment.length > 1);
+            let contentToRender = segment;
+            let forceRender = false;
+            if (!isLatex && /^\\[a-zA-Z]+/.test(segment)) {
+              contentToRender = `$${segment}$`;
+              forceRender = true;
+            }
+
+            if (isLatex || forceRender) {
+              try {
+                let latexContent = contentToRender.replace(/\\\\/g, "\\");
+                if (latexContent.startsWith('$$')) latexContent = latexContent.slice(2, -2);
+                else if (latexContent.startsWith('$')) latexContent = latexContent.slice(1, -1);
+                if (window.katex) {
+                  const html = window.katex.renderToString(latexContent, { throwOnError: false });
+                  return <span key={i} dangerouslySetInnerHTML={{ __html: html }} data-latex={segment} className="inline-block not-italic normal-case katex-source" />;
+                }
+                return <span key={i}>{latexContent}</span>;
+              } catch (e) {
+                return <span key={i}>{segment}</span>;
+              }
+            } else {
+              // Pre-scan for multi-word phrase matches using shared helper
+              const tokens = segment.split(/(\s+)/);
+              const inferredIsAnalogy = isAnalogyVisualMode || isNarrativeMode;
+              let phraseOverrides: Record<number, number> = {};
+              if (multiWordPhraseLookup) {
+                const phraseLookup = inferredIsAnalogy ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+                phraseOverrides = buildPhraseOverrides(tokens, phraseLookup);
+              }
+
+              return tokens.map((word, j) => {
+                if (!word) return null;
+                if (/^\s+$/.test(word)) return <span key={`${i}-${j}`}>{word}</span>;
+
+                const activeMap = customMap || conceptMap;
+                // Weight (bold/opacity), conceptId (concept_map color), entityId (attention/proper noun color)
+                // Infer isAnalogy from current view mode — this closure captures the view state
+                const inferredIsAnalogy = isAnalogyVisualMode || isNarrativeMode;
+                const { weight, conceptId, entityId } = getWordAttention(word, activeMap, importanceMap, inferredIsAnalogy);
+                // Invert threshold: low slider = high bar, high slider = low bar
+                // At 100% (threshold >= 0.99), ALL words should be fully visible
+                const effectiveThreshold = 1.1 - currentThreshold;
+                const isImportant = currentThreshold >= 0.99 || weight >= effectiveThreshold;
+
+                // Multi-word phrase override: if this word is part of a known compound concept,
+                // use the phrase's entityId as conceptId so all words share the same color
+                const phraseOverrideId = phraseOverrides[j];
+
+                // Highest priority: AI semantic color map
+                let semanticConceptId: number | undefined;
+                if (semanticColorMap) {
+                  const semanticLookup = inferredIsAnalogy ? semanticColorMap.analogy : semanticColorMap.tech;
+                  const cleanedWord = word.replace(/[.,!?;:'"()\[\]{}]/g, '').trim().toLowerCase();
+                  if (cleanedWord) {
+                    const mapped = semanticLookup.get(cleanedWord);
+                    if (mapped !== undefined) semanticConceptId = mapped;
+                  }
+                }
+
+                let colorClassName = "";
+                const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
+                if (isColorMode && isImportant) {
+                  if (semanticConceptId !== undefined) {
+                    // AI semantic map: highest quality, from second-pass API call
+                    colorClassName = activeColors[semanticConceptId % activeColors.length];
+                  } else if (phraseOverrideId !== undefined) {
+                    // Multi-word phrase: all words get the compound concept's color
+                    colorClassName = activeColors[phraseOverrideId % activeColors.length];
+                  } else if (conceptId !== undefined) {
+                    // Concept-map terms: fallback coloring
+                    colorClassName = activeColors[conceptId % activeColors.length];
+                  } else if (entityId !== undefined) {
+                    // Attention phrases + proper nouns: colored by their phrase group
+                    colorClassName = activeColors[entityId % activeColors.length];
+                  }
+                  // Uncategorized words (no conceptId, no entityId) stay default text color
+                }
+
+                const scale = (isImportant ? 1.1 : 0.9) * (textScale || 1);
+                const opacity = isImportant ? 1 : 0.7;
+                const fontWeight = isImportant ? 600 : 400;
+                const cleanWord = word.replace(/[.,!?;:'"()[\]{}]/g, '').trim();
+                const isClickable = onWordClick && cleanWord.length > 2;
+
+                return (
+                  <span
+                    key={`${i}-${j}`}
+                    className={`${colorClassName} ${isClickable ? 'cursor-pointer underline decoration-dotted decoration-neutral-400/50 hover:decoration-neutral-400' : ''}`}
+                    style={{
+                      fontSize: `${scale}em`,
+                      opacity: opacity,
+                      fontWeight: fontWeight,
+                      transition: 'all 0.2s ease',
+                      display: 'inline-block'
+                    }}
+                    onClick={isClickable ? (e) => {
+                      e.stopPropagation();
+                      const rect = (e.target as HTMLElement).getBoundingClientRect();
+                      onWordClick(cleanWord, rect);
+                    } : undefined}
+                  >
+                    {word}
+                  </span>
+                );
+              });
+            }
+          })}
+        </p>
       </div>
     );
   }, [conceptMap, importanceMap, entityLookup, attentionMap]);
@@ -2206,6 +2950,77 @@ export default function App() {
     }
 
     return sentences.filter(s => s.some(w => !w.isSpace)); // Filter empty sentences
+  };
+
+  // Find best matching analogy segment for a bullet sentence (keyword overlap scoring)
+  const findBestSegmentForSentence = (
+    sentenceWords: ProcessedWord[]
+  ): { analogy: string; intuition?: string; color?: string } | null => {
+    const sentenceText = sentenceWords
+      .filter(w => !w.isSpace && !w.isLatex)
+      .map(w => w.text.toLowerCase().replace(/[^a-z]/g, ''))
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+
+    if (sentenceText.length === 0) return null;
+
+    // Score each segment by shared keyword overlap
+    let bestSegment: Segment | null = null;
+    let bestScore = 0;
+
+    for (const seg of segments) {
+      if (!seg.tech || !seg.analogy) continue;
+      const segWords = seg.tech.toLowerCase()
+        .replace(/[^a-z\s]/g, '')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+      if (segWords.length === 0) continue;
+      // Count shared words (substring match in either direction)
+      const shared = segWords.filter(sw => sentenceText.some(st =>
+        st.includes(sw) || sw.includes(st) ||
+        // Stem-like: match if either word starts with the other's first 4+ chars
+        (sw.length >= 4 && st.length >= 4 && (st.startsWith(sw.slice(0, 4)) || sw.startsWith(st.slice(0, 4))))
+      ));
+      const score = shared.length / Math.max(Math.min(segWords.length, sentenceText.length), 1);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSegment = seg;
+      }
+    }
+
+    if (bestSegment && bestScore > 0.08) {
+      return {
+        analogy: bestSegment.analogy,
+        intuition: bestSegment.intuitions?.[0]
+      };
+    }
+
+    // Fallback: match against conceptMap tech_term or analogy_term
+    for (let i = 0; i < conceptMap.length; i++) {
+      const techLower = cleanText(conceptMap[i].tech_term).toLowerCase().replace(/[^a-z\s]/g, '');
+      const techWords = techLower.split(/\s+/).filter(w => w.length > 2);
+      if (techWords.some(tw => sentenceText.some(st => st.includes(tw) || tw.includes(st)))) {
+        return {
+          analogy: conceptMap[i].narrative_mapping || `${conceptMap[i].analogy_term} — the ${analogyDomain} equivalent of ${conceptMap[i].tech_term}`,
+          color: CONCEPT_COLORS[i % CONCEPT_COLORS.length]
+        };
+      }
+    }
+
+    // Last resort: pick the segment closest to this bullet's position in the list
+    if (segments.length > 0) {
+      const sentences = groupWordsIntoSentences(processedWords);
+      const bulletIdx = sentences.findIndex(s => s === sentenceWords);
+      if (bulletIdx >= 0) {
+        const ratio = bulletIdx / Math.max(sentences.length - 1, 1);
+        const segIdx = Math.min(Math.floor(ratio * segments.length), segments.length - 1);
+        const seg = segments[segIdx];
+        if (seg?.analogy) {
+          return { analogy: seg.analogy, intuition: seg.intuitions?.[0] };
+        }
+      }
+    }
+
+    return null;
   };
 
   // Extract unique math symbols from content for glossary
@@ -2287,9 +3102,16 @@ export default function App() {
     let heatmapColorClass = "";
     const isSelected = selectedTerm && cleanText(item.text).toLowerCase().includes(selectedTerm.toLowerCase());
 
-    if (isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
-      segmentColorClass = CONCEPT_COLORS[item.conceptIndex % CONCEPT_COLORS.length];
-      heatmapColorClass = CONCEPT_BG_COLORS[item.conceptIndex % CONCEPT_BG_COLORS.length];
+    const wordClean = cleanText(item.text).toLowerCase();
+    // Color from concept_map (conceptIndex) or attention/proper noun groups (entityId)
+    const colorSourceId = (item.conceptIndex !== undefined && item.conceptIndex >= 0)
+      ? item.conceptIndex
+      : (item.entityId !== undefined && item.entityId >= 0) ? item.entityId : undefined;
+    if (isIsomorphicMode && colorSourceId !== undefined && !STOP_WORDS.has(wordClean)) {
+      const activeColors = isDarkMode ? CONCEPT_COLORS_DARK : CONCEPT_COLORS;
+      const activeBgColors = isDarkMode ? CONCEPT_BG_COLORS_DARK : CONCEPT_BG_COLORS;
+      segmentColorClass = activeColors[colorSourceId % activeColors.length];
+      heatmapColorClass = activeBgColors[colorSourceId % activeBgColors.length];
     }
 
     if (mode === 'opacity') {
@@ -2306,17 +3128,33 @@ export default function App() {
     }
     if (mode === 'heatmap') {
       if (isImportant) {
-        style.color = '#000';
         style.fontWeight = 600;
         style.padding = '0 2px';
         style.borderRadius = '4px';
-        if (!isIsomorphicMode) {
-          // Use pure weight-based intensity (higher weight = more highlight)
-          const intensity = Math.min(item.weight, 1);
-          style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
+        if (isDarkMode) {
+          // Fluorescent dark mode
+          if (!isIsomorphicMode) {
+            // Non-isomorphic: bright white text with neon cyan-teal glow
+            style.color = '#fff';
+            const intensity = Math.min(item.weight, 1);
+            // Cyan-to-teal fluorescent background, vivid on dark surfaces
+            style.backgroundColor = `hsla(${165 + intensity * 25}, 100%, ${45 + intensity * 15}%, ${0.25 + (intensity * 0.45)})`;
+            // Subtle neon glow on high-weight words
+            if (intensity > 0.7) {
+              style.textShadow = '0 0 6px rgba(0, 255, 200, 0.3)';
+            }
+          }
+          // Isomorphic mode: let Tailwind dark colors handle text (don't force white)
+        } else {
+          // Light mode: existing yellow-based heatmap
+          if (!isIsomorphicMode) {
+            style.color = '#000';
+            const intensity = Math.min(item.weight, 1);
+            style.backgroundColor = `hsla(50, 100%, 75%, ${0.3 + (intensity * 0.7)})`;
+          }
         }
       } else {
-        style.color = '#888';
+        style.color = isDarkMode ? '#555' : '#888';
       }
     }
 
@@ -2328,7 +3166,7 @@ export default function App() {
     }
 
     let classes = "";
-    if (isImportant && isIsomorphicMode && item.conceptIndex !== undefined && item.conceptIndex >= 0) {
+    if (isImportant && isIsomorphicMode && colorSourceId !== undefined) {
       // Rainbow text colors always apply when isIsomorphicMode is on
       classes = segmentColorClass;
 
@@ -2389,97 +3227,199 @@ export default function App() {
     );
   };
 
-  // Process words effect - uses FULL explanations (250+ words) not short segment snippets
-  useEffect(() => {
-    // Need either full explanations or segments to display content
+  // Pure function: compute processed words for a given mode (tech/analogy/narrative)
+  // Extracted so we can pre-compute both tech and analogy arrays without mode dependencies
+  const computeProcessedWords = useCallback((forAnalogyMode: boolean, forNarrativeMode: boolean): ProcessedWord[] => {
     const hasFullExplanation = technicalExplanation || analogyExplanation;
     const hasSegments = segments.length > 0;
-    if ((!hasFullExplanation && !hasSegments) || isLoading) return;
+    if (!hasFullExplanation && !hasSegments) return [];
 
     const allTokens: ProcessedWord[] = [];
-    let fallbackCounter = -1;
+    const isTechnicalMode = !forNarrativeMode && !forAnalogyMode;
 
-    // Select the appropriate full text based on view mode
-    // Priority: Full explanation > Joined segments (fallback)
     let textToParse: string;
-    const isTechnicalMode = !isNarrativeMode && !isAnalogyVisualMode;
-
-    if (isNarrativeMode) {
-      // Narrative mode: join all narrative segments (no full narrative explanation exists)
+    if (forNarrativeMode) {
       textToParse = segments.map(s => s.narrative).filter(Boolean).join(' ');
-    } else if (isAnalogyVisualMode) {
-      // Analogy/Expert mode: use full analogy explanation, fall back to joined segments
+    } else if (forAnalogyMode) {
       textToParse = analogyExplanation || segments.map(s => s.analogy).filter(Boolean).join(' ');
     } else {
-      // Technical mode: use full technical explanation, fall back to joined segments
       textToParse = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
     }
 
-    if (!textToParse) return;
+    if (!textToParse) return [];
 
-    // Only apply LaTeX processing to technical text
-    // Analogy/narrative should be pure prose - no LaTeX conversion
-    let processedText: string;
-    if (isTechnicalMode) {
-      // Technical mode: fix malformed LaTeX, then wrap bare commands
-      const sanitizedText = sanitizeLatex(textToParse);
-      processedText = wrapBareLatex(sanitizedText);
-    } else {
-      // Analogy/narrative mode: pure prose, no LaTeX processing
-      processedText = textToParse;
+    // PRE-SCAN: phrase matching on RAW text BEFORE LaTeX processing
+    const useAnalogyTerms = forAnalogyMode || forNarrativeMode;
+    const phraseWordFallback: Record<string, number> = {};
+    if (multiWordPhraseLookup) {
+      const rawTokens = textToParse.split(/(\s+)/);
+      const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+      const rawOverrides = buildPhraseOverrides(rawTokens, phraseLookup);
+      rawTokens.forEach((tok, idx) => {
+        if (rawOverrides[idx] !== undefined) {
+          const cleaned = stripWordPunctuation(cleanText(tok).toLowerCase());
+          if (cleaned && phraseWordFallback[cleaned] === undefined) {
+            phraseWordFallback[cleaned] = rawOverrides[idx];
+          }
+        }
+      });
     }
 
-    const parts = processedText.split(LATEX_REGEX);
+    // LaTeX processing: only for technical mode (non-ELI5)
+    let processedText: string;
+    if (isTechnicalMode && mainComplexity !== 5) {
+      const sanitizedText = sanitizeLatex(textToParse);
+      const latexConverted = convertUnicodeToLatex(sanitizedText);
+      processedText = wrapBareLatex(latexConverted);
+    } else {
+      processedText = stripMathSymbols(textToParse);
+    }
+
+    const hasLatex = isTechnicalMode && mainComplexity !== 5;
+    const parts = hasLatex
+      ? processedText.split(LATEX_REGEX)
+      : [processedText];
 
     parts.forEach(part => {
       if (!part) return;
-      const isLatex = part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1);
+      const isLatex = hasLatex && (part.startsWith('$') || part.startsWith('\\(') || part.startsWith('\\[') || (part.startsWith('\\') && part.length > 1));
 
       if (isLatex) {
         allTokens.push({ text: part, weight: 1.0, isSpace: false, isLatex: true, segmentIndex: 0 });
       } else {
-        part.split(/(\s+)/).forEach(word => {
+        const tokens = part.split(/(\s+)/);
+        let phraseOverrides: Record<number, number> = {};
+        if (multiWordPhraseLookup) {
+          const phraseLookup = useAnalogyTerms ? multiWordPhraseLookup.analogy : multiWordPhraseLookup.tech;
+          phraseOverrides = buildPhraseOverrides(tokens, phraseLookup);
+        }
+
+        tokens.forEach((word, tokenIdx) => {
           if (!word) return;
           if (/^\s+$/.test(word)) {
             allTokens.push({ text: word, weight: 0, isSpace: true, segmentIndex: 0 });
             return;
           }
-          // In narrative mode, text uses analogy domain vocabulary, so check against analogy terms
-          const useAnalogyTerms = isAnalogyVisualMode || isNarrativeMode;
-          // Use getWordAttention for both weight and entityId (for consistent multi-word coloring)
-          const { weight, entityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
+          const { weight, conceptId, entityId: wordEntityId } = getWordAttention(word, conceptMap, importanceMap, useAnalogyTerms);
+          const cleanedForLookup = stripWordPunctuation(cleanText(word).toLowerCase());
 
-          // Determine conceptIndex: prioritize entityId, then conceptMap, then fallback
-          let cIdx: number | undefined;
-          if (entityId !== undefined) {
-            // Use entityId for consistent multi-word entity coloring
-            cIdx = entityId;
-          } else {
-            const mappedId = getConceptId(word, conceptMap);
-            if (mappedId !== -1) {
-              cIdx = mappedId;
-            } else if (weight > 0.6) {
-              fallbackCounter++;
-              cIdx = fallbackCounter;
+          let semanticConceptId: number | undefined;
+          if (semanticColorMap) {
+            const semanticLookup = useAnalogyTerms ? semanticColorMap.analogy : semanticColorMap.tech;
+            const mapped = semanticLookup.get(cleanedForLookup);
+            if (mapped !== undefined) semanticConceptId = mapped;
+          }
+
+          let phraseOverrideId = phraseOverrides[tokenIdx];
+          if (phraseOverrideId === undefined) {
+            if (cleanedForLookup && phraseWordFallback[cleanedForLookup] !== undefined) {
+              phraseOverrideId = phraseWordFallback[cleanedForLookup];
             }
           }
-          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: cIdx, entityId });
+
+          const finalConceptIndex = semanticConceptId ?? phraseOverrideId ?? conceptId;
+          allTokens.push({ text: word, weight, isSpace: false, isLatex: false, segmentIndex: 0, conceptIndex: finalConceptIndex, entityId: finalConceptIndex ?? wordEntityId });
         });
       }
     });
 
-    setIsTransitioning(true);
-    const timer = setTimeout(() => {
-      if (defPosition) {
-        setIsTransitioning(false);
-        return;
-      }
-      setProcessedWords(allTokens);
-      requestAnimationFrame(() => setIsTransitioning(false));
-    }, 200);
+    return allTokens;
+  }, [segments, conceptMap, importanceMap, technicalExplanation, analogyExplanation, multiWordPhraseLookup, mainComplexity, semanticColorMap]);
 
-    return () => clearTimeout(timer);
-  }, [segments, isAnalogyVisualMode, isNarrativeMode, conceptMap, importanceMap, defPosition, technicalExplanation, analogyExplanation]);
+  // Content-change effect: pre-compute BOTH tech and analogy word arrays (runs on data changes, NOT on morph toggle)
+  useEffect(() => {
+    const hasFullExplanation = technicalExplanation || analogyExplanation;
+    const hasSegments = segments.length > 0;
+    if ((!hasFullExplanation && !hasSegments) || isLoading) return;
+
+    const techWords = computeProcessedWords(false, false);
+    const analogyWords = computeProcessedWords(true, false);
+    setTechProcessedWords(techWords);
+    setAnalogyProcessedWords(analogyWords);
+
+    // Set active display based on current mode
+    if (isNarrativeMode) {
+      const narrativeWords = computeProcessedWords(isAnalogyVisualMode, true);
+      setProcessedWords(narrativeWords);
+    } else {
+      setProcessedWords(isAnalogyVisualMode ? analogyWords : techWords);
+    }
+  }, [segments, conceptMap, importanceMap, technicalExplanation, analogyExplanation, multiWordPhraseLookup, mainComplexity, semanticColorMap, isLoading, computeProcessedWords]);
+
+  // Lightweight mode-switch effect: instant swap of pre-computed arrays on morph toggle
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (techProcessedWords.length === 0 && analogyProcessedWords.length === 0) return;
+    if (isNarrativeMode) {
+      const narrativeWords = computeProcessedWords(isAnalogyVisualMode, true);
+      setProcessedWords(narrativeWords);
+      return;
+    }
+    const target = isAnalogyVisualMode ? analogyProcessedWords : techProcessedWords;
+    if (isMobile) {
+      // Mobile: instant swap — no transition overhead, no blur, no delay
+      setProcessedWords(target);
+    } else {
+      // Desktop: keep smooth transition for polish
+      setIsTransitioning(true);
+      const timer = setTimeout(() => {
+        setProcessedWords(target);
+        requestAnimationFrame(() => setIsTransitioning(false));
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [isAnalogyVisualMode, isNarrativeMode]);
+
+  // Searchable word list for mobile word search (derived from current processedWords)
+  const searchableWords = useMemo(() => {
+    if (processedWords.length === 0) return [];
+    const seen = new Set<string>();
+    const words: string[] = [];
+    for (const pw of processedWords) {
+      if (pw.isSpace || pw.isLatex) continue;
+      const clean = pw.text.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '').toLowerCase();
+      if (clean.length >= 2 && !STOP_WORDS.has(clean) && !seen.has(clean)) {
+        seen.add(clean);
+        words.push(clean);
+      }
+    }
+    return words;
+  }, [processedWords]);
+
+  // Mobile word search handler
+  const handleWordSearch = useCallback((query: string) => {
+    setWordSearchQuery(query);
+    if (query.length < 1) {
+      setWordSearchResults([]);
+      return;
+    }
+    const scored = searchableWords
+      .map((word: string) => ({ word, score: fuzzyScore(query, word) }))
+      .filter(({ score }: { score: number }) => score > 0.2)
+      .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+      .slice(0, 7)
+      .map(({ word }: { word: string }) => word);
+    setWordSearchResults(scored);
+  }, [searchableWords]);
+
+  // Handle search result selection → define the word
+  const handleSearchDefine = useCallback((word: string) => {
+    setIsWordSearchOpen(false);
+    setWordSearchQuery('');
+    setWordSearchResults([]);
+
+    setMiniDefPosition(null);
+    setMiniSelectedTerm(null);
+    setSelectedTerm(word);
+    if (isMobile) {
+      setDefPosition({ top: 0, left: 0, placement: 'below' });
+    }
+
+    const context = isAnalogyVisualMode
+      ? segments.map(s => s.analogy).join(' ')
+      : segments.map(s => s.tech).join(' ');
+    fetchDefinition(word, context, defComplexity, false);
+  }, [isMobile, isAnalogyVisualMode, segments, defComplexity]);
 
   const modeLabel = getViewModeLabel();
 
@@ -2494,13 +3434,16 @@ export default function App() {
         disambiguation={disambiguation}
         setDisambiguation={setDisambiguation}
         handleSetDomain={handleSetDomain}
+        isListening={isDomainListening}
+        onMicClick={isDomainListening ? stopDomainListening : startDomainListening}
+        isMicSupported={isDomainMicSupported}
       />
     );
   }
 
   // Main App
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${isDarkMode ? 'bg-neutral-900' : 'bg-neutral-50'}`}>
+    <div className={`min-h-screen flex flex-col overflow-x-hidden transition-colors duration-300 ${isDarkMode ? 'bg-neutral-900' : 'bg-neutral-50'}`}>
       {/* Disambiguation Modal */}
       {disambiguation && (
         <DisambiguationModal
@@ -2509,6 +3452,8 @@ export default function App() {
           isLoading={isDisambiguating}
           onSelect={async (opt) => {
             setIsDisambiguating(true);
+            // Clear disambiguation cache — user has made their choice
+            disambiguationCacheRef.current = null;
             // Clear current state before proceeding
             resetAllState({ keepDomain: true, keepTopic: true });
 
@@ -2522,6 +3467,7 @@ export default function App() {
             setIsDisambiguating(false);
           }}
           onCancel={() => {
+            // Keep cache intact so re-submitting the same topic shows disambiguation again
             setDisambiguation(null);
             setIsDisambiguating(false);
           }}
@@ -2592,16 +3538,16 @@ export default function App() {
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
             freeTierRemaining === 0
               ? (isDarkMode ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700')
-              : freeTierRemaining <= 2
+              : freeTierRemaining <= 8
                 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700')
                 : (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
           }`}>
             <Sparkles size={12} />
             {freeTierRemaining === 0
               ? 'Free searches used'
-              : `${freeTierRemaining} of ${freeTierLimit} free searches left today`
+              : `~${Math.ceil(freeTierRemaining / 5)} free searches left today`
             }
-            {freeTierRemaining <= 2 && freeTierRemaining > 0 && (
+            {freeTierRemaining <= 8 && freeTierRemaining > 0 && (
               <button
                 onClick={() => setShowFreeTierModal(true)}
                 className={`ml-1 underline hover:no-underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}
@@ -2676,276 +3622,841 @@ export default function App() {
                     ? (isDarkMode ? 'ring-2 ring-blue-500/30' : 'ring-2 ring-blue-400/30')
                     : ''
                 }`}
-                onMouseEnter={handleMouseEnterWrapper}
-                onMouseLeave={handleMouseLeaveWrapper}
                 onClick={handleTouchToggle}
               >
                 {/* Content Header */}
-                <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5">
-                    <button
-                      onClick={cycleViewMode}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                        viewMode === 'morph' && !isNarrativeMode
-                          ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
-                          : viewMode === 'tech'
-                            ? (isDarkMode ? 'bg-amber-900/50 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20' : 'bg-amber-100 text-amber-700 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/20')
-                            : viewMode === 'nfl'
-                              ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20' : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20')
+                <div className={`px-3 md:px-4 py-2 md:py-3 border-b ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
+                  {/* Primary toolbar row — always visible */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5">
+                      <button
+                        onClick={cycleViewMode}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                          viewMode === 'morph' && !isNarrativeMode
+                            ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
+                            : viewMode === 'tech'
+                              ? (isDarkMode ? 'bg-amber-900/50 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20' : 'bg-amber-100 text-amber-700 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/20')
+                              : viewMode === 'nfl'
+                                ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20' : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                        }`}
+                      >
+                        {modeLabel.icon}
+                        <span>{modeLabel.text}</span>
+                      </button>
+                      {/* Show selecting indicator when morph is locked for selection */}
+                      {morphLockedForSelection && viewMode === 'morph' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                          Selecting...
+                        </span>
+                      )}
+                      {hasStarted && (
+                        <button
+                          onClick={() => {
+                            if (isStudyGuideMode) setIsStudyGuideMode(false);
+                            if (!isNarrativeMode) {
+                              setIsBulletMode(false);
+                              if (isFirstPrinciplesMode) {
+                                setShowCondensedView(false);
+                                setIsFirstPrinciplesMode(false);
+                              }
+                              if (viewMode === 'morph') {
+                                setViewMode('nfl');
+                              }
+                            }
+                            setIsNarrativeMode(!isNarrativeMode);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isNarrativeMode
+                              ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
                               : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                      }`}
+                          }`}
+                        >
+                          <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
+                          <span className="hidden sm:inline">Story</span>
+                        </button>
+                      )}
+                      {/* ELI Complexity Buttons — always in primary row */}
+                      {hasStarted && (
+                        <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
+                          {([5, 50, 100] as const).map((level) => (
+                            <button
+                              key={level}
+                              onClick={() => handleComplexityChange(level)}
+                              disabled={isRegenerating || isLoading}
+                              className={`px-2 py-1.5 md:py-2 min-h-touch text-xs font-bold transition-colors ${
+                                mainComplexity === level
+                                  ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
+                                  : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
+                              } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title={level === 5 ? "Explain like I'm 5" : level === 100 ? "Advanced Academic" : "Standard"}
+                            >
+                              ELI{level}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Mobile: "More" toggle — only on mobile when content has loaded */}
+                      {isMobile && hasStarted && (
+                        <button
+                          onClick={() => setShowMoreTools(!showMoreTools)}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            showMoreTools
+                              ? (isDarkMode ? 'bg-neutral-600 text-white' : 'bg-neutral-300 text-neutral-800')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')
+                          }`}
+                          title="More tools"
+                        >
+                          <ChevronDown size={14} className={`transition-transform ${showMoreTools ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                      {/* Desktop: show ALL remaining buttons inline (no change from before) */}
+                      {/* Mobile: these go into collapsible section below */}
+                      {!isMobile && (
+                        <>
+                          {/* Bullet Point Mode */}
+                          {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && (
+                            <button
+                              onClick={() => {
+                                if (isStudyGuideMode) setIsStudyGuideMode(false);
+                                if (!isBulletMode) {
+                                  setIsNarrativeMode(false);
+                                  if (isFirstPrinciplesMode) {
+                                    setShowCondensedView(false);
+                                    setIsFirstPrinciplesMode(false);
+                                  }
+                                  if (viewMode === 'morph') {
+                                    setViewMode('tech');
+                                  }
+                                }
+                                setIsBulletMode(!isBulletMode);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isBulletMode
+                                  ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Bullet Point Mode"
+                            >
+                              <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Bullets</span>
+                            </button>
+                          )}
+                          {/* First Principles Mode */}
+                          {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
+                            <button
+                              onClick={toggleFirstPrinciplesMode}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isFirstPrinciplesMode
+                                  ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="First Principles Mode"
+                            >
+                              <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Essence</span>
+                            </button>
+                          )}
+                          {/* Constellation Mode */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsConstellationMode(!isConstellationMode); }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isConstellationMode
+                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Constellation Mode (G)"
+                            >
+                              <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Graph</span>
+                            </button>
+                          )}
+                          {/* Dual Pane Mode */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsDualPaneMode(!isDualPaneMode); }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isDualPaneMode
+                                  ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Dual Pane Isomorphic View (P)"
+                            >
+                              <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Dual</span>
+                            </button>
+                          )}
+                          {/* Mastery Mode */}
+                          {hasStarted && conceptMap.length > 0 && (
+                            <button
+                              onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsMasteryMode(true); }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isMasteryMode
+                                  ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Test My Understanding (U)"
+                            >
+                              <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Mastery</span>
+                            </button>
+                          )}
+                          {/* Study Guide */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isStudyGuideMode
+                                  ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50 shadow-lg shadow-teal-500/20' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50 shadow-lg shadow-teal-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Generate Study Guide (Y)"
+                            >
+                              <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">Guide</span>
+                            </button>
+                          )}
+                          {/* Intuition */}
+                          {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
+                            <button
+                              onClick={() => setShowIntuitionModal(true)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showIntuitionModal
+                                  ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="View Core Intuitions"
+                            >
+                              <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
+                              <span className="hidden sm:inline">Intuition</span>
+                            </button>
+                          )}
+                          {/* Reroll */}
+                          {hasStarted && lastSubmittedTopic && (
+                            <button
+                              onClick={() => {
+                                setMasterySessionCache(null);
+                                setIsMasteryMode(false);
+                                setStudyGuideCache(null);
+                                setIsStudyGuideMode(false);
+                                fetchAnalogy(lastSubmittedTopic);
+                              }}
+                              disabled={isRegenerating || isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
+                              } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Regenerate description and reset mastery progress"
+                            >
+                              <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                              <span className="hidden sm:inline">Reroll</span>
+                            </button>
+                          )}
+                          {/* Ask */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setShowFollowUp(!showFollowUp)}
+                              disabled={isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                              } ${
+                                showFollowUp
+                                  ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50 shadow-lg shadow-blue-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title="Ask a Follow-up Question"
+                            >
+                              <MessageCircle size={14} />
+                              <span className="hidden sm:inline">Ask</span>
+                            </button>
+                          )}
+                          {/* Quiz */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => fetchQuiz(false)}
+                              disabled={isQuizLoading || isLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                              } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
+                              title="Quick Quiz"
+                            >
+                              {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
+                              <span className="hidden sm:inline">Quiz</span>
+                            </button>
+                          )}
+                          {/* Synthesis — always visible once content loads; shows spinner while enrichment pending */}
+                          {hasStarted && segments.length > 0 && (
+                            <button
+                              onClick={() => synthesisSummary ? setShowSynthesis(!showSynthesis) : null}
+                              disabled={!synthesisSummary && !isEnrichmentLoading}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                !synthesisSummary
+                                  ? (isDarkMode ? 'bg-neutral-700/50 text-neutral-500' : 'bg-neutral-100 text-neutral-400')
+                                  : showSynthesis
+                                    ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
+                                    : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={synthesisSummary ? "View Synthesis Summary" : isEnrichmentLoading ? "Synthesis loading..." : "Synthesis unavailable"}
+                            >
+                              {isEnrichmentLoading && !synthesisSummary ? <Loader2 className="animate-spin" size={14} /> : <BrainCircuit size={14} />}
+                              <span className="hidden sm:inline">Synthesis</span>
+                            </button>
+                          )}
+                          {/* Mastery History */}
+                          {masteryHistory.length > 0 && (
+                            <button
+                              onClick={() => setShowMasteryHistory(true)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showMasteryHistory
+                                  ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`${masteryHistory.length} Mastered Topics`}
+                            >
+                              <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
+                              <span className="hidden sm:inline">{masteryHistory.length}</span>
+                            </button>
+                          )}
+                          {/* Text Scale */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => {
+                                const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                                const currentIndex = scales.indexOf(textScale);
+                                setTextScale(scales[(currentIndex + 1) % scales.length]);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                textScale > 1
+                                  ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (X)`}
+                            >
+                              <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+                              <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                            </button>
+                          )}
+                          {/* Font Preset */}
+                          {hasStarted && (
+                            <button
+                              onClick={() => setShowFontPicker(!showFontPicker)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                showFontPicker
+                                  ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50 shadow-lg shadow-indigo-500/20')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                              }`}
+                              title={`Reading Font: ${fontPreset.name}`}
+                            >
+                              <span className="text-sm font-serif">Aa</span>
+                              <span className="hidden sm:inline">{fontPreset.emoji}</span>
+                            </button>
+                          )}
+                          {/* Regenerating indicator */}
+                          {isRegenerating && (
+                            <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                              <Loader2 size={12} className="animate-spin" />
+                              Regenerating...
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setIsIsomorphicMode(!isIsomorphicMode)}
+                        className={`p-2 rounded-lg transition-colors mr-1 ${
+                          isIsomorphicMode
+                            ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-600')
+                            : (isDarkMode ? 'text-neutral-500 hover:bg-neutral-700' : 'text-neutral-400 hover:bg-neutral-100')
+                        }`}
+                        title="Isomorphic Colors"
+                      >
+                        <Palette size={16} />
+                      </button>
+                      <button
+                        onClick={() => setIsImmersive(!isImmersive)}
+                        className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:bg-neutral-700' : 'text-neutral-500 hover:bg-neutral-100'}`}
+                        title={isImmersive ? "Exit Immersive" : "Immersive Mode"}
+                      >
+                        {isImmersive ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mobile: Collapsible secondary toolbar */}
+                  {isMobile && hasStarted && (
+                    <div
+                      className={`overflow-hidden transition-all duration-200 ease-in-out ${showMoreTools ? 'max-h-96 mt-2' : 'max-h-0'}`}
                     >
-                      {modeLabel.icon}
-                      <span>{modeLabel.text}</span>
-                    </button>
-                    {/* Show selecting indicator when morph is locked for selection */}
-                    {morphLockedForSelection && viewMode === 'morph' && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
-                        Selecting...
-                      </span>
-                    )}
-                    {hasStarted && (
-                      <button
-                        onClick={() => {
-                          if (!isNarrativeMode) {
-                            // Turning on Story - disable Bullets and Essence
-                            setIsBulletMode(false);
-                            if (isFirstPrinciplesMode) {
-                              setShowCondensedView(false);
-                              setIsFirstPrinciplesMode(false);
-                            }
-                            // Lock to Expert mode when enabling Story from Morph to prevent transition jitter
-                            if (viewMode === 'morph') {
-                              setViewMode('nfl');
-                            }
-                          }
-                          setIsNarrativeMode(!isNarrativeMode);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isNarrativeMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                      >
-                        <BookOpenText size={14} className={isNarrativeMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Story</span>
-                      </button>
-                    )}
-                    {/* Bullet Point Mode - Only in Tech Lock */}
-                    {hasStarted && viewMode === 'tech' && (
-                      <button
-                        onClick={() => {
-                          if (!isBulletMode) {
-                            // Turning on Bullets - disable Story and Essence
-                            setIsNarrativeMode(false);
-                            if (isFirstPrinciplesMode) {
-                              setShowCondensedView(false);
-                              setIsFirstPrinciplesMode(false);
-                            }
-                          }
-                          setIsBulletMode(!isBulletMode);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isBulletMode
-                            ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Bullet Point Mode - Condensed single-sentence summaries"
-                      >
-                        <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Bullets</span>
-                      </button>
-                    )}
-                    {/* First Principles Mode - Available in Tech and Morph modes when condensed data available */}
-                    {hasStarted && (viewMode === 'tech' || viewMode === 'morph') && condensedData && (
-                      <button
-                        onClick={toggleFirstPrinciplesMode}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isFirstPrinciplesMode
-                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="First Principles Mode - WHAT/WHY essence with atomic insights"
-                      >
-                        <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Essence</span>
-                      </button>
-                    )}
-                    {/* ELI Complexity Buttons */}
-                    {hasStarted && (
-                      <div className={`flex items-center rounded-full overflow-hidden border ${isDarkMode ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 bg-neutral-100'}`}>
-                        {([5, 50, 100] as const).map((level) => (
+                      <div className={`flex items-center flex-wrap gap-x-2 gap-y-1.5 pt-2 border-t ${isDarkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                        {/* Bullets */}
+                        {(viewMode === 'tech' || viewMode === 'morph') && (
                           <button
-                            key={level}
-                            onClick={() => handleComplexityChange(level)}
-                            disabled={isRegenerating || isLoading}
-                            className={`px-2 py-2 min-h-touch text-xs font-bold transition-colors ${
-                              mainComplexity === level
-                                ? (isDarkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-white')
-                                : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200')
-                            } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={level === 5 ? "Explain like I'm 5" : level === 100 ? "Advanced Academic" : "Standard"}
+                            onClick={() => {
+                              if (isStudyGuideMode) setIsStudyGuideMode(false);
+                              if (!isBulletMode) {
+                                setIsNarrativeMode(false);
+                                if (isFirstPrinciplesMode) {
+                                  setShowCondensedView(false);
+                                  setIsFirstPrinciplesMode(false);
+                                }
+                                if (viewMode === 'morph') {
+                                  setViewMode('tech');
+                                }
+                              }
+                              setIsBulletMode(!isBulletMode);
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isBulletMode
+                                ? (isDarkMode ? 'bg-orange-900/50 text-orange-300 ring-2 ring-orange-500/50' : 'bg-orange-100 text-orange-700 ring-2 ring-orange-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
                           >
-                            ELI{level}
+                            <List size={14} className={isBulletMode ? 'animate-pulse' : ''} />
+                            <span>Bullets</span>
                           </button>
-                        ))}
+                        )}
+                        {/* Essence */}
+                        {(viewMode === 'tech' || viewMode === 'morph') && condensedData && (
+                          <button
+                            onClick={toggleFirstPrinciplesMode}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isFirstPrinciplesMode
+                                ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Zap size={14} className={isFirstPrinciplesMode ? 'animate-pulse' : ''} />
+                            <span>Essence</span>
+                          </button>
+                        )}
+                        {/* Graph */}
+                        <button
+                          onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsConstellationMode(!isConstellationMode); }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isConstellationMode
+                              ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
+                          <span>Graph</span>
+                        </button>
+                        {/* Dual */}
+                        <button
+                          onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsDualPaneMode(!isDualPaneMode); }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isDualPaneMode
+                              ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
+                          <span>Dual</span>
+                        </button>
+                        {/* Mastery */}
+                        {conceptMap.length > 0 && (
+                          <button
+                            onClick={() => { if (isStudyGuideMode) setIsStudyGuideMode(false); setIsMasteryMode(true); }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isMasteryMode
+                                ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
+                            <span>Mastery</span>
+                          </button>
+                        )}
+                        {/* Guide */}
+                        <button
+                          onClick={() => setIsStudyGuideMode(!isStudyGuideMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isStudyGuideMode
+                              ? (isDarkMode ? 'bg-teal-900/50 text-teal-300 ring-2 ring-teal-500/50' : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <BookOpen size={14} className={isStudyGuideMode ? 'animate-pulse' : ''} />
+                          <span>Guide</span>
+                        </button>
+                        {/* Intuition */}
+                        {segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
+                          <button
+                            onClick={() => setShowIntuitionModal(true)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              showIntuitionModal
+                                ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
+                            <span>Intuition</span>
+                          </button>
+                        )}
+                        {/* Reroll */}
+                        {lastSubmittedTopic && (
+                          <button
+                            onClick={() => {
+                              setMasterySessionCache(null);
+                              setIsMasteryMode(false);
+                              setStudyGuideCache(null);
+                              setIsStudyGuideMode(false);
+                              fetchAnalogy(lastSubmittedTopic);
+                            }}
+                            disabled={isRegenerating || isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'
+                            } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
+                            <span>Reroll</span>
+                          </button>
+                        )}
+                        {/* Ask */}
+                        <button
+                          onClick={() => setShowFollowUp(!showFollowUp)}
+                          disabled={isLoading}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${
+                            showFollowUp
+                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300 ring-2 ring-blue-500/50' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <MessageCircle size={14} />
+                          <span>Ask</span>
+                        </button>
+                        {/* Quiz */}
+                        {(
+                          <button
+                            onClick={() => fetchQuiz(false)}
+                            disabled={isQuizLoading || isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              isQuizLoading || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}
+                          >
+                            {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
+                            <span>Quiz</span>
+                          </button>
+                        )}
+                        {/* Synthesis — always visible once content loads */}
+                        {hasStarted && segments.length > 0 && (
+                          <button
+                            onClick={() => synthesisSummary ? setShowSynthesis(!showSynthesis) : null}
+                            disabled={!synthesisSummary && !isEnrichmentLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              !synthesisSummary
+                                ? (isDarkMode ? 'bg-neutral-700/50 text-neutral-500' : 'bg-neutral-100 text-neutral-400')
+                                : showSynthesis
+                                  ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50')
+                                  : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            {isEnrichmentLoading && !synthesisSummary ? <Loader2 className="animate-spin" size={14} /> : <BrainCircuit size={14} />}
+                            <span>Synthesis</span>
+                          </button>
+                        )}
+                        {/* Mastery History */}
+                        {masteryHistory.length > 0 && (
+                          <button
+                            onClick={() => setShowMasteryHistory(true)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              showMasteryHistory
+                                ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50')
+                                : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                            }`}
+                          >
+                            <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
+                            <span>{masteryHistory.length}</span>
+                          </button>
+                        )}
+                        {/* Text Scale */}
+                        <button
+                          onClick={() => {
+                            const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
+                            const currentIndex = scales.indexOf(textScale);
+                            setTextScale(scales[(currentIndex + 1) % scales.length]);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            textScale > 1
+                              ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
+                          <span>{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
+                        </button>
+                        {/* Font Preset */}
+                        <button
+                          onClick={() => setShowFontPicker(!showFontPicker)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            showFontPicker
+                              ? (isDarkMode ? 'bg-indigo-900/50 text-indigo-300 ring-2 ring-indigo-500/50' : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400/50')
+                              : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
+                          }`}
+                        >
+                          <span className="text-sm font-serif">Aa</span>
+                          <span>{fontPreset.emoji}</span>
+                        </button>
+                        {/* Dark Mode toggle - moved from header on mobile */}
+                        <button
+                          onClick={() => setIsDarkMode(!isDarkMode)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                            isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'
+                          }`}
+                        >
+                          {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
+                          <span>{isDarkMode ? 'Light' : 'Dark'}</span>
+                        </button>
+                        {/* Settings - promoted to primary toolbar on mobile (8B) */}
+                        {/* Regenerating indicator */}
+                        {isRegenerating && (
+                          <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                            <Loader2 size={12} className="animate-spin" />
+                            Regenerating...
+                          </span>
+                        )}
                       </div>
-                    )}
-                    {/* Constellation Mode Button */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setIsConstellationMode(!isConstellationMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isConstellationMode
-                            ? (isDarkMode ? 'bg-purple-900/50 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/20' : 'bg-purple-100 text-purple-700 ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Constellation Mode (G)"
-                      >
-                        <Network size={14} className={isConstellationMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Graph</span>
-                      </button>
-                    )}
-                    {/* Dual Pane Mode Button */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => setIsDualPaneMode(!isDualPaneMode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isDualPaneMode
-                            ? (isDarkMode ? 'bg-cyan-900/50 text-cyan-300 ring-2 ring-cyan-500/50 shadow-lg shadow-cyan-500/20' : 'bg-cyan-100 text-cyan-700 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Dual Pane Isomorphic View (P)"
-                      >
-                        <Columns size={14} className={isDualPaneMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Dual</span>
-                      </button>
-                    )}
-                    {/* Mastery Mode Button */}
-                    {hasStarted && conceptMap.length > 0 && (
-                      <button
-                        onClick={() => setIsMasteryMode(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isMasteryMode
-                            ? (isDarkMode ? 'bg-green-900/50 text-green-300 ring-2 ring-green-500/50 shadow-lg shadow-green-500/20' : 'bg-green-100 text-green-700 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="Test My Understanding (U)"
-                      >
-                        <GraduationCap size={14} className={isMasteryMode ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">Mastery</span>
-                      </button>
-                    )}
-                    {/* Intuition Mode Button - Opens modal with 3 memorable one-liners */}
-                    {hasStarted && segments.length > 0 && segments[0].intuitions && segments[0].intuitions.length > 0 && (
-                      <button
-                        onClick={() => setShowIntuitionModal(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showIntuitionModal
-                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title="View Core Intuitions"
-                      >
-                        <Lightbulb size={14} className={showIntuitionModal ? 'animate-pulse text-yellow-400' : 'text-yellow-500'} />
-                        <span className="hidden sm:inline">Intuition</span>
-                      </button>
-                    )}
-                    {/* Regenerate Button - Dice to regenerate description and reset mastery */}
-                    {hasStarted && lastSubmittedTopic && (
-                      <button
-                        onClick={() => {
-                          // Reset mastery session cache (clears quiz progress)
-                          setMasterySessionCache(null);
-                          // Close mastery mode if open
-                          setIsMasteryMode(false);
-                          // Regenerate content for current topic
-                          fetchAnalogy(lastSubmittedTopic);
-                        }}
-                        disabled={isRegenerating || isLoading}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          isDarkMode ? 'bg-neutral-700 text-neutral-300 hover:bg-orange-900/50 hover:text-orange-300' : 'bg-neutral-200 text-neutral-600 hover:bg-orange-100 hover:text-orange-700'
-                        } ${isRegenerating || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Regenerate description and reset mastery progress"
-                      >
-                        <Dices size={14} className={isRegenerating ? 'animate-spin' : ''} />
-                        <span className="hidden sm:inline">Reroll</span>
-                      </button>
-                    )}
-                    {/* Mastery History Button - Shows gold medals for mastered topics */}
-                    {masteryHistory.length > 0 && (
-                      <button
-                        onClick={() => setShowMasteryHistory(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          showMasteryHistory
-                            ? (isDarkMode ? 'bg-yellow-900/50 text-yellow-300 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title={`${masteryHistory.length} Mastered Topics`}
-                      >
-                        <Medal size={14} className={showMasteryHistory ? 'animate-pulse text-yellow-500' : 'text-yellow-500'} />
-                        <span className="hidden sm:inline">{masteryHistory.length}</span>
-                      </button>
-                    )}
-                    {/* Text Scale Control */}
-                    {hasStarted && (
-                      <button
-                        onClick={() => {
-                          const scales: (1 | 1.25 | 1.5 | 2)[] = [1, 1.25, 1.5, 2];
-                          const currentIndex = scales.indexOf(textScale);
-                          setTextScale(scales[(currentIndex + 1) % scales.length]);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                          textScale > 1
-                            ? (isDarkMode ? 'bg-violet-900/50 text-violet-300 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20' : 'bg-violet-100 text-violet-700 ring-2 ring-violet-400/50 shadow-lg shadow-violet-500/20')
-                            : (isDarkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600')
-                        }`}
-                        title={`Text Size: ${textScale === 1 ? 'Normal' : textScale === 1.25 ? 'Large' : textScale === 1.5 ? 'X-Large' : 'Fill'} (T)`}
-                      >
-                        <Type size={14} className={textScale > 1 ? 'animate-pulse' : ''} />
-                        <span className="hidden sm:inline">{textScale === 1 ? '1x' : textScale === 1.25 ? '1.25x' : textScale === 1.5 ? '1.5x' : '2x'}</span>
-                      </button>
-                    )}
-                    {/* Regenerating indicator */}
-                    {isRegenerating && (
-                      <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
-                        <Loader2 size={12} className="animate-spin" />
-                        Regenerating...
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsIsomorphicMode(!isIsomorphicMode)}
-                      className={`p-2 rounded-lg transition-colors mr-1 ${
-                        isIsomorphicMode
-                          ? (isDarkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-600')
-                          : (isDarkMode ? 'text-neutral-500 hover:bg-neutral-700' : 'text-neutral-400 hover:bg-neutral-100')
-                      }`}
-                      title="Isomorphic Colors"
-                    >
-                      <Palette size={16} />
-                    </button>
-                    <button
-                      onClick={() => setIsImmersive(!isImmersive)}
-                      className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:bg-neutral-700' : 'text-neutral-500 hover:bg-neutral-100'}`}
-                      title={isImmersive ? "Exit Immersive" : "Immersive Mode"}
-                    >
-                      {isImmersive ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Content Body */}
+                {/* Font Picker Panel */}
+                {showFontPicker && (
+                  <div className="px-4 pt-3">
+                    <FontPicker
+                      isDarkMode={isDarkMode}
+                      currentPreset={fontPreset}
+                      onSelectPreset={(preset) => {
+                        setFontPreset(preset);
+                      }}
+                      onClose={() => setShowFontPicker(false)}
+                    />
+                  </div>
+                )}
+
+                {/* Follow-up Section - positioned near top for easy access */}
+              {showFollowUp && (
+                <div ref={followUpContainerRef} className={`rounded-xl p-4 border mx-4 mt-3 ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
+                  {/* Header with minimize and history buttons */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
+                      <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {/* History toggle button - only show if there's history */}
+                      {tutorHistory.length > 0 && (
+                        <button
+                          onClick={() => setShowTutorHistory(!showTutorHistory)}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            showTutorHistory
+                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-600')
+                              : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100')
+                          }`}
+                          title="View conversation history"
+                        >
+                          <History size={14} />
+                        </button>
+                      )}
+                      {/* Minimize button */}
+                      <button
+                        onClick={() => setShowFollowUp(false)}
+                        className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'}`}
+                        title="Minimize"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* History Panel - clickable Q&A pairs for branching */}
+                  {showTutorHistory && tutorHistory.length > 0 && (
+                    <div className={`mb-3 p-3 rounded-lg max-h-64 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                      <div className="space-y-2">
+                        {(() => {
+                          // Group history into Q&A pairs
+                          const pairs: { question: string; answer: string; originalIndex: number }[] = [];
+                          for (let i = 0; i < tutorHistory.length; i += 2) {
+                            if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
+                              pairs.push({
+                                question: tutorHistory[i].text,
+                                answer: tutorHistory[i + 1].text,
+                                originalIndex: Math.floor(i / 2)
+                              });
+                            }
+                          }
+                          // Show last 5 pairs
+                          const displayPairs = pairs.slice(-5);
+                          return displayPairs.map((pair) => {
+                            const isSelected = selectedHistoryBranch === pair.originalIndex;
+                            return (
+                              <div
+                                key={pair.originalIndex}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    // Deselect - go back to latest
+                                    setSelectedHistoryBranch(null);
+                                    // Show the latest response
+                                    const lastPair = pairs[pairs.length - 1];
+                                    if (lastPair) {
+                                      setTutorResponse({ question: lastPair.question, answer: lastPair.answer, mode: "Tutor" });
+                                    }
+                                  } else {
+                                    // Select this branch point
+                                    setSelectedHistoryBranch(pair.originalIndex);
+                                    // Show full Q&A as current response
+                                    setTutorResponse({ question: pair.question, answer: pair.answer, mode: "Tutor" });
+                                  }
+                                }}
+                                className={`text-xs p-2 rounded cursor-pointer transition-all ${
+                                  isSelected
+                                    ? (isDarkMode ? 'bg-blue-900/50 border border-blue-500/50 ring-1 ring-blue-500/30' : 'bg-blue-100 border border-blue-300')
+                                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-white hover:bg-neutral-50')
+                                }`}
+                              >
+                                <p className={`font-medium mb-1 ${isSelected ? (isDarkMode ? 'text-blue-200' : 'text-blue-700') : (isDarkMode ? 'text-blue-300' : 'text-blue-600')}`}>
+                                  Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
+                                </p>
+                                <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
+                                  A: {isSelected ? stripMathSymbols(pair.answer) : (pair.answer.length > 120 ? stripMathSymbols(pair.answer.slice(0, 120)) + '...' : stripMathSymbols(pair.answer))}
+                                </p>
+                                {isSelected && (
+                                  <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                                    ↳ Branch from here - your next question will continue from this point
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      {selectedHistoryBranch !== null && (
+                        <div className={`mt-2 pt-2 border-t text-xs ${isDarkMode ? 'border-neutral-700 text-amber-400' : 'border-neutral-200 text-amber-600'}`}>
+                          ⚡ Branching mode: Next question will fork from selected point
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Input area */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={followUpQuery}
+                      onChange={(e) => setFollowUpQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAskTutor()}
+                      placeholder="e.g., Can you explain this differently?"
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm ${isDarkMode ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500' : 'border-neutral-200'}`}
+                    />
+                    {isAskMicSupported && (
+                      <button
+                        onClick={isAskListening ? stopAskListening : startAskListening}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isAskListening
+                            ? 'bg-red-500 text-white animate-pulse'
+                            : isDarkMode
+                              ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                              : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                        }`}
+                        title={isAskListening ? "Stop listening" : "Voice input"}
+                      >
+                        {isAskListening ? <MicOff size={16} /> : <Mic size={16} />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleAskTutor()}
+                      disabled={isTutorLoading || !followUpQuery.trim()}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                    >
+                      {isTutorLoading ? <Loader2 className="animate-spin" size={16} /> : 'Ask'}
+                    </button>
+                  </div>
+
+                  {/* Current response with attention controls */}
+                  {tutorResponse && (
+                    <div ref={tutorResponseRef} className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
+                      <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
+
+                      {/* Answer with attention rendering - strip math symbols for clean prose */}
+                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
+                        {renderAttentiveText(
+                          stripMathSymbols(tutorResponse.answer),
+                          tutorThreshold,
+                          setTutorThreshold,
+                          isTutorColorMode,
+                          setIsTutorColorMode,
+                          conceptMap,
+                          isDarkMode ? 'text-neutral-200' : 'text-neutral-700',
+                          1.0,
+                          undefined
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+                {/* Content Body + Footer - hidden when Study Guide is active */}
+                {!isStudyGuideMode ? (<>
                 <div
                   ref={contentRef}
-                  className="p-6 md:p-8 relative select-text min-h-[400px]"
+                  className="p-6 md:p-8 relative select-text min-h-[400px] signal-font"
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleSelectionStart}
                   onMouseUp={handleSelectionEnd}
                   onTouchStart={handleSelectionStart}
-                  onTouchEnd={handleSelectionEnd}
+                  onTouchEnd={(e) => handleSelectionEnd(e)}
+                  onMouseEnter={handleMouseEnterWrapper}
+                  onMouseLeave={handleMouseLeaveWrapper}
                 >
+                  {/* Attention Meter - locked at top of content area, collapsible */}
+                  {/* Morph-safe: hovering the meter cancels/pauses the morph timer so users can adjust attention without triggering morph */}
+                  {!(showCondensedView && isFirstPrinciplesMode) && (
+                    <div
+                      ref={attentionMeterRef}
+                      className={`sticky top-0 z-20 ${isAttentionMeterCollapsed ? 'mb-2' : 'pb-3 mb-4 border-b'} ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-neutral-200'}`}
+                      onMouseEnter={() => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); if (viewMode === 'morph') setIsHovering(false); }}
+                    >
+                      {isAttentionMeterCollapsed ? (
+                        <button
+                          onClick={() => setIsAttentionMeterCollapsed(false)}
+                          className={`flex items-center gap-1.5 px-2 py-2 min-h-touch rounded-md text-xs transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                          title="Show attention meter"
+                        >
+                          <Eye size={12} />
+                          <span className="font-mono">{Math.round(threshold * 100)}%</span>
+                          <ChevronDown size={10} />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-4">
+                          <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1.0"
+                            step="0.05"
+                            value={threshold}
+                            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                            className={`flex-1 h-2 md:h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
+                          />
+                          <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                            {Math.round(threshold * 100)}%
+                          </span>
+                          <button
+                            onClick={() => setIsAttentionMeterCollapsed(true)}
+                            className={`p-2 min-w-touch min-h-touch flex items-center justify-center rounded-md transition-colors ${isDarkMode ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                            title="Minimize attention meter"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* First Principles View - Button-toggled via "Essence" button in Tech mode */}
                   {viewMode === 'tech' && (showCondensedView || isCondensedMorphing) && condensedData && (
                     <div
@@ -3100,31 +4611,73 @@ export default function App() {
                   {/* Bullet Point Mode - Condensed sentence bullets */}
                   {isBulletMode && viewMode === 'tech' ? (
                     <ul
-                      className={`space-y-3 transition-all duration-300 ease-in-out ${
+                      className={`space-y-3 transition-all ${isMobile ? 'duration-75' : 'duration-300'} ease-in-out ${
                         isTransitioning || isCondensedMorphing
-                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
-                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                          ? (isMobile ? 'opacity-0' : 'opacity-0 blur-md scale-[0.98] translate-y-1')
+                          : (isMobile ? 'opacity-100' : 'opacity-100 blur-0 scale-100 translate-y-0')
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{
                         fontSize: `${1.125 * textScale}rem`,
                         lineHeight: textScale >= 1.5 ? '1.8' : '1.75',
                       }}
                     >
-                      {groupWordsIntoSentences(processedWords).map((sentence, sentenceIndex) => (
-                        <li
-                          key={sentenceIndex}
-                          className={`flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'}`}
-                        >
-                          <span className={`flex-shrink-0 mt-1.5 text-lg ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>•</span>
-                          <span className="flex-1 flex flex-wrap gap-x-1.5 gap-y-0.5 items-baseline">
-                            {sentence.map((word, wordIndex) => {
-                              // Skip rendering space tokens since we use gap for spacing
-                              if (word.isSpace) return null;
-                              return renderWord(word, sentenceIndex * 1000 + wordIndex);
-                            })}
-                          </span>
-                        </li>
-                      ))}
+                      {groupWordsIntoSentences(processedWords).map((sentence, sentenceIndex) => {
+                        const isActiveBullet = activeBulletIndex === sentenceIndex;
+                        const bulletMatch = isActiveBullet ? findBestSegmentForSentence(sentence) : null;
+                        return (
+                          <React.Fragment key={sentenceIndex}>
+                            <li
+                              className={`group flex gap-3 items-start pl-2 py-1 rounded-lg transition-colors cursor-pointer hover:${isDarkMode ? 'bg-neutral-700/30' : 'bg-neutral-100'} ${isActiveBullet ? (isDarkMode ? 'bg-neutral-700/20' : 'bg-neutral-50') : ''}`}
+                              onClick={() => {
+                                // Don't trigger if user is selecting text
+                                if (window.getSelection()?.toString().trim()) return;
+                                setActiveBulletIndex(isActiveBullet ? null : sentenceIndex);
+                              }}
+                            >
+                              <span className={`flex-shrink-0 mt-1.5 text-lg transition-all ${isDarkMode ? 'text-orange-400' : 'text-orange-500'}`}>
+                                <span className="group-hover:hidden">•</span>
+                                <span className="hidden group-hover:inline">{domainEmoji || '•'}</span>
+                              </span>
+                              <span className="flex-1 flex flex-wrap gap-x-1.5 gap-y-0.5 items-baseline">
+                                {sentence.map((word, wordIndex) => {
+                                  // Skip rendering space tokens since we use gap for spacing
+                                  if (word.isSpace) return null;
+                                  return renderWord(word, sentenceIndex * 1000 + wordIndex);
+                                })}
+                              </span>
+                            </li>
+                            {/* Inline analogy tooltip - slides open below clicked bullet */}
+                            {isActiveBullet && bulletMatch && (
+                              <li className="list-none">
+                                <div
+                                  className={`mx-auto my-1 px-3 py-2 rounded-md text-center max-w-[90%] ${
+                                    isDarkMode
+                                      ? 'bg-amber-950/30 border border-amber-800/30'
+                                      : 'bg-amber-50/90 border border-amber-200/80'
+                                  }`}
+                                  style={{ animation: 'fadeIn 0.2s ease-out' }}
+                                >
+                                  <span className={`text-xs font-semibold uppercase tracking-wider ${
+                                    isDarkMode ? 'text-amber-400/70' : 'text-amber-600/80'
+                                  }`}>
+                                    {domainEmoji} {analogyDomain}
+                                  </span>
+                                  <p className={`mt-1 leading-snug ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}
+                                     style={{ fontSize: `${0.875 * textScale}rem` }}>
+                                    {bulletMatch.analogy}
+                                  </p>
+                                  {bulletMatch.intuition && (
+                                    <p className={`mt-1.5 text-xs italic ${isDarkMode ? 'text-amber-300/60' : 'text-amber-700/70'}`}
+                                       style={{ fontSize: `${0.78 * textScale}rem` }}>
+                                      💡 {bulletMatch.intuition}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
 
                       {/* Symbol Glossary - shows detected math symbols with explanations */}
                       {(() => {
@@ -3165,10 +4718,10 @@ export default function App() {
                     </ul>
                   ) : (
                     <p
-                      className={`leading-relaxed transition-all duration-300 ease-in-out ${
+                      className={`leading-relaxed transition-all ${isMobile ? 'duration-75' : 'duration-300'} ease-in-out ${
                         isTransitioning || (viewMode === 'tech' && isCondensedMorphing)
-                          ? 'opacity-0 blur-md scale-[0.98] translate-y-1'
-                          : 'opacity-100 blur-0 scale-100 translate-y-0'
+                          ? (isMobile ? 'opacity-0' : 'opacity-0 blur-md scale-[0.98] translate-y-1')
+                          : (isMobile ? 'opacity-100' : 'opacity-100 blur-0 scale-100 translate-y-0')
                       } ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}
                       style={{
                         fontSize: `${1.125 * textScale}rem`,
@@ -3205,224 +4758,106 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Content Footer - Hide when in Essence mode */}
+                {/* Content Footer - Word search (mobile) / Selection hint (desktop) */}
                 {!(showCondensedView && isFirstPrinciplesMode) && (
-                <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}>
-                  {/* Selection hint - only show when not in morph mode */}
-                  {viewMode !== 'morph' && (
-                    <div className={`flex items-center justify-center gap-1.5 mb-2 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                <div className={`px-4 py-3 border-t ${isDarkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-50 border-neutral-200'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isMobile ? (
+                    isWordSearchOpen ? (
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          <Search size={14} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
+                          <input
+                            ref={wordSearchInputRef}
+                            type="text"
+                            value={wordSearchQuery}
+                            onChange={(e) => handleWordSearch(e.target.value)}
+                            placeholder="Type to find a word..."
+                            className={`flex-1 bg-transparent text-sm outline-none ${
+                              isDarkMode ? 'text-white placeholder-neutral-500' : 'text-neutral-800 placeholder-neutral-400'
+                            }`}
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => { setIsWordSearchOpen(false); setWordSearchQuery(''); setWordSearchResults([]); }}
+                            className="p-1"
+                          >
+                            <X size={14} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
+                          </button>
+                        </div>
+                        {wordSearchResults.length > 0 && (
+                          <div className={`absolute bottom-full left-0 right-0 mb-1 rounded-lg border shadow-lg max-h-48 overflow-y-auto ${
+                            isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'
+                          }`} style={{ animation: 'slideUp 0.15s ease-out' }}>
+                            {wordSearchResults.map((word) => (
+                              <button
+                                key={word}
+                                onClick={(e) => { e.stopPropagation(); handleSearchDefine(word); }}
+                                className={`w-full text-left px-3 py-2.5 text-sm min-h-touch ${
+                                  isDarkMode ? 'hover:bg-neutral-700 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-700'
+                                }`}
+                              >
+                                {word}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {wordSearchQuery.length > 0 && wordSearchResults.length === 0 && (
+                          <div className={`absolute bottom-full left-0 right-0 mb-1 px-3 py-2 rounded-lg border text-sm ${
+                            isDarkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-500' : 'bg-white border-neutral-200 text-neutral-400'
+                          }`} style={{ animation: 'slideUp 0.15s ease-out' }}>
+                            No matches found
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsWordSearchOpen(true);
+                          setTimeout(() => wordSearchInputRef.current?.focus(), 50);
+                        }}
+                        className={`flex items-center justify-center gap-1.5 text-xs w-full ${
+                          isDarkMode ? 'text-neutral-500' : 'text-neutral-400'
+                        }`}
+                      >
+                        <Search size={12} />
+                        <span>Search to define a word</span>
+                      </button>
+                    )
+                  ) : (
+                    <div className={`flex items-center justify-center gap-1.5 text-xs ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
                       <BookOpen size={12} />
-                      <span>Select any text to define • {isMobile ? 'Tap' : 'Double-click'} words for quick definitions</span>
+                      <span>Select any text to define • Double-click words for quick definitions</span>
                     </div>
                   )}
-                  <div className="flex items-center gap-4">
-                    <Eye size={14} className={isDarkMode ? 'text-neutral-500' : 'text-neutral-400'} />
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="1.0"
-                      step="0.05"
-                      value={threshold}
-                      onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                      className={`flex-1 h-1 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-neutral-700 accent-blue-400' : 'bg-neutral-200 accent-blue-600'}`}
-                    />
-                    <span className={`text-xs font-mono ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                      {Math.round(threshold * 100)}%
-                    </span>
-                  </div>
                 </div>
+                )}
+                </>) : (
+                  <div className="signal-font">
+                    <StudyGuide
+                      topic={lastSubmittedTopic}
+                      domain={analogyDomain}
+                      domainEmoji={domainEmoji}
+                      isDarkMode={isDarkMode}
+                      onClose={() => setIsStudyGuideMode(false)}
+                      cachedOutline={studyGuideCache}
+                      onOutlineGenerated={(outline) => setStudyGuideCache(outline)}
+                      renderAttentiveText={renderAttentiveText}
+                    />
+                  </div>
                 )}
               </div>
 
               {/* Insight Takeaway */}
-              {contextData && (
+              {!isStudyGuideMode && contextData && (
                 <ContextCard
                   contextData={contextData}
                   isDarkMode={isDarkMode}
                 />
               )}
 
-              {/* Follow-up Section */}
-              {showFollowUp && (
-                <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'}`}>
-                  {/* Header with minimize and history buttons */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle size={16} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
-                      <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : ''}`}>Ask a follow-up question</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {/* History toggle button - only show if there's history */}
-                      {tutorHistory.length > 0 && (
-                        <button
-                          onClick={() => setShowTutorHistory(!showTutorHistory)}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            showTutorHistory
-                              ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-600')
-                              : (isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100')
-                          }`}
-                          title="View conversation history"
-                        >
-                          <History size={14} />
-                        </button>
-                      )}
-                      {/* Minimize button */}
-                      <button
-                        onClick={() => setShowFollowUp(false)}
-                        className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-neutral-400 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'}`}
-                        title="Minimize"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* History Panel - clickable Q&A pairs for branching */}
-                  {showTutorHistory && tutorHistory.length > 0 && (
-                    <div className={`mb-3 p-3 rounded-lg max-h-64 overflow-y-auto ${isDarkMode ? 'bg-neutral-900/50 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
-                      <div className="space-y-2">
-                        {(() => {
-                          // Group history into Q&A pairs
-                          const pairs: { question: string; answer: string; originalIndex: number }[] = [];
-                          for (let i = 0; i < tutorHistory.length; i += 2) {
-                            if (tutorHistory[i]?.role === 'user' && tutorHistory[i + 1]?.role === 'model') {
-                              pairs.push({
-                                question: tutorHistory[i].text,
-                                answer: tutorHistory[i + 1].text,
-                                originalIndex: Math.floor(i / 2)
-                              });
-                            }
-                          }
-                          // Show last 5 pairs
-                          const displayPairs = pairs.slice(-5);
-                          return displayPairs.map((pair) => {
-                            const isSelected = selectedHistoryBranch === pair.originalIndex;
-                            return (
-                              <div
-                                key={pair.originalIndex}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    // Deselect - go back to latest
-                                    setSelectedHistoryBranch(null);
-                                    // Show the latest response
-                                    const lastPair = pairs[pairs.length - 1];
-                                    if (lastPair) {
-                                      setTutorResponse({ question: lastPair.question, answer: lastPair.answer, mode: "Tutor" });
-                                    }
-                                  } else {
-                                    // Select this branch point
-                                    setSelectedHistoryBranch(pair.originalIndex);
-                                    // Show full Q&A as current response
-                                    setTutorResponse({ question: pair.question, answer: pair.answer, mode: "Tutor" });
-                                  }
-                                }}
-                                className={`text-xs p-2 rounded cursor-pointer transition-all ${
-                                  isSelected
-                                    ? (isDarkMode ? 'bg-blue-900/50 border border-blue-500/50 ring-1 ring-blue-500/30' : 'bg-blue-100 border border-blue-300')
-                                    : (isDarkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-white hover:bg-neutral-50')
-                                }`}
-                              >
-                                <p className={`font-medium mb-1 ${isSelected ? (isDarkMode ? 'text-blue-200' : 'text-blue-700') : (isDarkMode ? 'text-blue-300' : 'text-blue-600')}`}>
-                                  Q: {isSelected ? pair.question : (pair.question.length > 80 ? pair.question.slice(0, 80) + '...' : pair.question)}
-                                </p>
-                                <p className={isSelected ? (isDarkMode ? 'text-neutral-200' : 'text-neutral-700') : (isDarkMode ? 'text-neutral-400' : 'text-neutral-600')}>
-                                  A: {isSelected ? stripMathSymbols(pair.answer) : (pair.answer.length > 120 ? stripMathSymbols(pair.answer.slice(0, 120)) + '...' : stripMathSymbols(pair.answer))}
-                                </p>
-                                {isSelected && (
-                                  <p className={`mt-2 text-xs italic ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
-                                    ↳ Branch from here - your next question will continue from this point
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                      {selectedHistoryBranch !== null && (
-                        <div className={`mt-2 pt-2 border-t text-xs ${isDarkMode ? 'border-neutral-700 text-amber-400' : 'border-neutral-200 text-amber-600'}`}>
-                          ⚡ Branching mode: Next question will fork from selected point
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Input area */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={followUpQuery}
-                      onChange={(e) => setFollowUpQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAskTutor()}
-                      placeholder="e.g., Can you explain this differently?"
-                      className={`flex-1 px-3 py-2 rounded-lg border text-sm ${isDarkMode ? 'bg-neutral-700 border-neutral-600 text-white placeholder-neutral-500' : 'border-neutral-200'}`}
-                    />
-                    <button
-                      onClick={() => handleAskTutor()}
-                      disabled={isTutorLoading || !followUpQuery.trim()}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                    >
-                      {isTutorLoading ? <Loader2 className="animate-spin" size={16} /> : 'Ask'}
-                    </button>
-                  </div>
-
-                  {/* Current response with attention controls */}
-                  {tutorResponse && (
-                    <div className={`mt-3 p-3 rounded-lg text-sm ${isDarkMode ? 'bg-neutral-700' : 'bg-blue-50'}`}>
-                      <p className={`font-medium mb-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>Q: {tutorResponse.question}</p>
-
-                      {/* Answer with attention rendering - strip math symbols for clean prose */}
-                      <div className={isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}>
-                        {renderAttentiveText(
-                          stripMathSymbols(tutorResponse.answer),
-                          tutorThreshold,
-                          setTutorThreshold,
-                          isTutorColorMode,
-                          setIsTutorColorMode,
-                          conceptMap,
-                          isDarkMode ? 'text-neutral-200' : 'text-neutral-700',
-                          1.0,
-                          undefined
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-2 justify-center">
-                <button
-                  onClick={() => setShowFollowUp(!showFollowUp)}
-                  disabled={isLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    showFollowUp
-                      ? (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
-                      : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
-                  }`}
-                >
-                  <MessageCircle size={14} />Ask Question
-                </button>
-                <button
-                  onClick={() => fetchQuiz(false)}
-                  disabled={isQuizLoading || isLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'}`}
-                >
-                  {isQuizLoading ? <Loader2 className="animate-spin" size={14} /> : <Trophy size={14} />}
-                  Quiz Me
-                </button>
-                {synthesisSummary && (
-                  <button
-                    onClick={() => setShowSynthesis(!showSynthesis)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      showSynthesis
-                        ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
-                        : (isDarkMode ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700' : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200')
-                    }`}
-                  >
-                    <BrainCircuit size={14} />Synthesis
-                  </button>
-                )}
-              </div>
             </div>
           )}
 
@@ -3492,9 +4927,11 @@ export default function App() {
       )}
 
       {/* Synthesis Modal */}
-      {showSynthesis && synthesisSummary && (
+      {showSynthesis && (synthesisOneLiner || synthesisSummary || isEnrichmentLoading) && (
         <SynthesisModal
+          synthesisOneLiner={synthesisOneLiner}
           synthesisSummary={synthesisSummary}
+          synthesisDeep={synthesisDeep}
           synthesisCitation={synthesisCitation}
           synthPos={synthPos}
           isMobile={isMobile}
@@ -3504,6 +4941,11 @@ export default function App() {
           setIsSynthesisColorMode={setIsSynthesisColorMode}
           onClose={() => setShowSynthesis(false)}
           onStartDrag={startDrag}
+          onStartResize={startResize}
+          synthSize={synthSize}
+          onTouchStart={handleSynthTouchStart}
+          onTouchMove={handleSynthTouchMove}
+          onTouchEnd={handleSynthTouchEnd}
           renderAttentiveText={renderAttentiveText}
         />
       )}
@@ -3511,6 +4953,7 @@ export default function App() {
       {/* Definition Popup */}
       {defPosition && selectedTerm && (
         <DefinitionPopup
+          defTitle={defTitle}
           selectedTerm={selectedTerm}
           defText={defText}
           isLoadingDef={isLoadingDef}
@@ -3525,6 +4968,16 @@ export default function App() {
           isMobile={isMobile}
           copiedId={copiedId}
           symbolGuide={defSymbolGuide}
+          domainIntuition={defDomainIntuition}
+          analogyDomain={analogyDomain}
+          domainEmoji={domainEmoji}
+          sheetHeight={defSheet.sheetHeight}
+          isDraggingSheet={defSheet.isDragging}
+          onSheetDragHandlers={{
+            handleTouchStart: defSheet.handleTouchStart,
+            handleTouchMove: defSheet.handleTouchMove,
+            handleTouchEnd: defSheet.handleTouchEnd,
+          }}
           onClose={() => {
             setDefPosition(null);
             setSelectedTerm(null);
@@ -3551,6 +5004,8 @@ export default function App() {
           retryCount={quizRetryCount}
           maxRetries={MAX_QUIZ_RETRIES}
           questionNumber={quizQuestionNumber}
+          domain={analogyDomain}
+          domainEmoji={domainEmoji}
           onOptionClick={handleQuizOptionClick}
           onClose={() => setShowQuizModal(false)}
           onStartDrag={startDrag}
@@ -3563,6 +5018,7 @@ export default function App() {
       {/* Mini Definition Popup */}
       {miniDefPosition && miniSelectedTerm && (
         <MiniDefinitionPopup
+          miniDefTitle={miniDefTitle}
           miniSelectedTerm={miniSelectedTerm}
           miniDefText={miniDefText}
           isLoadingMiniDef={isLoadingMiniDef}
@@ -3580,6 +5036,7 @@ export default function App() {
           onStartResize={startResize}
           onEliClick={(level) => handleDefEliClick(level, true)}
           onCopy={copyToClipboard}
+          onWordClick={handleMiniDefWordClick}
           renderAttentiveText={renderAttentiveText}
           renderRichText={renderRichText}
         />
@@ -3649,6 +5106,10 @@ export default function App() {
             <span className="text-base font-bold">∑</span>
           </button>
         )}
+        {/* Settings — always accessible on mobile (no need to expand toolbar) */}
+        {isMobile && (
+          <Settings isDarkMode={isDarkMode} />
+        )}
         <button
           ref={controlsButtonRef}
           onClick={() => setShowControls(!showControls)}
@@ -3707,8 +5168,12 @@ export default function App() {
                   <span>Dual Pane</span>
                 </div>
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>T</kbd>
-                  <span>Text Size</span>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>U</kbd>
+                  <span>Mastery Mode</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>Y</kbd>
+                  <span>Study Guide</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>UI Controls</div>
@@ -3728,6 +5193,18 @@ export default function App() {
                 <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
                   <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>H</kbd>
                   <span>History</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>F</kbd>
+                  <span>Font Picker</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>N</kbd>
+                  <span>Intuition</span>
+                </div>
+                <div className={`flex items-center gap-2 ${isDarkMode ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                  <kbd className={`px-2 py-1 rounded text-xs font-mono ${isDarkMode ? 'bg-neutral-700' : 'bg-neutral-100'}`}>X</kbd>
+                  <span>Text Size</span>
                 </div>
               </div>
               <div className={`text-xs font-bold uppercase tracking-wider mb-2 mt-4 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Ambiance</div>
@@ -3760,19 +5237,41 @@ export default function App() {
       {/* Symbol Glossary Modal - Draggable, No Blur - Hidden in analogy mode */}
       {showSymbolGlossary && !(viewMode === 'morph' && isHovering) && (
         <div
-          className={`fixed z-[100] ${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'}`}
-          style={{
-            left: '50%',
-            top: '50%',
-            transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
-            maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
-            willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
-          }}
+          className={`fixed z-[100] shadow-2xl ${isDarkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-white border border-neutral-200'} ${
+            isMobile
+              ? 'left-0 right-0 bottom-0 w-full rounded-t-2xl'
+              : `${isSymbolGuideMinimized ? 'w-64' : 'w-full max-w-lg'} rounded-2xl`
+          }`}
+          style={isMobile
+            ? {
+                height: isSymbolGuideMinimized ? 'auto' : `${symbolSheet.sheetHeight}vh`,
+                transition: symbolSheet.isDragging ? 'none' : 'height 0.2s ease-out',
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              }
+            : {
+                left: '50%',
+                top: '50%',
+                transform: `translate(calc(-50% + ${symbolGuidePos.x}px), calc(-50% + ${symbolGuidePos.y}px))`,
+                maxHeight: isSymbolGuideMinimized ? 'auto' : '80vh',
+                willChange: isDraggingSymbolGuide ? 'transform' : 'auto',
+              }
+          }
         >
-          {/* Draggable Header */}
+          {/* Mobile drag handle bar */}
+          {isMobile && (
+            <div
+              className="flex justify-center pt-2 pb-1 touch-none"
+              onTouchStart={symbolSheet.handleTouchStart}
+              onTouchMove={symbolSheet.handleTouchMove}
+              onTouchEnd={symbolSheet.handleTouchEnd}
+            >
+              <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-neutral-600' : 'bg-neutral-300'}`} />
+            </div>
+          )}
+          {/* Draggable Header (desktop) / Static Header (mobile) */}
           <div
-            className={`px-4 py-3 border-b cursor-move select-none ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} rounded-t-2xl`}
-            onMouseDown={(e) => {
+            className={`px-4 py-3 border-b select-none ${isMobile ? '' : 'cursor-move'} ${isDarkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-white border-neutral-200'} ${isMobile ? '' : 'rounded-t-2xl'}`}
+            onMouseDown={isMobile ? undefined : (e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsDraggingSymbolGuide(true);
@@ -3815,8 +5314,10 @@ export default function App() {
           {!isSymbolGuideMinimized && (
             <div className="overflow-y-auto max-h-[60vh] p-4">
               {(() => {
-                // Detect which symbols are in the current content
-                // Use the same text source as displayed content (full explanations, not segments)
+                // PRIMARY: Use API-generated symbolGuide — the AI identifies exactly which
+                // symbols appear in the content, avoiding false positives from keyword hinting.
+                // FALLBACK: Direct symbol detection (no concept hints) for when API data is empty.
+
                 let currentText: string;
                 if (isNarrativeMode) {
                   currentText = segments.map(s => s.narrative).filter(Boolean).join(' ');
@@ -3825,29 +5326,47 @@ export default function App() {
                 } else {
                   currentText = technicalExplanation || segments.map(s => s.tech).filter(Boolean).join(' ');
                 }
-                const detectedSymbols = SYMBOL_GLOSSARY.filter(entry => {
-                  // Single Latin letters (linear algebra) - only match in LaTeX context to avoid false positives
-                  const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
-                  if (isSingleLatinLetter) {
-                    // Check for $X$ pattern or within larger LaTeX expressions like $m \times n$
-                    const latexPattern = new RegExp(`\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$`);
-                    return latexPattern.test(currentText);
-                  }
-                  // Check Unicode symbol (for non-Latin symbols)
-                  if (currentText.includes(entry.symbol)) return true;
-                  // Check LaTeX commands (handle both escaped and unescaped backslashes)
-                  return entry.latex.some(cmd => {
-                    // Check direct match
-                    if (currentText.includes(cmd)) return true;
-                    // Check with single backslash (in case of different escaping)
-                    const unescaped = cmd.replace(/\\\\/g, '\\');
-                    if (currentText.includes(unescaped)) return true;
-                    // Check within $ delimiters (e.g., $\in$)
-                    if (currentText.includes('$' + cmd + '$')) return true;
-                    if (currentText.includes('$' + unescaped + '$')) return true;
-                    return false;
-                  });
-                });
+
+                // Build detected symbols from API symbolGuide entries matched to SYMBOL_GLOSSARY
+                // This gives us rich static metadata (categories, latex arrays) + API context data (formula, domain_analogy)
+                const apiMatchedSymbols = symbolGuide.length > 0
+                  ? SYMBOL_GLOSSARY.filter(entry => {
+                      return symbolGuide.some(sg => {
+                        // Exact symbol match
+                        if (sg.symbol === entry.symbol) return true;
+                        // Name match (e.g., "Partial Derivative" ↔ "Partial Derivative")
+                        if (sg.name.toLowerCase() === entry.name.toLowerCase()) return true;
+                        // Symbol appears in API symbol (e.g., entry.symbol='∂' in sg.symbol='∂f/∂x')
+                        if (entry.symbol.length === 1 && sg.symbol.includes(entry.symbol)) return true;
+                        // LaTeX pattern match
+                        return entry.latex.some(l => sg.symbol.includes(l) || l.includes(sg.symbol));
+                      });
+                    })
+                  : [];
+
+                // Fallback: Direct detection (only actual symbol/LaTeX presence, NO concept hints)
+                const directDetected = apiMatchedSymbols.length > 0
+                  ? []
+                  : SYMBOL_GLOSSARY.filter(entry => {
+                      // Single Latin letters - only in LaTeX context
+                      const isSingleLatinLetter = /^[A-Za-z]$/.test(entry.symbol);
+                      if (isSingleLatinLetter) {
+                        const latexPattern = new RegExp(`\\$[^$]*\\b${entry.symbol}\\b[^$]*\\$`);
+                        return latexPattern.test(currentText);
+                      }
+                      // Check Unicode symbol directly in text
+                      if (currentText.includes(entry.symbol)) return true;
+                      // Check LaTeX commands in $ delimiters only (stricter)
+                      return entry.latex.some(cmd => {
+                        const unescaped = cmd.replace(/\\\\/g, '\\');
+                        if (currentText.includes('$' + cmd + '$') || currentText.includes('$' + unescaped + '$')) return true;
+                        // Check LaTeX command within larger $ blocks
+                        const cmdRegex = new RegExp(`\\$[^$]*${cmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^$]*\\$`);
+                        return cmdRegex.test(currentText);
+                      });
+                    });
+
+                const detectedSymbols = apiMatchedSymbols.length > 0 ? apiMatchedSymbols : directDetected;
 
                 if (detectedSymbols.length === 0) {
                   return (
@@ -3862,7 +5381,7 @@ export default function App() {
                 const greekUpper = detectedSymbols.filter(s => /^[ΣΔΩΘΠΦΨΓΛ]$/.test(s.symbol));
                 const greekLower = detectedSymbols.filter(s => /^[σαβγδεθλμπφψωρτηκνχ]$/.test(s.symbol));
                 const setLogic = detectedSymbols.filter(s => /^[∈∉⊂⊆∪∩∀∃∅∧∨¬]$/.test(s.symbol));
-                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol));
+                const calculus = detectedSymbols.filter(s => /^[∞∂∇∫∑∏′]$/.test(s.symbol) || ['lim', 'dx', 'dy/dx', 'frac'].includes(s.symbol));
                 const relations = detectedSymbols.filter(s => /^[≈≠≤≥≪≫∝≡]$/.test(s.symbol));
                 const arrows = detectedSymbols.filter(s => /^[→←↔⟹⟺]$/.test(s.symbol));
                 const operations = detectedSymbols.filter(s => /^[√×÷±·∘⊕⊗]$/.test(s.symbol));
@@ -3874,6 +5393,9 @@ export default function App() {
                   !linearAlgebra.includes(s)
                 );
 
+                // Track seen domain_analogy texts to skip duplicates (LLM sometimes repeats)
+                const seenAnalogies = new Set<string>();
+
                 const renderCategory = (title: string, symbols: typeof detectedSymbols) => {
                   if (symbols.length === 0) return null;
                   return (
@@ -3882,30 +5404,69 @@ export default function App() {
                         {title}
                       </h3>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {symbols.map(({ symbol, name, meaning, simple }) => (
-                          <div
-                            key={symbol}
-                            className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
-                          >
-                            <span className={`text-xl font-mono w-8 text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                              {symbol}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div>
-                                <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                                  {name}
-                                </span>
-                                <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                                  — {meaning}
-                                </span>
+                        {symbols.map(({ symbol, name, meaning, simple, formula: hardcodedFormula, latex }) => {
+                          // Look up API-generated entry from both main and definition symbol guides
+                          // Match by symbol (exact/fuzzy), name, or latex patterns
+                          const findEntry = (guide: typeof symbolGuide) =>
+                            guide.find(sg => sg.symbol === symbol) ||
+                            guide.find(sg => sg.name.toLowerCase() === name.toLowerCase()) ||
+                            guide.find(sg => sg.symbol.toLowerCase().includes(symbol.toLowerCase()) || symbol.toLowerCase().includes(sg.symbol.toLowerCase())) ||
+                            guide.find(sg => latex?.some(l => sg.symbol.includes(l) || l.includes(sg.symbol)));
+                          const apiEntry = findEntry(symbolGuide) || findEntry(defSymbolGuide);
+                          const resolvedFormula = apiEntry?.formula
+                            ? ensureFormulaDelimiters(apiEntry.formula)
+                            : hardcodedFormula;
+
+                          // Display symbol: use curated LaTeX for multi-char symbols
+                          // Bare \frac is invalid KaTeX (needs args), dx needs math mode, etc.
+                          const SYMBOL_DISPLAY: Record<string, string> = {
+                            'frac': '$\\frac{a}{b}$',
+                            'dx': '$dx$',
+                            'dy/dx': '$\\frac{dy}{dx}$',
+                            'lim': '$\\lim$',
+                          };
+                          const displaySymbol = SYMBOL_DISPLAY[symbol] || symbol;
+
+                          return (
+                            <div
+                              key={symbol}
+                              className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDarkMode ? 'bg-neutral-700/50 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'} transition-colors`}
+                            >
+                              <span className={`text-xl font-mono w-auto min-w-[2rem] text-center flex-shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                {renderRichText(displaySymbol, isDarkMode ? 'text-blue-400' : 'text-blue-600')}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div>
+                                  <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
+                                    {name}
+                                  </span>
+                                  <span className={`text-sm ml-2 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                    — {meaning}
+                                  </span>
+                                </div>
+                                {/* Contextual formula — KaTeX rendered */}
+                                {resolvedFormula && (
+                                  <div className={`text-sm mt-1.5 px-2 py-1 rounded overflow-x-auto ${isDarkMode ? 'bg-neutral-800/80 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
+                                    {renderRichText(resolvedFormula, isDarkMode ? 'text-blue-300' : 'text-blue-700')}
+                                  </div>
+                                )}
+                                {/* Simple explanation */}
+                                <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                  💡 {renderRichText(simple, isDarkMode ? 'text-emerald-400' : 'text-emerald-600')}
+                                </p>
+                                {/* Domain analogy — from API-generated symbol guide (dedup: skip if already shown) */}
+                                {apiEntry?.domain_analogy && !seenAnalogies.has(apiEntry.domain_analogy) && (() => {
+                                  seenAnalogies.add(apiEntry.domain_analogy!);
+                                  return (
+                                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+                                      {domainEmoji || '🧠'} {renderRichText(apiEntry.domain_analogy!, isDarkMode ? 'text-amber-400' : 'text-amber-600')}
+                                    </p>
+                                  );
+                                })()}
                               </div>
-                              {/* Simple explanation */}
-                              <p className={`text-xs mt-1 italic ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                                💡 {simple}
-                              </p>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -3945,7 +5506,7 @@ export default function App() {
                 <Sparkles className={isDarkMode ? 'text-amber-400' : 'text-amber-500'} size={32} />
               </div>
               <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-neutral-800'}`}>
-                You've used your {freeTierLimit} free searches!
+                You've reached the free daily limit!
               </h2>
               <p className={`text-sm ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
                 Get unlimited searches by adding a free API key. It takes less than a minute.
@@ -4323,6 +5884,7 @@ export default function App() {
           onClose={() => setIsConstellationMode(false)}
           domainName={analogyDomain}
           topicName={lastSubmittedTopic}
+          isEnrichmentLoading={isEnrichmentLoading}
           renderRichText={renderRichText}
           onFetchFoundationalMapping={generateFoundationalMapping}
         />
@@ -4335,6 +5897,8 @@ export default function App() {
           importanceMap={importanceMap}
           isDarkMode={isDarkMode}
           analogyDomain={analogyDomain}
+          domainEmoji={domainEmoji}
+          isEnrichmentLoading={isEnrichmentLoading}
           onClose={() => setIsDualPaneMode(false)}
         />
       )}
@@ -4355,7 +5919,7 @@ export default function App() {
         />
       )}
 
-      {/* Intuition Mode Modal - 3 memorable one-liners */}
+      {/* Intuition Mode Modal - 3 memorable one-liners + domain mapping */}
       {showIntuitionModal && segments.length > 0 && segments[0].intuitions && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center"
@@ -4363,65 +5927,128 @@ export default function App() {
             if (e.target === e.currentTarget) setShowIntuitionModal(false);
           }}
         >
-          {/* Dark blue/black backdrop */}
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 opacity-95" />
+          {/* Frosted backdrop */}
+          <div className={`absolute inset-0 backdrop-blur-sm ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`} />
 
-          {/* Modal content */}
-          <div className="relative max-w-lg w-full mx-4 p-6 rounded-2xl bg-slate-900/80 border border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/10">
+          {/* Modal content — inherits reading font */}
+          <div
+            className={`relative max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto p-5 rounded-2xl shadow-2xl border ${
+              isDarkMode
+                ? 'bg-neutral-900 border-neutral-700'
+                : 'bg-white border-neutral-200'
+            }`}
+            style={{ fontFamily: 'var(--signal-font-family, inherit)', letterSpacing: 'var(--signal-letter-spacing, normal)' }}
+          >
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Lightbulb className="text-yellow-400" size={24} />
-                <h2 className="text-lg font-bold text-white">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <Lightbulb className="text-yellow-500" size={22} />
+                <h2 className={`text-lg font-bold ${isDarkMode ? 'text-neutral-100' : 'text-neutral-800'}`}>
                   Core Intuitions
                 </h2>
               </div>
               <button
                 onClick={() => setShowIntuitionModal(false)}
-                className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'}`}
               >
-                <X size={20} className="text-neutral-400" />
+                <X size={18} className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'} />
               </button>
             </div>
 
             {/* Intuitions List */}
-            <div className="space-y-4">
+            <div className="space-y-2.5">
               {segments[0].intuitions.map((intuition, idx) => (
                 <div
                   key={idx}
-                  className="group relative p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/30 transition-all"
+                  className={`group relative px-3.5 py-3 rounded-xl border transition-all ${
+                    isDarkMode
+                      ? 'bg-neutral-800/50 border-neutral-700/50 hover:border-yellow-500/30'
+                      : 'bg-neutral-50 border-neutral-200 hover:border-yellow-400/50'
+                  }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center">
+                  <div className="flex items-start gap-2.5">
+                    <span className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                      isDarkMode ? 'bg-yellow-500/15 text-yellow-400' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
                       {idx + 1}
                     </span>
-                    <p className="text-blue-100 text-base leading-relaxed italic flex-1">
-                      "{intuition}"
-                    </p>
+                    <div className={`text-sm leading-relaxed italic flex-1 ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                      {renderRichText(intuition, isDarkMode ? "text-neutral-200" : "text-neutral-700")}
+                    </div>
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(intuition);
                         setCopiedId(`intuition-${idx}`);
                         setTimeout(() => setCopiedId(null), 2000);
                       }}
-                      className={`flex-shrink-0 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
+                      className={`flex-shrink-0 p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100 ${
                         copiedId === `intuition-${idx}`
                           ? 'bg-green-500 text-white opacity-100'
-                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          : isDarkMode
+                            ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                            : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
                       }`}
                       title="Copy"
                     >
-                      {copiedId === `intuition-${idx}` ? <Check size={14} /> : <Copy size={14} />}
+                      {copiedId === `intuition-${idx}` ? <Check size={12} /> : <Copy size={12} />}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Footer hint */}
-            <p className="mt-6 text-center text-xs text-slate-500">
-              Low-complexity insights — easy to remember, powerful to share
-            </p>
+            {/* Domain Mapping — homomorphic narrative bridge */}
+            {conceptMap.length > 0 && (
+              <div className={`mt-4 pt-4 border-t ${isDarkMode ? 'border-neutral-700/50' : 'border-neutral-200'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">{domainEmoji}</span>
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${
+                    isDarkMode ? 'text-amber-400/80' : 'text-amber-600'
+                  }`}>
+                    {analogyDomain} Translation
+                  </span>
+                </div>
+                <div className={`px-3.5 py-3 rounded-xl border ${
+                  isDarkMode
+                    ? 'bg-amber-950/20 border-amber-800/20'
+                    : 'bg-amber-50/60 border-amber-200/60'
+                }`}>
+                  <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-neutral-200' : 'text-neutral-700'}`}>
+                    {(() => {
+                      const narratives = conceptMap
+                        .filter(c => c.narrative_mapping)
+                        .slice(0, 2)
+                        .map(c => cleanText(c.narrative_mapping));
+
+                      if (narratives.length > 0) {
+                        return narratives.join(' ');
+                      }
+                      const mappings = conceptMap.slice(0, 4).map(c => {
+                        return `${cleanText(c.tech_term)} → ${cleanText(c.analogy_term)}`;
+                      });
+                      return `In ${analogyDomain} terms: ${mappings.join(', ')}.`;
+                    })()}
+                  </p>
+                  {/* Compact term map */}
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {conceptMap.slice(0, 5).map((c, i) => (
+                      <span
+                        key={i}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border ${
+                          isDarkMode
+                            ? 'bg-neutral-800/60 border-neutral-700/30'
+                            : 'bg-white border-neutral-200'
+                        }`}
+                      >
+                        <span className={isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}>{cleanText(c.tech_term)}</span>
+                        <span className={isDarkMode ? 'text-amber-500/70' : 'text-amber-600/70'}>≅</span>
+                        <span className={isDarkMode ? 'text-amber-300/80' : 'text-amber-700'}>{cleanText(c.analogy_term)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
