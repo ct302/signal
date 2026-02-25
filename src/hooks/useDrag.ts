@@ -24,6 +24,12 @@ export const useDrag = ({ isMobile }: UseDragOptions) => {
   const resizeStartWidthRef = useRef(0);
   const resizeStartHeightRef = useRef(0);
 
+  // Track current values in refs so the useEffect doesn't need to re-run on every change
+  const defSizeRef = useRef(defSize);
+  const miniDefSizeRef = useRef(miniDefSize);
+  defSizeRef.current = defSize;
+  miniDefSizeRef.current = miniDefSize;
+
   const startDrag = useCallback((e: React.MouseEvent, target: string) => {
     if (isMobile) return;
     e.preventDefault();

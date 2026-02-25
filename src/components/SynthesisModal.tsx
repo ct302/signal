@@ -246,4 +246,4 @@ export const SynthesisModal: React.FC<SynthesisModalProps> = ({
       </div>
     </div>
   );
-};
+});

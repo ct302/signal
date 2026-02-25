@@ -223,4 +223,4 @@ export const MiniDefinitionPopup: React.FC<MiniDefinitionPopupProps> = ({
       )}
     </div>
   );
-};
+});

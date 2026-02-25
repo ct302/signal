@@ -425,4 +425,4 @@ export const DefinitionPopup: React.FC<DefinitionPopupProps> = ({
       </div>
     </div>
   );
-};
+});

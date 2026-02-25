@@ -1162,7 +1162,7 @@ export default function App() {
         setIsLoading(false); // Stop loading on disambiguation
         return;
       }
-      if (!result.isValid) {
+      if (!ambiguityResult.isValid) {
         setDomainError("Invalid topic or typo.");
         setIsLoading(false); // Stop loading on error
         return;
@@ -1172,8 +1172,10 @@ export default function App() {
       // Topic passed ambiguity check — clear any stale disambiguation cache
       disambiguationCacheRef.current = null;
 
-      // Check if topic is too close to the domain
-      const proximityResult = await checkDomainProximity(confirmedTopic, analogyDomain);
+      // Use optimistic proximity result if topic wasn't corrected, otherwise re-check
+      const proximityResult = confirmedTopic === topic
+        ? optimisticProximity
+        : await checkDomainProximity(confirmedTopic, analogyDomain);
       if (proximityResult.isTooClose) {
         setProximityWarning({ topic: confirmedTopic, result: proximityResult });
         setIsLoading(false); // Stop loading on proximity warning
@@ -1234,8 +1236,24 @@ export default function App() {
       const freeTierNote = isOnFreeTier() ? " This may not have counted against your free tier." : "";
 
       // Handle ApiError with detailed status codes
-      if (e instanceof ApiError) {
-        switch (e.status) {
+      // Use duck typing as fallback for cases where instanceof might fail due to bundling
+      const apiError = e instanceof ApiError ? e : (
+        (e as any)?.status !== undefined ? e as ApiError : null
+      );
+
+      if (apiError) {
+        // Try to extract server error message from responseBody for better error messages
+        let serverMessage = '';
+        if (apiError.responseBody) {
+          try {
+            const body = JSON.parse(apiError.responseBody);
+            serverMessage = body.error || '';
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        switch (apiError.status) {
           case 401:
           case 403:
             setApiError("API key issue. Please check your API key in Settings." + freeTierNote);
@@ -1639,6 +1657,21 @@ export default function App() {
   // Desktop: double-click + text selection + floating Define button (unchanged).
 
   const fetchDefinition = async (term: string, context: string, level: number = 50, isMini: boolean = false) => {
+    const cacheKey = `${term.toLowerCase()}::${level}`;
+    const cached = definitionCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      if (isMini) {
+        setMiniDefText(cached.definition);
+        setMiniDefComplexity(level);
+      } else {
+        setDefText(cached.definition);
+        setDefSymbolGuide(cached.symbol_guide);
+        setDefComplexity(level);
+      }
+      return;
+    }
+
     if (isMini) {
       setIsLoadingMiniDef(true);
       setMiniDefText("");
@@ -1658,6 +1691,14 @@ export default function App() {
       const symbolGuideData = typeof result === 'object' && result.symbol_guide ? result.symbol_guide : [];
       const domainIntuition = typeof result === 'object' && result.domain_intuition ? result.domain_intuition : null;
       const title = typeof result === 'object' && result.title ? result.title : null;
+
+      // Cache the result
+      definitionCacheRef.current.set(cacheKey, { definition, symbol_guide: symbolGuideData });
+      // Cap cache size to prevent unbounded growth
+      if (definitionCacheRef.current.size > 100) {
+        const firstKey = definitionCacheRef.current.keys().next().value;
+        if (firstKey) definitionCacheRef.current.delete(firstKey);
+      }
 
       if (isMini) {
         setMiniDefText(definition);
@@ -2710,7 +2751,7 @@ export default function App() {
     });
   };
 
-  const renderAttentiveText = (
+  const renderAttentiveText = useCallback((
     text: string,
     currentThreshold: number,
     setThresholdState: React.Dispatch<React.SetStateAction<number>> | null,
@@ -2874,7 +2915,7 @@ export default function App() {
         </p>
       </div>
     );
-  };
+  }, [conceptMap, importanceMap, entityLookup, attentionMap]);
 
   // Group processedWords into sentences for bullet mode
   const groupWordsIntoSentences = (words: ProcessedWord[]): ProcessedWord[][] => {

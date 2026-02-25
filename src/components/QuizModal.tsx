@@ -30,7 +30,7 @@ const DIFFICULTY_CONFIG: Record<QuizDifficulty, { label: string; color: string; 
   advanced: { label: 'Advanced', color: 'text-red-300', bg: 'bg-red-900/50', paperText: 'text-red-700', paperBorder: 'border-red-300' }
 };
 
-export const QuizModal: React.FC<QuizModalProps> = ({
+export const QuizModal: React.FC<QuizModalProps> = React.memo(({
   quizData,
   quizFeedback,
   quizPos,
@@ -343,4 +343,4 @@ export const QuizModal: React.FC<QuizModalProps> = ({
       </div>
     </div>
   );
-};
+});
