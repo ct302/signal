@@ -1,15 +1,31 @@
 // Free tier configuration
-const FREE_TIER_DAILY_LIMIT = 25;
+//
+// The user-facing unit is a SEARCH, not an API call: one search fans out into
+// several calls (ambiguity check, core, enrichment, colour map). So the client
+// marks the request that starts a search with X-Signal-Primary and only those
+// count. That makes the number shown in the UI exact instead of a guess.
+//
+// A client could of course lie and never send that header. So a second,
+// independent counter tracks *every* call and enforces a hard ceiling that no
+// header can bypass. Honest clients see an exact search count; a client that
+// omits the header still can't get more than roughly the same amount of work.
+// Whichever limit is hit first wins.
+const FREE_TIER_DAILY_LIMIT = 10;         // searches per IP per day
+const MAX_CALLS_PER_SEARCH = 6;           // generous upper bound on fan-out
+const FREE_TIER_CALL_CEILING = FREE_TIER_DAILY_LIMIT * MAX_CALLS_PER_SEARCH;
 
-// Primary model: fast paid model — ~$0.001/call, 5-15s response vs 60-180s on free tier
-const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.0-flash-lite-001';
+// Primary model: fast paid model — cheap, quick response vs 60-180s on free tier
+const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 
-// Fallback chain: fast paid models first, free models as last resort
+// Fallback chain: fast paid models first, free models as last resort.
+// Verified against the OpenRouter model list on 2026-07-30. OpenRouter retires
+// model ids without notice — if the free tier starts failing with "no response
+// received", re-check these against https://openrouter.ai/api/v1/models first.
 const FREE_TIER_MODELS = [
-  'google/gemini-2.0-flash-lite-001',    // Primary: fast + cheap (~$0.001/call)
-  'google/gemini-2.5-flash-lite',        // Fallback 1: latest flash lite
-  'arcee-ai/trinity-large-preview:free', // Fallback 2: free but slow
-  'meta-llama/llama-4-scout:free',       // Fallback 3: free Llama
+  'google/gemini-2.5-flash-lite',  // Primary: $0.10/$0.40 per 1M — cheapest paid
+  'google/gemini-3.1-flash-lite',  // Fallback 1: $0.25/$1.50 per 1M
+  'google/gemma-4-31b-it:free',    // Fallback 2: free
+  'openai/gpt-oss-20b:free',       // Fallback 3: free
 ];
 
 // Statuses that should trigger trying the next model instead of returning error
@@ -18,7 +34,15 @@ const FREE_TIER_MODELS = [
 const RETRYABLE_STATUSES = new Set([400, 402, 404, 429, 500, 502, 503, 504]);
 
 // ============================================
-// KV STORAGE (optional - falls back to in-memory)
+// USAGE STORAGE — tried in order:
+//   1. Vercel KV / Upstash REST  (KV_REST_API_URL + KV_REST_API_TOKEN)
+//   2. Redis over TCP            (REDIS_URL)
+//   3. In-memory                 (last resort)
+//
+// Tiers 1 and 2 are shared across function instances, so the free-tier cap
+// actually holds. Tier 3 is per-instance: Vercel spins these up and tears
+// them down constantly, so the counter resets and the cap does NOT hold.
+// It exists only so the endpoint keeps serving if the store is unreachable.
 // ============================================
 
 let kvClient = null;
@@ -33,13 +57,55 @@ async function getKV() {
       const { kv } = await import('@vercel/kv');
       kvClient = kv;
     } catch (error) {
-      console.warn('Vercel KV not available, using in-memory tracking:', error);
+      console.warn('Vercel KV not available, trying Redis:', error);
     }
-  } else {
-    console.warn('KV env vars not set, using in-memory usage tracking');
   }
 
   return kvClient;
+}
+
+// Redis (TCP) — what Vercel's Redis/Marketplace integrations provide as REDIS_URL.
+// The promise is cached at module scope so a warm instance reuses one connection
+// instead of dialing Redis on every request.
+let redisClient = null;
+let redisInitPromise = null;
+
+async function getRedis() {
+  if (!process.env.REDIS_URL) return null;
+  if (redisClient) return redisClient;
+
+  if (!redisInitPromise) {
+    redisInitPromise = (async () => {
+      try {
+        const { createClient } = await import('redis');
+        const client = createClient({
+          url: process.env.REDIS_URL,
+          socket: {
+            connectTimeout: 3000,
+            // Give up quickly rather than stalling the request; a failed
+            // command falls through to the next tier.
+            reconnectStrategy: (retries) => (retries > 2 ? false : 100),
+          },
+        });
+        // Without a listener, a connection error becomes an unhandled
+        // 'error' event and crashes the function.
+        client.on('error', (error) => console.error('Redis client error:', error.message));
+        await client.connect();
+        return (redisClient = client);
+      } catch (error) {
+        console.warn('Redis unavailable, using in-memory tracking:', error.message);
+        return null;
+      }
+    })();
+  }
+
+  return redisInitPromise;
+}
+
+// kind is 'usage' (searches) or 'calls' (every request). Keeping the 'usage'
+// name means existing counters in Redis carry over rather than resetting.
+function counterKey(ip, today, kind) {
+  return `signal:${kind}:${ip}:${today}`;
 }
 
 // In-memory fallback for usage tracking
@@ -60,13 +126,13 @@ function getTodayString() {
   return new Date().toISOString().split('T')[0];
 }
 
-async function getDailyUsage(ip) {
-  const kv = await getKV();
+async function getCounter(ip, kind) {
   const today = getTodayString();
+  const key = counterKey(ip, today, kind);
 
+  const kv = await getKV();
   if (kv) {
     try {
-      const key = `signal:usage:${ip}:${today}`;
       const count = await kv.get(key);
       return count || 0;
     } catch (error) {
@@ -74,20 +140,31 @@ async function getDailyUsage(ip) {
     }
   }
 
-  const record = memoryUsageStore.get(ip);
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      // node-redis returns strings; a missing key is null.
+      const count = await redis.get(key);
+      return count ? parseInt(count, 10) || 0 : 0;
+    } catch (error) {
+      console.error('Redis read error:', error.message);
+    }
+  }
+
+  const record = memoryUsageStore.get(key);
   if (record && record.date === today) {
     return record.count;
   }
   return 0;
 }
 
-async function incrementDailyUsage(ip) {
-  const kv = await getKV();
+async function incrementCounter(ip, kind) {
   const today = getTodayString();
+  const key = counterKey(ip, today, kind);
 
+  const kv = await getKV();
   if (kv) {
     try {
-      const key = `signal:usage:${ip}:${today}`;
       const newCount = await kv.incr(key);
       if (newCount === 1) {
         await kv.expire(key, 86400);
@@ -98,12 +175,27 @@ async function incrementDailyUsage(ip) {
     }
   }
 
-  const record = memoryUsageStore.get(ip);
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      const newCount = await redis.incr(key);
+      // Set the TTL only on first write, so the window is a rolling 24h from
+      // the day's first request rather than being extended by every request.
+      if (newCount === 1) {
+        await redis.expire(key, 86400);
+      }
+      return newCount;
+    } catch (error) {
+      console.error('Redis write error:', error.message);
+    }
+  }
+
+  const record = memoryUsageStore.get(key);
   if (record && record.date === today) {
     record.count++;
     return record.count;
   }
-  memoryUsageStore.set(ip, { count: 1, date: today });
+  memoryUsageStore.set(key, { count: 1, date: today });
   return 1;
 }
 
@@ -133,10 +225,11 @@ function checkBurstLimit(ip) {
 // OPENROUTER REQUEST HELPER
 // ============================================
 
-// Models known to NOT support response_format: { type: "json_object" }
-const NO_JSON_MODE_MODELS = new Set([
-  'arcee-ai/trinity-large-preview:free',
-]);
+// Models known to NOT support response_format: { type: "json_object" }.
+// Empty as of 2026-07-30 — every model in FREE_TIER_MODELS advertises
+// response_format support. A model that lacks it still self-heals: the 400
+// handler below retries the same model once with json mode switched off.
+const NO_JSON_MODE_MODELS = new Set([]);
 
 async function tryOpenRouterRequest(model, messages, response_format, plugins, apiKey, skipJsonMode) {
   const body = { model, messages };
@@ -226,9 +319,16 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Check daily usage limit
-    var currentUsage = await getDailyUsage(clientIP);
-    if (currentUsage >= FREE_TIER_DAILY_LIMIT) {
+    // Does this request start a new search? Only those count toward the search
+    // limit. The header is a client hint for accurate display — the call
+    // ceiling below is what actually stops someone who lies about it.
+    var isPrimary = String(req.headers['x-signal-primary'] || '') === 'true';
+
+    // Check both limits: searches (user-facing) and total calls (anti-bypass).
+    var currentUsage = await getCounter(clientIP, 'usage');
+    var currentCalls = await getCounter(clientIP, 'calls');
+
+    if (currentUsage >= FREE_TIER_DAILY_LIMIT || currentCalls >= FREE_TIER_CALL_CEILING) {
       res.setHeader('X-Free-Remaining', '0');
       res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
       return res.status(403).json({
@@ -258,8 +358,16 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // Count ALL successful calls against daily limit (no client-side bypass)
-          var newUsage = await incrementDailyUsage(clientIP);
+          // Every successful call counts toward the ceiling — no header can
+          // opt out of this, so it can't be bypassed by a modified client.
+          await incrementCounter(clientIP, 'calls');
+
+          // Only search-starting calls count toward the user-facing limit, so
+          // the number in the UI matches what a person actually did.
+          var newUsage = isPrimary
+            ? await incrementCounter(clientIP, 'usage')
+            : currentUsage;
+
           var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
           res.setHeader('X-Free-Remaining', String(remaining));
           res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));

@@ -3549,16 +3549,16 @@ export default function App() {
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
             freeTierRemaining === 0
               ? (isDarkMode ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700')
-              : freeTierRemaining <= 8
+              : freeTierRemaining <= 3
                 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700')
                 : (isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
           }`}>
             <Sparkles size={12} />
             {freeTierRemaining === 0
               ? 'Free searches used'
-              : `~${Math.ceil(freeTierRemaining / 5)} free searches left today`
+              : `${freeTierRemaining} free ${freeTierRemaining === 1 ? 'search' : 'searches'} left today`
             }
-            {freeTierRemaining <= 8 && freeTierRemaining > 0 && (
+            {freeTierRemaining <= 3 && freeTierRemaining > 0 && (
               <button
                 onClick={() => setShowFreeTierModal(true)}
                 className={`ml-1 underline hover:no-underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}

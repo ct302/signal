@@ -8,19 +8,19 @@ export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 // OpenRouter models for demo/free tier (server-side proxy handles model selection)
 // These must match the whitelist in api/chat.js
 export const OPENROUTER_MODELS = [
-  'google/gemini-2.0-flash-lite-001',
   'google/gemini-2.5-flash-lite',
-  'arcee-ai/trinity-large-preview:free',
-  'meta-llama/llama-4-scout:free',
+  'google/gemini-3.1-flash-lite',
+  'google/gemma-4-31b-it:free',
+  'openai/gpt-oss-20b:free',
 ];
 
 // Fallback model chain for circuit breaker pattern
 // When primary model hits rate limit, try these in order
 export const OPENROUTER_FALLBACK_MODELS = [
-  'google/gemini-2.0-flash-lite-001',
   'google/gemini-2.5-flash-lite',
-  'arcee-ai/trinity-large-preview:free',
-  'meta-llama/llama-4-scout:free',
+  'google/gemini-3.1-flash-lite',
+  'google/gemma-4-31b-it:free',
+  'openai/gpt-oss-20b:free',
 ];
 
 // Rate limit configuration
