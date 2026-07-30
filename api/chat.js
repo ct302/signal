@@ -18,7 +18,15 @@ const FREE_TIER_MODELS = [
 const RETRYABLE_STATUSES = new Set([400, 402, 404, 429, 500, 502, 503, 504]);
 
 // ============================================
-// KV STORAGE (optional - falls back to in-memory)
+// USAGE STORAGE — tried in order:
+//   1. Vercel KV / Upstash REST  (KV_REST_API_URL + KV_REST_API_TOKEN)
+//   2. Redis over TCP            (REDIS_URL)
+//   3. In-memory                 (last resort)
+//
+// Tiers 1 and 2 are shared across function instances, so the free-tier cap
+// actually holds. Tier 3 is per-instance: Vercel spins these up and tears
+// them down constantly, so the counter resets and the cap does NOT hold.
+// It exists only so the endpoint keeps serving if the store is unreachable.
 // ============================================
 
 let kvClient = null;
@@ -33,13 +41,53 @@ async function getKV() {
       const { kv } = await import('@vercel/kv');
       kvClient = kv;
     } catch (error) {
-      console.warn('Vercel KV not available, using in-memory tracking:', error);
+      console.warn('Vercel KV not available, trying Redis:', error);
     }
-  } else {
-    console.warn('KV env vars not set, using in-memory usage tracking');
   }
 
   return kvClient;
+}
+
+// Redis (TCP) — what Vercel's Redis/Marketplace integrations provide as REDIS_URL.
+// The promise is cached at module scope so a warm instance reuses one connection
+// instead of dialing Redis on every request.
+let redisClient = null;
+let redisInitPromise = null;
+
+async function getRedis() {
+  if (!process.env.REDIS_URL) return null;
+  if (redisClient) return redisClient;
+
+  if (!redisInitPromise) {
+    redisInitPromise = (async () => {
+      try {
+        const { createClient } = await import('redis');
+        const client = createClient({
+          url: process.env.REDIS_URL,
+          socket: {
+            connectTimeout: 3000,
+            // Give up quickly rather than stalling the request; a failed
+            // command falls through to the next tier.
+            reconnectStrategy: (retries) => (retries > 2 ? false : 100),
+          },
+        });
+        // Without a listener, a connection error becomes an unhandled
+        // 'error' event and crashes the function.
+        client.on('error', (error) => console.error('Redis client error:', error.message));
+        await client.connect();
+        return (redisClient = client);
+      } catch (error) {
+        console.warn('Redis unavailable, using in-memory tracking:', error.message);
+        return null;
+      }
+    })();
+  }
+
+  return redisInitPromise;
+}
+
+function usageKey(ip, today) {
+  return `signal:usage:${ip}:${today}`;
 }
 
 // In-memory fallback for usage tracking
@@ -61,16 +109,27 @@ function getTodayString() {
 }
 
 async function getDailyUsage(ip) {
-  const kv = await getKV();
   const today = getTodayString();
+  const key = usageKey(ip, today);
 
+  const kv = await getKV();
   if (kv) {
     try {
-      const key = `signal:usage:${ip}:${today}`;
       const count = await kv.get(key);
       return count || 0;
     } catch (error) {
       console.error('KV read error:', error);
+    }
+  }
+
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      // node-redis returns strings; a missing key is null.
+      const count = await redis.get(key);
+      return count ? parseInt(count, 10) || 0 : 0;
+    } catch (error) {
+      console.error('Redis read error:', error.message);
     }
   }
 
@@ -82,12 +141,12 @@ async function getDailyUsage(ip) {
 }
 
 async function incrementDailyUsage(ip) {
-  const kv = await getKV();
   const today = getTodayString();
+  const key = usageKey(ip, today);
 
+  const kv = await getKV();
   if (kv) {
     try {
-      const key = `signal:usage:${ip}:${today}`;
       const newCount = await kv.incr(key);
       if (newCount === 1) {
         await kv.expire(key, 86400);
@@ -95,6 +154,21 @@ async function incrementDailyUsage(ip) {
       return newCount;
     } catch (error) {
       console.error('KV write error:', error);
+    }
+  }
+
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      const newCount = await redis.incr(key);
+      // Set the TTL only on first write, so the window is a rolling 24h from
+      // the day's first request rather than being extended by every request.
+      if (newCount === 1) {
+        await redis.expire(key, 86400);
+      }
+      return newCount;
+    } catch (error) {
+      console.error('Redis write error:', error.message);
     }
   }
 
