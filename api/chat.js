@@ -1,15 +1,31 @@
 // Free tier configuration
-const FREE_TIER_DAILY_LIMIT = 25;
+//
+// The user-facing unit is a SEARCH, not an API call: one search fans out into
+// several calls (ambiguity check, core, enrichment, colour map). So the client
+// marks the request that starts a search with X-Signal-Primary and only those
+// count. That makes the number shown in the UI exact instead of a guess.
+//
+// A client could of course lie and never send that header. So a second,
+// independent counter tracks *every* call and enforces a hard ceiling that no
+// header can bypass. Honest clients see an exact search count; a client that
+// omits the header still can't get more than roughly the same amount of work.
+// Whichever limit is hit first wins.
+const FREE_TIER_DAILY_LIMIT = 10;         // searches per IP per day
+const MAX_CALLS_PER_SEARCH = 6;           // generous upper bound on fan-out
+const FREE_TIER_CALL_CEILING = FREE_TIER_DAILY_LIMIT * MAX_CALLS_PER_SEARCH;
 
-// Primary model: fast paid model — ~$0.001/call, 5-15s response vs 60-180s on free tier
-const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.0-flash-lite-001';
+// Primary model: fast paid model — cheap, quick response vs 60-180s on free tier
+const FREE_TIER_DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 
-// Fallback chain: fast paid models first, free models as last resort
+// Fallback chain: fast paid models first, free models as last resort.
+// Verified against the OpenRouter model list on 2026-07-30. OpenRouter retires
+// model ids without notice — if the free tier starts failing with "no response
+// received", re-check these against https://openrouter.ai/api/v1/models first.
 const FREE_TIER_MODELS = [
-  'google/gemini-2.0-flash-lite-001',    // Primary: fast + cheap (~$0.001/call)
-  'google/gemini-2.5-flash-lite',        // Fallback 1: latest flash lite
-  'arcee-ai/trinity-large-preview:free', // Fallback 2: free but slow
-  'meta-llama/llama-4-scout:free',       // Fallback 3: free Llama
+  'google/gemini-2.5-flash-lite',  // Primary: $0.10/$0.40 per 1M — cheapest paid
+  'google/gemini-3.1-flash-lite',  // Fallback 1: $0.25/$1.50 per 1M
+  'google/gemma-4-31b-it:free',    // Fallback 2: free
+  'openai/gpt-oss-20b:free',       // Fallback 3: free
 ];
 
 // Statuses that should trigger trying the next model instead of returning error
@@ -86,8 +102,10 @@ async function getRedis() {
   return redisInitPromise;
 }
 
-function usageKey(ip, today) {
-  return `signal:usage:${ip}:${today}`;
+// kind is 'usage' (searches) or 'calls' (every request). Keeping the 'usage'
+// name means existing counters in Redis carry over rather than resetting.
+function counterKey(ip, today, kind) {
+  return `signal:${kind}:${ip}:${today}`;
 }
 
 // In-memory fallback for usage tracking
@@ -108,9 +126,9 @@ function getTodayString() {
   return new Date().toISOString().split('T')[0];
 }
 
-async function getDailyUsage(ip) {
+async function getCounter(ip, kind) {
   const today = getTodayString();
-  const key = usageKey(ip, today);
+  const key = counterKey(ip, today, kind);
 
   const kv = await getKV();
   if (kv) {
@@ -133,16 +151,16 @@ async function getDailyUsage(ip) {
     }
   }
 
-  const record = memoryUsageStore.get(ip);
+  const record = memoryUsageStore.get(key);
   if (record && record.date === today) {
     return record.count;
   }
   return 0;
 }
 
-async function incrementDailyUsage(ip) {
+async function incrementCounter(ip, kind) {
   const today = getTodayString();
-  const key = usageKey(ip, today);
+  const key = counterKey(ip, today, kind);
 
   const kv = await getKV();
   if (kv) {
@@ -172,12 +190,12 @@ async function incrementDailyUsage(ip) {
     }
   }
 
-  const record = memoryUsageStore.get(ip);
+  const record = memoryUsageStore.get(key);
   if (record && record.date === today) {
     record.count++;
     return record.count;
   }
-  memoryUsageStore.set(ip, { count: 1, date: today });
+  memoryUsageStore.set(key, { count: 1, date: today });
   return 1;
 }
 
@@ -207,10 +225,11 @@ function checkBurstLimit(ip) {
 // OPENROUTER REQUEST HELPER
 // ============================================
 
-// Models known to NOT support response_format: { type: "json_object" }
-const NO_JSON_MODE_MODELS = new Set([
-  'arcee-ai/trinity-large-preview:free',
-]);
+// Models known to NOT support response_format: { type: "json_object" }.
+// Empty as of 2026-07-30 — every model in FREE_TIER_MODELS advertises
+// response_format support. A model that lacks it still self-heals: the 400
+// handler below retries the same model once with json mode switched off.
+const NO_JSON_MODE_MODELS = new Set([]);
 
 async function tryOpenRouterRequest(model, messages, response_format, plugins, apiKey, skipJsonMode) {
   const body = { model, messages };
@@ -300,9 +319,16 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Check daily usage limit
-    var currentUsage = await getDailyUsage(clientIP);
-    if (currentUsage >= FREE_TIER_DAILY_LIMIT) {
+    // Does this request start a new search? Only those count toward the search
+    // limit. The header is a client hint for accurate display — the call
+    // ceiling below is what actually stops someone who lies about it.
+    var isPrimary = String(req.headers['x-signal-primary'] || '') === 'true';
+
+    // Check both limits: searches (user-facing) and total calls (anti-bypass).
+    var currentUsage = await getCounter(clientIP, 'usage');
+    var currentCalls = await getCounter(clientIP, 'calls');
+
+    if (currentUsage >= FREE_TIER_DAILY_LIMIT || currentCalls >= FREE_TIER_CALL_CEILING) {
       res.setHeader('X-Free-Remaining', '0');
       res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));
       return res.status(403).json({
@@ -332,8 +358,16 @@ module.exports = async function handler(req, res) {
         var result = await tryOpenRouterRequest(attemptModel, messages, response_format, plugins, apiKey, skipJsonMode);
 
         if (result.ok) {
-          // Count ALL successful calls against daily limit (no client-side bypass)
-          var newUsage = await incrementDailyUsage(clientIP);
+          // Every successful call counts toward the ceiling — no header can
+          // opt out of this, so it can't be bypassed by a modified client.
+          await incrementCounter(clientIP, 'calls');
+
+          // Only search-starting calls count toward the user-facing limit, so
+          // the number in the UI matches what a person actually did.
+          var newUsage = isPrimary
+            ? await incrementCounter(clientIP, 'usage')
+            : currentUsage;
+
           var remaining = Math.max(0, FREE_TIER_DAILY_LIMIT - newUsage);
           res.setHeader('X-Free-Remaining', String(remaining));
           res.setHeader('X-Free-Limit', String(FREE_TIER_DAILY_LIMIT));

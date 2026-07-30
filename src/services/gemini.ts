@@ -134,7 +134,7 @@ const updateFreeTierFromResponse = (response: Response): void => {
   if (remaining !== null) {
     freeTierState = {
       remaining: parseInt(remaining, 10),
-      limit: limit ? parseInt(limit, 10) : 5,
+      limit: limit ? parseInt(limit, 10) : 10, // keep in sync with FREE_TIER_DAILY_LIMIT in api/chat.js
       isExhausted: parseInt(remaining, 10) <= 0
     };
     // Notify listeners
@@ -222,7 +222,10 @@ const getProviderConfig = (): ProviderConfig => {
   }
   // Default config without API key - user must provide their own
   // When using proxy (production, no user key), use the demo tier model
-  const defaultModel = shouldUseProxy() ? 'arcee-ai/trinity-large-preview:free' : '';
+  // Must be a live model — the proxy tries this one first, so a retired id
+  // costs every request a wasted 404 before the fallback chain kicks in.
+  // Keep in sync with FREE_TIER_DEFAULT_MODEL in api/chat.js.
+  const defaultModel = shouldUseProxy() ? 'google/gemini-2.5-flash-lite' : '';
   return {
     provider: 'cloud' as const,
     apiKey: '',
@@ -267,6 +270,7 @@ interface ApiCallOptions {
   searchPrompt?: string; // Custom prompt for how to integrate web search results
   maxResults?: number; // Number of web search results (default 3, max 10 for Mastery Mode)
   isEnrichment?: boolean; // Enrichment calls don't count against free tier daily limit
+  isPrimary?: boolean; // Marks the call that starts a user-initiated search — only these count toward the free tier limit
 }
 
 // Build request body based on provider
@@ -357,6 +361,11 @@ const callApi = async (prompt: string, options: ApiCallOptions = {}): Promise<st
   // Enrichment calls send a header so the proxy skips usage counting
   if (options.isEnrichment && shouldUseProxy()) {
     headers['X-Signal-Enrichment'] = 'true';
+  }
+  // Tells the proxy this request begins a new search, so it counts as exactly
+  // one against the free tier no matter how many follow-up calls it triggers.
+  if (options.isPrimary && shouldUseProxy()) {
+    headers['X-Signal-Primary'] = 'true';
   }
   const body = buildRequestBody(prompt, config, options);
 
@@ -1089,7 +1098,8 @@ RULES:
   const text = await callApi(corePrompt, {
     jsonMode: true,
     webSearch: needsWebSearch,
-    searchPrompt: searchPromptText
+    searchPrompt: searchPromptText,
+    isPrimary: true // This call *is* the search — the one thing that counts against the free tier
   });
   return safeJsonParse(text);
 };
